@@ -3,11 +3,17 @@ from langchain_deepseek import ChatDeepSeek
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from src.state import WorkflowState
 from src.prompts import CODER_SYSTEM_PROMPT
+from pydantic import SecretStr
 
 # 初始化 DeepSeek (请确保在跑代码前 .env 里有真实的 DEEPSEEK_API_KEY)
+api_key_raw = os.environ.get("DEEPSEEK_API_KEY")
+if not api_key_raw:
+    raise ValueError("请设置 DEEPSEEK_API_KEY 环境变量")
+
+api_key = SecretStr(api_key_raw)
 llm = ChatDeepSeek(
     model="deepseek-chat", 
-    api_key=os.environ.get("DEEPSEEK_API_KEY"), 
+    api_key=api_key, 
     base_url="https://api.deepseek.com",
     temperature=0
 )
