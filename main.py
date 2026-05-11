@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+from src.state import WorkflowState
+
 # 确保在导入任何核心逻辑前加载环境变量
 load_dotenv()
 
@@ -33,7 +35,7 @@ def main():
     }
     
     # 初始化状态笔记本
-    initial_state = {
+    initial_state: WorkflowState = {
         "parsed_json": mock_user_input,
         "messages": [],
         "current_wdl": "",
