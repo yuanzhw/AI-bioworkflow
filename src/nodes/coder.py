@@ -12,7 +12,7 @@ if not api_key_raw:
 
 api_key = SecretStr(api_key_raw)
 llm = ChatDeepSeek(
-    model="deepseek-chat", 
+    model="deepseek-v4-pro", 
     api_key=api_key, 
     base_url="https://api.deepseek.com",
     temperature=0
