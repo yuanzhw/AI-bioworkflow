@@ -65,8 +65,8 @@ uv run main.py
 
 - [x] 搭建基础 LangGraph 状态机与 DeepSeek 连通。
 - [x] 实现从结构化 JSON 到 WDL 的单向代码生成。
-- [ ] 引入 `miniwdl` / `womtool` 作为 Tool 节点，实现生成的 WDL 自动化本地校验。
-- [ ] 闭环重试机制：当校验器报错时，将 Error Message 返回给大模型进行自我修复。
+- [x] 引入 `miniwdl` / `womtool` 作为 Tool 节点，实现生成的 WDL 自动化本地校验。
+- [x] 闭环重试机制：当校验器报错时，将 Error Message 返回给大模型进行自我修复。
 - [ ] 接入 Biocontainers 镜像搜索节点，实现 Docker 地址的自动补全。
 
 ## 📄 许可证

@@ -39,7 +39,8 @@ def main():
         "parsed_json": mock_user_input,
         "messages": [],
         "current_wdl": "",
-        "error_count": 0
+        "error_count": 0,
+        "is_valid": False
     }
     
     # 启动 Agent！

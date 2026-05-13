@@ -14,3 +14,6 @@ class WorkflowState(TypedDict):
     
     # 记录当前重试或循环的次数，防止死循环
     error_count: int
+    
+    # 用一个明确的布尔值来记录校验状态，True 代表校验通过，False 代表校验失败
+    is_valid: bool
