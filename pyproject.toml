@@ -11,5 +11,6 @@ dependencies = [
     "langchain-deepseek>=1.0.1",
     "langchain-openai>=1.2.1",
     "langgraph>=1.1.10",
+    "miniwdl>=1.14.2",
     "python-dotenv>=1.2.2",
 ]
