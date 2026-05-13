@@ -1,7 +1,9 @@
+import os
 import subprocess
 import tempfile
-import os
+
 from langchain_core.tools import tool
+
 
 @tool
 def wdl_validator(wdl_code: str) -> dict:

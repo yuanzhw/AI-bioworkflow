@@ -1,6 +1,8 @@
-from typing_extensions import TypedDict, Annotated
-from langchain_core.messages import AnyMessage
 import operator
+
+from langchain_core.messages import AnyMessage
+from typing_extensions import Annotated, TypedDict
+
 
 class WorkflowState(TypedDict):
     # 存放 LLM 的所有对话记录（必须用 operator.add 保证是追加模式）

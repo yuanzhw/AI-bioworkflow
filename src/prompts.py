@@ -1,4 +1,5 @@
-from langchain_core.prompts import SystemMessagePromptTemplate, PromptTemplate, ChatPromptTemplate
+from langchain_core.prompts import (ChatPromptTemplate, PromptTemplate,
+                                    SystemMessagePromptTemplate)
 
 _CODER_SYSTEM_TEMPLATE = """
 你是一个世界顶级的生物信息学工程师，精通 WDL (Workflow Description Language) 1.0 规范。

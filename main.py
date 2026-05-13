@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 from src.state import WorkflowState
@@ -12,6 +13,7 @@ if not os.environ.get("DEEPSEEK_API_KEY"):
 
 # 导入我们编译好的总 Agent
 from src.graph import agent
+
 
 def main():
     print("🚀 启动 AI-bioworkflow MVP 测试...\n")
