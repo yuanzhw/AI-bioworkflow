@@ -15,6 +15,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "miniwdl" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -32,6 +33,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=1.1.10" },
     { name = "miniwdl", specifier = ">=1.14.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [package.metadata.requires-dev]

@@ -73,12 +73,17 @@ def _analyze_calls(ir: WorkflowIR, report: AnalysisReport) -> None:
             report.errors.append(f"call '{call.id}' references unknown task '{call.task}'")
             continue
 
-        expected_inputs = set(task.inputs)
+        expected_inputs = {
+            input_name
+            for input_name, input_type in task.inputs.items()
+            if not _is_optional_type(input_type)
+        }
+        declared_inputs = set(task.inputs)
         provided_inputs = set(call.inputs)
 
         for missing in sorted(expected_inputs - provided_inputs):
             report.errors.append(f"call '{call.id}' is missing input '{missing}'")
-        for unexpected in sorted(provided_inputs - expected_inputs):
+        for unexpected in sorted(provided_inputs - declared_inputs):
             report.errors.append(f"call '{call.id}' provides unknown input '{unexpected}'")
 
         for input_name, expression in call.inputs.items():
@@ -170,3 +175,7 @@ def _types_compatible(expected: str, actual: str) -> bool:
 
 def _normalize_type(value: str) -> str:
     return value.strip().rstrip("?")
+
+
+def _is_optional_type(value: str) -> bool:
+    return value.strip().endswith("?")

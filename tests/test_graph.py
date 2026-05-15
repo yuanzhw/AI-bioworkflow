@@ -109,6 +109,16 @@ class WorkflowCompilationTests(unittest.TestCase):
         self.assertFalse(report.is_valid)
         self.assertIn("references unavailable output 'qc.clean_r1'", "\n".join(report.errors))
 
+    def test_analyzer_allows_omitted_optional_call_inputs(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["tasks"]["fastp"]["inputs"]["r2"] = "File?"
+        raw_ir["workflow"]["calls"][0]["inputs"].pop("r2")
+
+        workflow_ir = coerce_workflow_ir(raw_ir)
+        report = analyze_workflow_ir(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+
     def test_legacy_json_is_normalized_to_ir(self):
         legacy_json = {
             "workflow_name": "SimpleQC",

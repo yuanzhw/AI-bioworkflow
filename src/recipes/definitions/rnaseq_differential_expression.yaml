@@ -1,0 +1,38 @@
+id: rnaseq_differential_expression
+name: RNA-seq differential expression
+description: Analyze bulk RNA-seq reads and identify differentially expressed genes.
+aliases:
+  - RNA-seq DEG
+  - bulk RNA-seq differential expression
+  - differential expression from RNA sequencing
+  - transcriptome differential expression
+
+required_inputs:
+  raw_r1:
+    type: File
+    description: First FASTQ read file.
+  raw_r2:
+    type: File
+    description: Second FASTQ read file.
+  transcriptome_index:
+    type: File
+    description: Salmon transcriptome index archive or directory.
+  sample_groups:
+    type: File
+    description: Sample metadata table with group labels.
+
+steps:
+  - id: qc
+    role: read_quality_control
+    allowed_tools:
+      - fastp
+
+  - id: quantify
+    role: expression_quantification
+    allowed_tools:
+      - salmon
+
+  - id: differential_expression
+    role: differential_expression
+    allowed_tools:
+      - deseq2

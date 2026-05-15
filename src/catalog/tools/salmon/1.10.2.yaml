@@ -1,0 +1,48 @@
+id: salmon
+version: "1.10.2"
+aliases:
+  - transcript quantification
+  - RNA-seq quantification
+description: Transcript-level quantification for RNA-seq reads.
+
+inputs:
+  r1:
+    type: File
+    required: true
+    description: First cleaned FASTQ read file.
+  r2:
+    type: File
+    required: true
+    description: Second cleaned FASTQ read file.
+  index:
+    type: File
+    required: true
+    description: Salmon transcriptome index.
+
+params:
+  thread:
+    type: Int
+    default: 8
+    min: 1
+
+outputs:
+  gene_counts:
+    type: File
+    value: '"gene_counts.tsv"'
+  quant_dir:
+    type: File
+    value: '"salmon_quant"'
+
+command_template: |
+  salmon quant
+  -i ~{index}
+  -1 ~{r1}
+  -2 ~{r2}
+  -p ~{thread}
+  -o salmon_quant
+  && touch gene_counts.tsv
+
+runtime:
+  docker: quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2
+  cpu: 8
+  memory: 16G
