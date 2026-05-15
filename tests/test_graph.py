@@ -1,6 +1,7 @@
 import unittest
 
 from src.analyzer import analyze_workflow_ir
+from src.graph import agent
 from src.renderers import render_wdl
 from src.schema import coerce_workflow_ir
 
@@ -83,6 +84,80 @@ def sample_multi_task_ir():
     }
 
 
+def sample_rnaseq_tool_plan():
+    return {
+        "workflow": {
+            "name": "RNASeqDEG",
+            "recipe": "rnaseq_differential_expression",
+            "inputs": {
+                "raw_r1": "File",
+                "raw_r2": "File",
+                "transcriptome_index": "File",
+                "sample_groups": "File",
+            },
+            "tool_calls": [
+                {
+                    "id": "qc",
+                    "step": "qc",
+                    "tool": "fastp",
+                    "version": "0.23.2",
+                    "inputs": {
+                        "r1": "raw_r1",
+                        "r2": "raw_r2",
+                    },
+                    "params": {
+                        "thread": 4,
+                    },
+                },
+                {
+                    "id": "quantify",
+                    "step": "quantify",
+                    "tool": "salmon",
+                    "version": "1.10.2",
+                    "inputs": {
+                        "r1": "qc.clean_r1",
+                        "r2": "qc.clean_r2",
+                        "index": "transcriptome_index",
+                    },
+                    "params": {
+                        "thread": 8,
+                    },
+                },
+                {
+                    "id": "deg",
+                    "step": "differential_expression",
+                    "tool": "deseq2",
+                    "version": "1.42.0",
+                    "inputs": {
+                        "counts": "quantify.gene_counts",
+                        "sample_groups": "sample_groups",
+                    },
+                    "params": {
+                        "contrast": "condition",
+                    },
+                },
+            ],
+            "outputs": {
+                "deg_table": "deg.deg_table",
+            },
+        }
+    }
+
+
+def initial_state(parsed_json: dict):
+    return {
+        "parsed_json": parsed_json,
+        "workflow_ir": {},
+        "analysis_errors": [],
+        "analysis_warnings": [],
+        "messages": [],
+        "current_wdl": "",
+        "validation_message": "",
+        "error_count": 0,
+        "is_valid": False,
+    }
+
+
 class WorkflowCompilationTests(unittest.TestCase):
     def test_multi_task_ir_analyzes_and_renders(self):
         workflow_ir = coerce_workflow_ir(sample_multi_task_ir())
@@ -142,6 +217,16 @@ class WorkflowCompilationTests(unittest.TestCase):
         self.assertEqual(workflow_ir.workflow.name, "SimpleQC")
         self.assertEqual(workflow_ir.workflow.calls[0].id, "fastp_qc")
         self.assertEqual(workflow_ir.tasks["fastp_qc"].runtime.docker, "quay.io/biocontainers/fastp:0.23.2")
+
+    def test_agent_compiles_recipe_tool_plan(self):
+        final_state = agent.invoke(initial_state(sample_rnaseq_tool_plan()))
+
+        self.assertTrue(final_state["is_valid"], final_state["validation_message"])
+        self.assertEqual(final_state["analysis_errors"], [])
+        self.assertIn("call fastp_qc as qc", final_state["current_wdl"])
+        self.assertIn("call salmon_quantify as quantify", final_state["current_wdl"])
+        self.assertIn("call deseq2_deg as deg", final_state["current_wdl"])
+        self.assertIn("File deg_table = deg.deg_table", final_state["current_wdl"])
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 - **Workflow IR 驱动**：将 workflow 调用关系与 task 定义分离，支持多个 task、复用 task 和明确的数据依赖。
 - **确定性 WDL 编译**：通过 Jinja2 Renderer 从 IR 生成 WDL，避免让 LLM 承担模板引擎职责。
 - **静态分析**：在渲染前检查 task/call 引用、输入完整性、上游输出引用和基础类型匹配。
+- **Recipe / Tool Catalog**：支持用预定义生信工具目录和分析配方生成 Workflow IR。
 - **Agentic 架构**：基于 LangGraph 串联 Planner、Analyzer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
 - **模块化设计**：高度解耦的 State、Prompts、Nodes 与 Tools 设计，极佳的代码可维护性。
 
@@ -58,6 +59,45 @@ uv run main.py
 ```
 *如果配置正确，终端将输出一段包含 `fastp` 和 `bwa_mem` 两个 task 的合规 WDL 代码。*
 
+## 📥 支持的输入格式
+
+Planner 当前支持两类结构化输入：
+
+1. **标准 Workflow IR**：直接提供 `workflow.calls` 和 `tasks`，适合精确控制每个 task 的命令、输入、输出和 runtime。
+2. **Recipe Tool Plan**：提供 `workflow.recipe` 和 `workflow.tool_calls`，由内置 recipe/tool catalog 自动解析为 Workflow IR。
+
+Recipe Tool Plan 示例：
+
+```json
+{
+  "workflow": {
+    "name": "RNASeqDEG",
+    "recipe": "rnaseq_differential_expression",
+    "inputs": {
+      "raw_r1": "File",
+      "raw_r2": "File",
+      "transcriptome_index": "File",
+      "sample_groups": "File"
+    },
+    "tool_calls": [
+      {
+        "id": "qc",
+        "step": "qc",
+        "tool": "fastp",
+        "version": "0.23.2",
+        "inputs": {
+          "r1": "raw_r1",
+          "r2": "raw_r2"
+        },
+        "params": {
+          "thread": 4
+        }
+      }
+    ]
+  }
+}
+```
+
 ## 🏗️ 架构与开发指南
 
 对于希望了解本项目底层实现原理、LangGraph 状态图设计，或有志于参与二次开发的工程师，请务必阅读我们的开发文档：
@@ -70,6 +110,7 @@ uv run main.py
 - [x] 实现从结构化 JSON 到 WDL 的单向代码生成。
 - [x] 引入 `miniwdl` / `womtool` 作为 Tool 节点，实现生成的 WDL 自动化本地校验。
 - [x] 引入 Workflow IR、静态分析器与确定性 WDL Renderer。
+- [x] 接入 Recipe / Tool Catalog 输入到 LangGraph Planner。
 - [ ] 闭环修复机制：当校验器报错时，优先修复 IR 而不是重写整份 WDL。
 - [ ] 接入 Biocontainers 镜像搜索节点，实现 Docker 地址的自动补全。
 
