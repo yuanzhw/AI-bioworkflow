@@ -10,9 +10,21 @@ class WorkflowState(TypedDict):
     
     # 存放用户从前端传来的结构化表单数据（JSON格式）
     parsed_json: dict 
+
+    # 标准化后的内部工作流表示，后续节点只处理这个 IR
+    workflow_ir: dict
+
+    # IR 静态分析阶段产生的错误
+    analysis_errors: list[str]
+
+    # IR 静态分析阶段产生的警告
+    analysis_warnings: list[str]
     
     # 存放模型生成的 WDL 代码（用于后续验证器检查）
     current_wdl: str 
+
+    # miniwdl 或系统校验阶段返回的最后一条消息
+    validation_message: str
     
     # 记录当前重试或循环的次数，防止死循环
     error_count: int
