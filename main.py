@@ -9,7 +9,12 @@ import yaml
 from dotenv import load_dotenv
 
 from src.graph import agent
-from src.nl_planner import DEFAULT_PLANNER_MODEL, plan_from_natural_language
+from src.nl_planner import (
+    DEFAULT_PLANNER_MODEL,
+    NaturalLanguagePlanningError,
+    build_default_planner_prompt,
+    create_natural_language_plan,
+)
 from src.nodes.analyzer import analyzer_node
 from src.nodes.planner import planner_node
 from src.nodes.renderer import renderer_node
@@ -144,6 +149,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Print the structured plan produced from natural language before compilation.",
     )
     parser.add_argument(
+        "--save-plan",
+        type=Path,
+        help="Write the structured plan produced from natural language to JSON.",
+    )
+    parser.add_argument(
+        "--save-planner-prompt",
+        type=Path,
+        help="Write the full natural-language planner prompt to a text file for debugging.",
+    )
+    parser.add_argument(
         "--no-check",
         action="store_true",
         help="Skip miniwdl syntax validation after rendering.",
@@ -223,6 +238,16 @@ def write_wdl_output(path: Path, wdl_code: str) -> None:
     path.write_text(wdl_code, encoding="utf-8")
 
 
+def write_json_output(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def write_text_output(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
 def workflow_succeeded(state: WorkflowState, check: bool) -> bool:
     if state["analysis_errors"]:
         return False
@@ -242,10 +267,22 @@ def main(argv: list[str] | None = None) -> int:
             planned_from_natural_language = False
         else:
             prompt = load_prompt(args.prompt, args.prompt_file)
-            parsed_json = plan_from_natural_language(prompt, model=args.planner_model)
+            if args.save_planner_prompt:
+                write_text_output(args.save_planner_prompt, build_default_planner_prompt(prompt))
+                print(f"Planner prompt written to {args.save_planner_prompt}", file=sys.stderr)
+
+            plan_result = create_natural_language_plan(prompt, model=args.planner_model)
+            parsed_json = plan_result.plan
             planned_from_natural_language = True
 
+            if args.save_plan:
+                write_json_output(args.save_plan, parsed_json)
+                print(f"Planner plan written to {args.save_plan}", file=sys.stderr)
+
         final_state = compile_workflow(parsed_json, check=check)
+    except NaturalLanguagePlanningError as exc:
+        print(f"Natural language planning failed: {exc}", file=sys.stderr)
+        return 1
     except Exception as exc:
         print(f"Compilation failed before workflow execution: {exc}", file=sys.stderr)
         return 1

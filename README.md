@@ -84,6 +84,8 @@ uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rna
 - `--input` / `-i`：开发模式，读取标准 Workflow IR 或 Recipe Tool Plan。
 - `--output` / `-o`：写出生成的 WDL；不传则打印到终端。
 - `--print-plan`：打印自然语言 Planner 生成的结构化 Recipe Tool Plan。
+- `--save-plan`：将自然语言 Planner 生成的 Recipe Tool Plan 保存为 JSON 文件。
+- `--save-planner-prompt`：保存完整 Planner prompt，方便调试模型输出。
 - `--print-ir`：打印 Planner 标准化后的 Workflow IR。
 - `--no-check`：跳过 `miniwdl` 语法校验，仅执行 IR 分析与 WDL 渲染。
 - `--planner-model`：指定自然语言 Planner 使用的模型。
@@ -93,6 +95,16 @@ uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rna
 
 ```bash
 uv run main.py --input examples/rnaseq_workflow_ir.json --no-check > workflow.wdl
+```
+
+调试自然语言规划时，可以保存模型看到的 prompt 和模型生成的 plan：
+
+```bash
+uv run main.py \
+  --prompt-file examples/rnaseq_deg_request.txt \
+  --save-planner-prompt debug/planner_prompt.txt \
+  --save-plan debug/plan.json \
+  --output outputs/rnaseq_deg.wdl
 ```
 
 ## 📥 支持的输入格式
