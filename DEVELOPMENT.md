@@ -22,23 +22,24 @@ AI-bioworkflow/
 │   │
 │   ├── analyzer.py       # 3. IR 静态分析：引用、类型、DAG 顺序等检查
 │   ├── repairer.py       # 4. IR 保守修复：call 顺序、输出字面量等确定性问题
+│   ├── nl_planner.py     # 5. 自然语言需求 -> Recipe Tool Plan
 │   │
-│   ├── catalog/          # 5. 生信工具目录：工具 schema、YAML 定义与 plan resolver
+│   ├── catalog/          # 6. 生信工具目录：工具 schema、YAML 定义与 plan resolver
 │   │
-│   ├── recipes/          # 6. 分析配方目录：配方 schema 与步骤定义
+│   ├── recipes/          # 7. 分析配方目录：配方 schema 与步骤定义
 │   │
-│   ├── prompts.py        # 7. 提示词管理：存放所有 System Prompts 和 Few-shot 示例
+│   ├── prompts.py        # 8. 提示词管理：存放所有 System Prompts 和 Few-shot 示例
 │   │
-│   ├── renderers/        # 8. 确定性代码生成器
+│   ├── renderers/        # 9. 确定性代码生成器
 │   │   ├── wdl.py        # IR -> WDL
 │   │   └── templates/
 │   │       └── workflow.wdl.j2
 │   │
-│   ├── tools/            # 9. 工具箱：存放外部工具封装
+│   ├── tools/            # 10. 工具箱：存放外部工具封装
 │   │   ├── __init__.py
 │   │   └── validator.py  # 生信特定工具（如 miniwdl 语法校验）
 │   │
-│   ├── nodes/            # 10. 工作节点：LangGraph 的具体执行工位
+│   ├── nodes/            # 11. 工作节点：LangGraph 的具体执行工位
 │   │   ├── __init__.py
 │   │   ├── planner.py    # 将标准 IR 或 Recipe Tool Plan 标准化为 Workflow IR
 │   │   ├── analyzer.py   # 调用 IR 静态分析
@@ -47,7 +48,7 @@ AI-bioworkflow/
 │   │   ├── checker.py    # 调用 miniwdl validator
 │   │   └── coder.py      # 旧版 LLM 直出 WDL 节点，保留作对照/实验
 │   │
-│   └── graph.py          # 11. 核心图纸：组装 nodes 和 tools 的 StateGraph
+│   └── graph.py          # 12. 核心图纸：组装 nodes 和 tools 的 StateGraph
 │
 ├── tests/                # 单元与集成测试
 │   ├── test_tools.py     
@@ -61,17 +62,20 @@ AI-bioworkflow/
 1. **状态管理 (`state.py`)**：必须保持强类型。除了 LangGraph 原生的 `messages` 列表，还需要定义好接收前端传入的 `parsed_json`、标准化后的 `workflow_ir`、流转中的 `current_wdl`、`analysis_errors` 和 `validation_message`。
 2. **提示词隔离 (`prompts.py`)**：绝对不要将长篇大论的 System Prompt 硬编码在业务逻辑文件中。
 3. **IR 优先 (`schema.py`)**：workflow 的调用关系与 task 的定义必须分离。`workflow.calls` 表达 DAG，`tasks` 表达可复用 task 模板。
-4. **Catalog 先于自由生成 (`catalog/`, `recipes/`)**：常见生信工具、版本、参数、runtime 与配方步骤应沉淀为结构化目录，Planner 可以把 Recipe Tool Plan 解析成标准 IR。
-5. **静态分析先于渲染 (`analyzer.py`)**：在生成 WDL 前先检查 task 是否存在、输入是否齐全、上游输出引用是否有效、基础类型是否匹配。
-6. **保守修复 (`repairer.py`)**：自动修复只处理可以由 IR 本身确定的问题，例如 call 拓扑顺序和明显漏引号的 File/String 输出字面量；无法确定的错误应保留给人工或后续 LLM repairer。
-7. **确定性渲染 (`renderers/`)**：标准 IR 到 WDL 必须由模板或普通代码生成，不应依赖 LLM 的自由文本输出。
-8. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立 Tool，确保生成代码闭环验证。
-9. **渐进式重构**：先保证 IR -> WDL -> miniwdl check 的主链路稳定，再逐步引入 LLM planner、LLM repairer、Biocontainers 镜像查询节点。
+4. **自然语言只到 Plan (`nl_planner.py`)**：LLM 的职责是把用户需求转成 Recipe Tool Plan，不直接生成 WDL。
+5. **Catalog 先于自由生成 (`catalog/`, `recipes/`)**：常见生信工具、版本、参数、runtime 与配方步骤应沉淀为结构化目录，Planner 可以把 Recipe Tool Plan 解析成标准 IR。
+6. **静态分析先于渲染 (`analyzer.py`)**：在生成 WDL 前先检查 task 是否存在、输入是否齐全、上游输出引用是否有效、基础类型是否匹配。
+7. **保守修复 (`repairer.py`)**：自动修复只处理可以由 IR 本身确定的问题，例如 call 拓扑顺序和明显漏引号的 File/String 输出字面量；无法确定的错误应保留给人工或后续 LLM repairer。
+8. **确定性渲染 (`renderers/`)**：标准 IR 到 WDL 必须由模板或普通代码生成，不应依赖 LLM 的自由文本输出。
+9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立 Tool，确保生成代码闭环验证。
+10. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步引入 LLM repairer、Biocontainers 镜像查询节点。
 
 ## 当前 LangGraph 流程
 
 ```text
 START
+  ↓
+nl_planner        # 自然语言需求 -> Recipe Tool Plan（CLI 自然语言入口）
   ↓
 planner_node     # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR
   ↓

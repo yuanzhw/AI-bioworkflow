@@ -9,6 +9,7 @@ import yaml
 from dotenv import load_dotenv
 
 from src.graph import agent
+from src.nl_planner import DEFAULT_PLANNER_MODEL, plan_from_natural_language
 from src.nodes.analyzer import analyzer_node
 from src.nodes.planner import planner_node
 from src.nodes.renderer import renderer_node
@@ -17,6 +18,14 @@ from src.state import WorkflowState
 
 
 load_dotenv()
+
+
+DEMO_PROMPT = """
+Build a bulk RNA-seq differential expression workflow. The inputs are paired-end
+FASTQ files, a Salmon transcriptome index, and a sample metadata table. Run fastp
+for read QC, Salmon for quantification, and DESeq2 for differential expression.
+Return the differential expression table as the workflow output.
+""".strip()
 
 
 DEMO_INPUT: dict[str, Any] = {
@@ -98,14 +107,26 @@ DEMO_INPUT: dict[str, Any] = {
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compile a Workflow IR or Recipe Tool Plan into WDL.",
+        description="Plan and compile a bioinformatics workflow into WDL.",
     )
-    parser.add_argument(
+
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
+        "--prompt",
+        help="Natural-language workflow request. Uses a built-in RNA-seq demo prompt if no source is provided.",
+    )
+    source.add_argument(
+        "--prompt-file",
+        type=Path,
+        help="Path to a UTF-8 text file containing a natural-language workflow request.",
+    )
+    source.add_argument(
         "-i",
         "--input",
         type=Path,
-        help="Path to a JSON/YAML Workflow IR or Recipe Tool Plan. Uses a built-in demo if omitted.",
+        help="Developer mode: path to a JSON/YAML Workflow IR or Recipe Tool Plan.",
     )
+
     parser.add_argument(
         "-o",
         "--output",
@@ -118,9 +139,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Print the normalized Workflow IR after compilation.",
     )
     parser.add_argument(
+        "--print-plan",
+        action="store_true",
+        help="Print the structured plan produced from natural language before compilation.",
+    )
+    parser.add_argument(
         "--no-check",
         action="store_true",
         help="Skip miniwdl syntax validation after rendering.",
+    )
+    parser.add_argument(
+        "--planner-model",
+        default=DEFAULT_PLANNER_MODEL,
+        help=f"LLM model for natural-language planning. Default: {DEFAULT_PLANNER_MODEL}.",
     )
     parser.add_argument(
         "--verbose",
@@ -130,7 +161,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def load_workflow_input(path: Path | None) -> dict[str, Any]:
+def load_workflow_input(path: Path | None = None) -> dict[str, Any]:
     if path is None:
         return DEMO_INPUT
 
@@ -143,6 +174,14 @@ def load_workflow_input(path: Path | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"workflow input must be a JSON/YAML object: {path}")
     return data
+
+
+def load_prompt(prompt: str | None = None, prompt_file: Path | None = None) -> str:
+    if prompt_file is not None:
+        return prompt_file.read_text(encoding="utf-8").strip()
+    if prompt is not None:
+        return prompt.strip()
+    return DEMO_PROMPT
 
 
 def build_initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
@@ -198,13 +237,23 @@ def main(argv: list[str] | None = None) -> int:
     check = not args.no_check
 
     try:
-        parsed_json = load_workflow_input(args.input)
+        if args.input:
+            parsed_json = load_workflow_input(args.input)
+            planned_from_natural_language = False
+        else:
+            prompt = load_prompt(args.prompt, args.prompt_file)
+            parsed_json = plan_from_natural_language(prompt, model=args.planner_model)
+            planned_from_natural_language = True
+
         final_state = compile_workflow(parsed_json, check=check)
     except Exception as exc:
         print(f"Compilation failed before workflow execution: {exc}", file=sys.stderr)
         return 1
 
     _print_report(final_state, check=check)
+
+    if args.print_plan and planned_from_natural_language:
+        print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
 
     if args.print_ir and final_state["workflow_ir"]:
         print(json.dumps(final_state["workflow_ir"], indent=2, ensure_ascii=False))
