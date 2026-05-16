@@ -1,5 +1,6 @@
 import copy
 import unittest
+from typing import Any
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
@@ -7,7 +8,7 @@ from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
 
 
-def sample_rnaseq_tool_plan():
+def sample_rnaseq_tool_plan() -> dict[str, Any]:
     return {
         "workflow": {
             "name": "RNASeqDEG",
@@ -95,11 +96,51 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn('contrast = "condition"', wdl)
 
     def test_resolver_rejects_tool_not_allowed_for_recipe_step(self):
-        plan = sample_rnaseq_tool_plan()
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
         plan["workflow"]["tool_calls"][0]["tool"] = "salmon"
         plan["workflow"]["tool_calls"][0]["version"] = "1.10.2"
 
         with self.assertRaisesRegex(ValueError, "not allowed for recipe step 'qc'"):
+            resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+
+    def test_resolver_rejects_unknown_recipe_step(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        plan["workflow"]["tool_calls"][0]["step"] = "magic"
+
+        with self.assertRaisesRegex(ValueError, "references unknown recipe step 'magic'"):
+            resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+
+    def test_resolver_rejects_missing_required_recipe_step(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        plan["workflow"]["tool_calls"] = plan["workflow"]["tool_calls"][:-1]
+
+        with self.assertRaisesRegex(ValueError, "missing required recipe step\\(s\\): differential_expression"):
+            resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+
+    def test_resolver_rejects_duplicate_recipe_step(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        duplicate_call = copy.deepcopy(plan["workflow"]["tool_calls"][0])
+        duplicate_call["id"] = "qc_again"
+        plan["workflow"]["tool_calls"].append(duplicate_call)
+
+        with self.assertRaisesRegex(ValueError, "duplicate tool calls for recipe step\\(s\\): qc"):
+            resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+
+    def test_resolver_rejects_missing_required_workflow_input(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        plan["workflow"]["inputs"].pop("sample_groups")
+
+        with self.assertRaisesRegex(ValueError, "missing required workflow input 'sample_groups'"):
+            resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+
+    def test_resolver_rejects_required_workflow_input_type_mismatch(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        plan["workflow"]["inputs"]["sample_groups"] = "String"
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "workflow input 'sample_groups' expects File but received String",
+        ):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
 
     def test_resolver_rejects_unknown_param(self):

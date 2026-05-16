@@ -10,6 +10,7 @@ from src.catalog.schema import (
     ToolParamSpec,
     ToolSpec,
     validate_identifier,
+    validate_mapping_keys,
     validate_value_range,
     validate_value_type,
 )
@@ -50,6 +51,18 @@ class PlannedWorkflow(BaseModel):
         validate_identifier(value, "planned workflow identifier")
         return value
 
+    @field_validator("inputs")
+    @classmethod
+    def validate_input_names(cls, value: dict[str, str]) -> dict[str, str]:
+        validate_mapping_keys(value, "planned workflow input")
+        return value
+
+    @field_validator("outputs")
+    @classmethod
+    def validate_output_names(cls, value: dict[str, str]) -> dict[str, str]:
+        validate_mapping_keys(value, "planned workflow output")
+        return value
+
     @model_validator(mode="after")
     def validate_call_ids(self):
         seen_call_ids = set()
@@ -73,6 +86,7 @@ def resolve_tool_plan(
 ) -> WorkflowIR:
     plan = plan_data if isinstance(plan_data, ToolCallPlan) else ToolCallPlan.model_validate(plan_data)
     recipe = recipe_catalog.get(plan.workflow.recipe)
+    validate_recipe_plan(plan, recipe)
 
     task_defs: dict[str, dict[str, Any]] = {}
     calls: list[dict[str, Any]] = []
@@ -136,9 +150,33 @@ def validate_recipe_plan(plan_data: ToolCallPlan | dict[str, Any], recipe: Recip
         raise ValueError(f"plan references recipe '{plan.workflow.recipe}', expected '{recipe.id}'")
 
     known_steps = {step.id for step in recipe.steps}
+    required_steps = {step.id for step in recipe.steps if not step.optional}
+    planned_steps = []
     for tool_call in plan.workflow.tool_calls:
         if tool_call.step not in known_steps:
             raise ValueError(f"tool call '{tool_call.id}' references unknown recipe step '{tool_call.step}'")
+        planned_steps.append(tool_call.step)
+
+    duplicate_steps = _duplicates(planned_steps)
+    if duplicate_steps:
+        joined = ", ".join(duplicate_steps)
+        raise ValueError(f"duplicate tool calls for recipe step(s): {joined}")
+
+    missing_steps = sorted(required_steps - set(planned_steps))
+    if missing_steps:
+        joined = ", ".join(missing_steps)
+        raise ValueError(f"plan is missing required recipe step(s): {joined}")
+
+    for input_name, spec in recipe.required_inputs.items():
+        if input_name not in plan.workflow.inputs:
+            raise ValueError(f"plan is missing required workflow input '{input_name}'")
+
+        provided_type = plan.workflow.inputs[input_name]
+        if not _types_compatible(spec.type, provided_type):
+            raise ValueError(
+                f"workflow input '{input_name}' expects {spec.type} "
+                f"but received {provided_type}"
+            )
 
 
 def _task_inputs_for_tool(tool: ToolSpec) -> dict[str, str]:
@@ -153,6 +191,20 @@ def _task_inputs_for_tool(tool: ToolSpec) -> dict[str, str]:
         inputs[param_name] = param_spec.type
 
     return inputs
+
+
+def _duplicates(values: list[str]) -> list[str]:
+    seen = set()
+    duplicates = []
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+        seen.add(value)
+    return duplicates
+
+
+def _types_compatible(expected: str, actual: str) -> bool:
+    return expected.strip().rstrip("?") == actual.strip().rstrip("?")
 
 
 def _resolve_inputs(tool_call: PlannedToolCall, tool: ToolSpec) -> dict[str, str]:
