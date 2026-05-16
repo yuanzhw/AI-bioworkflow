@@ -1,3 +1,5 @@
+import logging
+
 from langchain_core.messages import HumanMessage
 
 from src.analyzer import analyze_workflow_ir
@@ -5,11 +7,14 @@ from src.schema import WorkflowIR
 from src.state import WorkflowState
 
 
+logger = logging.getLogger(__name__)
+
+
 def analyzer_node(state: WorkflowState):
     """
     Validate WorkflowIR before rendering WDL.
     """
-    print("🧪 Analyzer 节点正在检查 Workflow IR...")
+    logger.info("Analyzer node is checking Workflow IR.")
 
     try:
         workflow_ir = WorkflowIR.model_validate(state.get("workflow_ir", {}))

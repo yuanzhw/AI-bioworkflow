@@ -262,7 +262,7 @@ def _render_command(
     tool_call: PlannedToolCall,
     params: dict[str, Any],
 ) -> str:
-    env = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True)
+    env = Environment(undefined=StrictUndefined, trim_blocks=False, lstrip_blocks=True)
     template = env.from_string(tool.command_template)
     context = {
         input_name: input_name in tool_call.inputs

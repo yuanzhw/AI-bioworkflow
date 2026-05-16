@@ -1,14 +1,19 @@
+import logging
+
 from langchain_core.messages import AIMessage
 
 from src.repairer import repair_workflow_ir
 from src.state import WorkflowState
 
 
+logger = logging.getLogger(__name__)
+
+
 def repairer_node(state: WorkflowState):
     """
     Deterministically repair WorkflowIR when the analyzer/checker finds a safe fix.
     """
-    print("🩹 Repairer 节点正在尝试修复 Workflow IR...")
+    logger.info("Repairer node is attempting to repair Workflow IR.")
 
     try:
         report = repair_workflow_ir(state.get("workflow_ir", {}))

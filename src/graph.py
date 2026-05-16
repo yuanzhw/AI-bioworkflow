@@ -1,3 +1,5 @@
+import logging
+
 from langgraph.graph import END, START, StateGraph
 
 from src.nodes.analyzer import analyzer_node
@@ -9,6 +11,7 @@ from src.state import WorkflowState
 
 
 MAX_REPAIR_ATTEMPTS = 2
+logger = logging.getLogger(__name__)
 
 
 def route_after_planner(state: WorkflowState):
@@ -72,4 +75,4 @@ builder.add_conditional_edges("repairer", route_after_repairer)
 # 4. 编译打包成最终的 Agent
 agent = builder.compile()
 
-print("✅ Agent 图纸编译完成！")
+logger.info("Agent graph compiled.")

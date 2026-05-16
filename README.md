@@ -50,14 +50,34 @@ uv sync
 DEEPSEEK_API_KEY="sk-你的真实API密钥"
 ```
 
-### 4. 运行 MVP 测试
+### 4. 编译工作流
 
-执行主入口文件，验证 Agent 是否能正常根据预设的多 task Workflow IR 生成并校验 WDL 代码：
+无参数运行时会使用内置 demo，并打印生成的 WDL：
 
 ```bash
 uv run main.py
 ```
 *如果配置正确，终端将输出一段包含 `fastp` 和 `bwa_mem` 两个 task 的合规 WDL 代码。*
+
+也可以传入 JSON/YAML 文件并写出 WDL：
+
+```bash
+uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl
+```
+
+常用选项：
+
+- `--input` / `-i`：读取标准 Workflow IR 或 Recipe Tool Plan。
+- `--output` / `-o`：写出生成的 WDL；不传则打印到终端。
+- `--print-ir`：打印 Planner 标准化后的 Workflow IR。
+- `--no-check`：跳过 `miniwdl` 语法校验，仅执行 IR 分析与 WDL 渲染。
+- `--verbose`：将节点进度日志输出到 stderr。
+
+默认情况下，CLI 会把 WDL / JSON IR 等机器可消费内容写到 stdout，将状态、错误和校验信息写到 stderr，因此可以直接重定向生成 WDL：
+
+```bash
+uv run main.py --input examples/rnaseq_workflow_ir.json --no-check > workflow.wdl
+```
 
 ## 📥 支持的输入格式
 

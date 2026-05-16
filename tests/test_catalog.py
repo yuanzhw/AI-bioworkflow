@@ -94,6 +94,8 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("File deg_table = deg.deg_table", wdl)
         self.assertIn("--contrast ~{contrast}", wdl)
         self.assertIn('contrast = "condition"', wdl)
+        self.assertIn("-I ~{r2}\n    -o clean_R1.fq.gz", wdl)
+        self.assertIn("-O clean_R2.fq.gz\n    --thread ~{thread}", wdl)
 
     def test_resolver_rejects_tool_not_allowed_for_recipe_step(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())

@@ -1,9 +1,14 @@
+import logging
+
 from langchain_core.messages import AIMessage, HumanMessage
 
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.recipes import load_recipe_catalog
 from src.schema import coerce_workflow_ir
 from src.state import WorkflowState
+
+
+logger = logging.getLogger(__name__)
 
 
 def planner_node(state: WorkflowState):
@@ -14,7 +19,7 @@ def planner_node(state: WorkflowState):
     LLM planner can sit before this step and produce the same IR schema from
     natural language or incomplete forms.
     """
-    print("🧭 Planner 节点正在标准化 Workflow IR...")
+    logger.info("Planner node is normalizing Workflow IR.")
 
     raw_input = state.get("workflow_ir") or state.get("parsed_json", {})
 

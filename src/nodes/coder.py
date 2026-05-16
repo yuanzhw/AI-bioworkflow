@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 
@@ -8,6 +9,9 @@ from pydantic import SecretStr
 
 from src.prompts import coder_prompt
 from src.state import WorkflowState
+
+
+logger = logging.getLogger(__name__)
 
 # 初始化 DeepSeek (请确保在跑代码前 .env 里有真实的 DEEPSEEK_API_KEY)
 api_key_raw = os.environ.get("DEEPSEEK_API_KEY")
@@ -23,7 +27,7 @@ llm = ChatDeepSeek(
 )
 
 def coder_node(state: WorkflowState):
-    print("🤖 Coder 节点正在生成 WDL 代码...")
+    logger.info("Coder node is generating WDL code.")
     
     # 1. 获取输入数据
     user_json = state.get("parsed_json", {})

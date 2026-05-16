@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import subprocess
@@ -6,6 +7,9 @@ import tempfile
 from pathlib import Path
 
 from langchain_core.tools import tool
+
+
+logger = logging.getLogger(__name__)
 
 
 def miniwdl_available() -> bool:
@@ -18,7 +22,7 @@ def wdl_validator(wdl_code: str) -> dict:
     使用 miniwdl 校验 WDL 代码语法的合法性。
     如果代码有错，会返回具体的错误行号和原因。
     """
-    print("🛠️ Validator 工具正在校验代码语法...")
+    logger.info("Validator tool is checking WDL syntax.")
     
     # 1. 创建一个安全的临时文件来存放 WDL 代码
     # delete=False 是因为 subprocess 需要在外部读取它，我们稍后手动删除
