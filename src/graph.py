@@ -3,8 +3,12 @@ from langgraph.graph import END, START, StateGraph
 from src.nodes.analyzer import analyzer_node
 from src.nodes.checker import checker_node
 from src.nodes.planner import planner_node
+from src.nodes.repairer import repairer_node
 from src.nodes.renderer import renderer_node
 from src.state import WorkflowState
+
+
+MAX_REPAIR_ATTEMPTS = 2
 
 
 def route_after_planner(state: WorkflowState):
@@ -15,15 +19,34 @@ def route_after_planner(state: WorkflowState):
 
 def route_after_analyzer(state: WorkflowState):
     if state.get("analysis_errors"):
+        if _can_attempt_repair(state):
+            return "repairer"
         return END
     return "renderer"
 
 
-def route_after_checker(_state: WorkflowState):
-    """
-    End after syntax validation. A future repairer can branch from here.
-    """
+def route_after_checker(state: WorkflowState):
+    if state.get("is_valid"):
+        return END
+    if _missing_local_validator(state):
+        return END
+    if _can_attempt_repair(state):
+        return "repairer"
     return END
+
+
+def route_after_repairer(state: WorkflowState):
+    if state.get("repair_actions"):
+        return "analyzer"
+    return END
+
+
+def _can_attempt_repair(state: WorkflowState) -> bool:
+    return bool(state.get("workflow_ir")) and state.get("repair_count", 0) < MAX_REPAIR_ATTEMPTS
+
+
+def _missing_local_validator(state: WorkflowState) -> bool:
+    return "未找到 miniwdl" in state.get("validation_message", "")
 
 
 # 1. 实例化状态图，传入我们的 WorkflowState 笔记本
@@ -35,14 +58,17 @@ builder.add_node("planner", planner_node)
 builder.add_node("analyzer", analyzer_node)
 builder.add_node("renderer", renderer_node)
 builder.add_node("checker", checker_node)
+builder.add_node("repairer", repairer_node)
 
 # 3. 规划工作流向 (连线)
 # START -> planner -> analyzer -> renderer -> checker -> END
+# analyzer/checker can branch to repairer, then repairer returns to analyzer.
 builder.add_edge(START, "planner")
 builder.add_conditional_edges("planner", route_after_planner)
 builder.add_conditional_edges("analyzer", route_after_analyzer)
 builder.add_edge("renderer", "checker")
 builder.add_conditional_edges("checker", route_after_checker)
+builder.add_conditional_edges("repairer", route_after_repairer)
 # 4. 编译打包成最终的 Agent
 agent = builder.compile()
 

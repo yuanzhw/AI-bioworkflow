@@ -19,7 +19,7 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 - **确定性 WDL 编译**：通过 Jinja2 Renderer 从 IR 生成 WDL，避免让 LLM 承担模板引擎职责。
 - **静态分析**：在渲染前检查 task/call 引用、输入完整性、上游输出引用和基础类型匹配。
 - **Recipe / Tool Catalog**：支持用预定义生信工具目录和分析配方生成 Workflow IR。
-- **Agentic 架构**：基于 LangGraph 串联 Planner、Analyzer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
+- **Agentic 架构**：基于 LangGraph 串联 Planner、Analyzer、Repairer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
 - **模块化设计**：高度解耦的 State、Prompts、Nodes 与 Tools 设计，极佳的代码可维护性。
 
 ## 🛠️ 快速开始
@@ -111,7 +111,7 @@ Recipe Tool Plan 示例：
 - [x] 引入 `miniwdl` / `womtool` 作为 Tool 节点，实现生成的 WDL 自动化本地校验。
 - [x] 引入 Workflow IR、静态分析器与确定性 WDL Renderer。
 - [x] 接入 Recipe / Tool Catalog 输入到 LangGraph Planner。
-- [ ] 闭环修复机制：当校验器报错时，优先修复 IR 而不是重写整份 WDL。
+- [x] 闭环修复机制初版：当分析器或校验器发现可确定修复的问题时，优先修复 IR 并重新编译 WDL。
 - [ ] 接入 Biocontainers 镜像搜索节点，实现 Docker 地址的自动补全。
 
 ## 📄 许可证

@@ -99,6 +99,8 @@ def main():
         "current_wdl": "",
         "validation_message": "",
         "error_count": 0,
+        "repair_count": 0,
+        "repair_actions": [],
         "is_valid": False
     }
     

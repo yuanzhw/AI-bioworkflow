@@ -28,6 +28,12 @@ class WorkflowState(TypedDict):
     
     # 记录当前重试或循环的次数，防止死循环
     error_count: int
+
+    # 记录 IR repairer 已经尝试的次数，防止修复循环
+    repair_count: int
+
+    # 记录最近一次 IR repairer 执行的具体修复动作
+    repair_actions: list[str]
     
     # 用一个明确的布尔值来记录校验状态，True 代表校验通过，False 代表校验失败
     is_valid: bool
