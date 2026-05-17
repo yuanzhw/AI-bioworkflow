@@ -162,6 +162,7 @@ Recipe Tool Plan 示例：
 - [x] 引入 Workflow IR、静态分析器与确定性 WDL Renderer。
 - [x] 接入 Recipe / Tool Catalog 输入到 LangGraph Planner。
 - [x] 闭环修复机制初版：当分析器或校验器发现可确定修复的问题时，优先修复 IR 并重新编译 WDL。
+- [x] 建立 Container Resolver 的 provider 接口与离线测试基础。
 - [ ] 接入 Biocontainers 镜像搜索节点，实现 Docker 地址的自动补全。
 
 ## 📄 许可证
