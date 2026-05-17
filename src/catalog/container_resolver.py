@@ -54,6 +54,30 @@ class StaticContainerImageProvider:
         return list(self._images.get((tool_id, version), ()))
 
 
+def static_provider_from_image_map(
+    images: Mapping[str, str | Sequence[ImageCandidateInput]],
+) -> StaticContainerImageProvider:
+    normalized: dict[tuple[str, str], list[ImageCandidateInput]] = {}
+    for key, candidates in images.items():
+        tool_id, version = parse_tool_version_key(key)
+        if isinstance(candidates, str) or isinstance(candidates, ContainerImageCandidate):
+            candidate_values = [candidates]
+        else:
+            candidate_values = list(candidates)
+        normalized[(tool_id, version)] = candidate_values
+    return StaticContainerImageProvider(normalized)
+
+
+def parse_tool_version_key(key: str) -> tuple[str, str]:
+    if "@" not in key:
+        raise ValueError(f"container image key must use '<tool>@<version>': {key!r}")
+
+    tool_id, version = key.split("@", 1)
+    if not tool_id or not version:
+        raise ValueError(f"container image key must use '<tool>@<version>': {key!r}")
+    return tool_id, version
+
+
 def resolve_tool_container(
     tool: ToolSpec,
     provider: ContainerImageProvider,

@@ -69,7 +69,7 @@ AI-bioworkflow/
 7. **保守修复 (`repairer.py`)**：自动修复只处理可以由 IR 本身确定的问题，例如 call 拓扑顺序和明显漏引号的 File/String 输出字面量；无法确定的错误应保留给人工或后续 LLM repairer。
 8. **确定性渲染 (`renderers/`)**：标准 IR 到 WDL 必须由模板或普通代码生成，不应依赖 LLM 的自由文本输出。
 9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立 Tool，确保生成代码闭环验证。
-10. **Container 补全可插拔 (`catalog/container_resolver.py`)**：镜像解析先定义 provider 协议与确定性离线实现；真实 Biocontainers / Quay 查询应作为 provider 或独立节点接入，避免让主编译链路默认依赖网络。
+10. **Container 补全可插拔 (`catalog/container_resolver.py`)**：镜像解析先定义 provider 协议与确定性离线实现；CLI 只能通过显式 `--fill-containers` / `--container-images` 启用补全。真实 Biocontainers / Quay 查询应作为 provider 或独立节点接入，避免让主编译链路默认依赖网络。
 11. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步引入 LLM repairer、Biocontainers 镜像查询节点。
 
 ## 当前 LangGraph 流程

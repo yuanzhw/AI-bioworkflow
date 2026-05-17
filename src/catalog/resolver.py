@@ -5,6 +5,7 @@ from typing import Any
 from jinja2 import Environment, StrictUndefined
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.catalog.container_resolver import ContainerImageProvider, fill_missing_tool_container
 from src.catalog.loader import ToolCatalog
 from src.catalog.schema import (
     ToolParamSpec,
@@ -83,6 +84,7 @@ def resolve_tool_plan(
     plan_data: ToolCallPlan | dict[str, Any],
     recipe_catalog: RecipeCatalog,
     tool_catalog: ToolCatalog,
+    container_provider: ContainerImageProvider | None = None,
 ) -> WorkflowIR:
     plan = plan_data if isinstance(plan_data, ToolCallPlan) else ToolCallPlan.model_validate(plan_data)
     recipe = recipe_catalog.get(plan.workflow.recipe)
@@ -100,6 +102,8 @@ def resolve_tool_plan(
             )
 
         tool = tool_catalog.get(tool_call.tool, tool_call.version)
+        if container_provider is not None:
+            tool = fill_missing_tool_container(tool, container_provider)
         task_name = _task_name_for_call(tool_call)
         task_inputs = _task_inputs_for_tool(tool)
         params = _resolve_params(tool_call, tool)

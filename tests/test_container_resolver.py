@@ -8,7 +8,9 @@ from src.catalog import (
     StaticContainerImageProvider,
     ToolSpec,
     fill_missing_tool_container,
+    parse_tool_version_key,
     resolve_tool_container,
+    static_provider_from_image_map,
 )
 
 
@@ -114,6 +116,22 @@ class ContainerResolverTests(unittest.TestCase):
             provider.calls,
             [("fastp", "0.23.2", ("fastq qc", "adapter trimming"))],
         )
+
+    def test_static_provider_from_image_map_parses_tool_version_keys(self):
+        provider = static_provider_from_image_map(
+            {
+                "fastp@0.23.2": "quay.io/biocontainers/fastp:0.23.2",
+            }
+        )
+
+        self.assertEqual(
+            resolve_tool_container(make_tool(), provider),
+            "quay.io/biocontainers/fastp:0.23.2",
+        )
+
+    def test_parse_tool_version_key_rejects_malformed_key(self):
+        with self.assertRaisesRegex(ValueError, "<tool>@<version>"):
+            parse_tool_version_key("fastp")
 
     def test_missing_image_reports_tool_version(self):
         tool = make_tool()
