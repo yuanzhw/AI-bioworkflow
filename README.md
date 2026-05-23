@@ -88,8 +88,6 @@ uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rna
 - `--save-planner-prompt`：保存完整 Planner prompt，方便调试模型输出。
 - `--print-ir`：打印 Planner 标准化后的 Workflow IR。
 - `--no-check`：跳过 `miniwdl` 语法校验，仅执行 IR 分析与 WDL 渲染。
-- `--fill-containers`：从离线候选映射补全缺失的 `runtime.docker`。
-- `--container-images`：读取 JSON/YAML 格式的 container 候选映射，并隐式启用 `--fill-containers`。
 - `--planner-model`：指定自然语言 Planner 使用的模型。
 - `--verbose`：将节点进度日志输出到 stderr。
 
@@ -106,21 +104,6 @@ uv run main.py \
   --prompt-file examples/rnaseq_deg_request.txt \
   --save-planner-prompt debug/planner_prompt.txt \
   --save-plan debug/plan.json \
-  --output outputs/rnaseq_deg.wdl
-```
-
-补全缺失 container 镜像时，可以传入离线映射。键使用 `tool@version`，值可以是单个镜像或候选镜像列表：
-
-```json
-{
-  "fastp@0.23.2": "quay.io/biocontainers/fastp:0.23.2--h5f740d0_0"
-}
-```
-
-```bash
-uv run main.py \
-  --input examples/rnaseq_deg_recipe_plan.json \
-  --container-images debug/container_images.json \
   --output outputs/rnaseq_deg.wdl
 ```
 
@@ -179,9 +162,8 @@ Recipe Tool Plan 示例：
 - [x] 引入 Workflow IR、静态分析器与确定性 WDL Renderer。
 - [x] 接入 Recipe / Tool Catalog 输入到 LangGraph Planner。
 - [x] 闭环修复机制初版：当分析器或校验器发现可确定修复的问题时，优先修复 IR 并重新编译 WDL。
-- [x] 建立 Container Resolver 的 provider 接口与离线测试基础。
-- [x] CLI 支持显式离线 container 镜像补全。
-- [ ] 接入 Biocontainers 镜像搜索节点，实现 Docker 地址的自动补全。
+- [x] Tool Catalog 强制显式声明 `runtime.docker`，作为镜像来源的唯一权威。
+- [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证
 

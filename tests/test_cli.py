@@ -7,23 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import main as cli
-from src.catalog import ToolCatalog, load_tool_catalog
 from src.nl_planner import NaturalLanguagePlanningError, NaturalLanguagePlanResult
-from src.recipes import load_recipe_catalog
 
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
-
-
-def tool_catalog_without_fastp_docker() -> ToolCatalog:
-    tools = {
-        (tool.id, tool.version): tool
-        for tool in load_tool_catalog().all()
-    }
-    fastp = tools[("fastp", "0.23.2")]
-    runtime_without_docker = fastp.runtime.model_copy(update={"docker": None})
-    tools[("fastp", "0.23.2")] = fastp.model_copy(update={"runtime": runtime_without_docker})
-    return ToolCatalog(tools)
 
 
 class CliTests(unittest.TestCase):
@@ -37,72 +24,6 @@ class CliTests(unittest.TestCase):
         prompt = cli.load_prompt(prompt_file=EXAMPLES_DIR / "rnaseq_deg_request.txt")
 
         self.assertIn("bulk RNA-seq differential expression", prompt)
-
-    def test_load_container_image_candidates_reads_json_mapping(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "containers.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "fastp@0.23.2": "quay.io/biocontainers/fastp:0.23.2",
-                        "salmon@1.10.2": [
-                            "quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2",
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            candidates = cli.load_container_image_candidates(path)
-
-        self.assertEqual(
-            candidates,
-            {
-                "fastp@0.23.2": ["quay.io/biocontainers/fastp:0.23.2"],
-                "salmon@1.10.2": [
-                    "quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2",
-                ],
-            },
-        )
-
-    def test_cli_container_images_implies_fill_containers(self):
-        tool_catalog = tool_catalog_without_fastp_docker()
-        recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "rnaseq_deg.wdl"
-            container_path = Path(tmpdir) / "containers.json"
-            container_path.write_text(
-                json.dumps(
-                    {
-                        "fastp@0.23.2": "quay.io/biocontainers/fastp:0.23.2--h5f740d0_0",
-                    }
-                ),
-                encoding="utf-8",
-            )
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-
-            with patch("src.nodes.planner.load_tool_catalog", return_value=tool_catalog):
-                with patch("src.nodes.planner.load_recipe_catalog", return_value=recipe_catalog):
-                    with redirect_stdout(stdout), redirect_stderr(stderr):
-                        exit_code = cli.main(
-                            [
-                                "--input",
-                                str(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json"),
-                                "--container-images",
-                                str(container_path),
-                                "--output",
-                                str(output_path),
-                                "--no-check",
-                            ]
-                        )
-
-            self.assertEqual(exit_code, 0, stderr.getvalue())
-            self.assertIn(
-                "quay.io/biocontainers/fastp:0.23.2--h5f740d0_0",
-                output_path.read_text(encoding="utf-8"),
-            )
 
     def test_cli_compiles_natural_language_prompt_with_mock_planner(self):
         planned = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")

@@ -8,7 +8,6 @@ from typing import Any, Mapping, cast
 import yaml
 from dotenv import load_dotenv
 
-from src.catalog import parse_tool_version_key
 from src.graph import agent
 from src.nl_planner import (
     DEFAULT_PLANNER_MODEL,
@@ -165,19 +164,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Skip miniwdl syntax validation after rendering.",
     )
     parser.add_argument(
-        "--fill-containers",
-        action="store_true",
-        help="Fill missing runtime.docker values from offline container image candidates.",
-    )
-    parser.add_argument(
-        "--container-images",
-        type=Path,
-        help=(
-            "Path to a JSON/YAML map of '<tool>@<version>' to image or image list. "
-            "Implies --fill-containers."
-        ),
-    )
-    parser.add_argument(
         "--planner-model",
         default=DEFAULT_PLANNER_MODEL,
         help=f"LLM model for natural-language planning. Default: {DEFAULT_PLANNER_MODEL}.",
@@ -213,48 +199,11 @@ def load_prompt(prompt: str | None = None, prompt_file: Path | None = None) -> s
     return DEMO_PROMPT
 
 
-def load_container_image_candidates(path: Path) -> dict[str, list[str]]:
-    raw_text = path.read_text(encoding="utf-8")
-    if path.suffix.lower() in {".yaml", ".yml"}:
-        data = yaml.safe_load(raw_text)
-    else:
-        data = json.loads(raw_text)
-
-    if not isinstance(data, dict):
-        raise ValueError(f"container image map must be a JSON/YAML object: {path}")
-
-    normalized: dict[str, list[str]] = {}
-    for key, value in data.items():
-        if not isinstance(key, str):
-            raise ValueError(f"container image map keys must be strings: {path}")
-        parse_tool_version_key(key)
-
-        if isinstance(value, str):
-            candidates = [value]
-        elif isinstance(value, list) and all(isinstance(candidate, str) for candidate in value):
-            candidates = value
-        else:
-            raise ValueError(
-                "container image map values must be an image string or list of image strings"
-            )
-
-        if not candidates:
-            raise ValueError(f"container image map entry has no candidates: {key}")
-        normalized[key] = candidates
-
-    return normalized
-
-
 def build_initial_state(
     parsed_json: dict[str, Any],
-    *,
-    fill_containers: bool = False,
-    container_image_candidates: dict[str, list[str]] | None = None,
 ) -> WorkflowState:
     return {
         "parsed_json": parsed_json,
-        "fill_containers": fill_containers,
-        "container_image_candidates": container_image_candidates or {},
         "workflow_ir": {},
         "analysis_errors": [],
         "analysis_warnings": [],
@@ -271,15 +220,8 @@ def build_initial_state(
 def compile_workflow(
     parsed_json: dict[str, Any],
     check: bool = True,
-    *,
-    fill_containers: bool = False,
-    container_image_candidates: dict[str, list[str]] | None = None,
 ) -> WorkflowState:
-    state = build_initial_state(
-        parsed_json,
-        fill_containers=fill_containers,
-        container_image_candidates=container_image_candidates,
-    )
+    state = build_initial_state(parsed_json)
     if check:
         return cast(WorkflowState, agent.invoke(state))
 
@@ -342,16 +284,9 @@ def main(argv: list[str] | None = None) -> int:
                 write_json_output(args.save_plan, parsed_json)
                 print(f"Planner plan written to {args.save_plan}", file=sys.stderr)
 
-        container_image_candidates = (
-            load_container_image_candidates(args.container_images)
-            if args.container_images
-            else {}
-        )
         final_state = compile_workflow(
             parsed_json,
             check=check,
-            fill_containers=args.fill_containers or bool(container_image_candidates),
-            container_image_candidates=container_image_candidates,
         )
     except NaturalLanguagePlanningError as exc:
         print(f"Natural language planning failed: {exc}", file=sys.stderr)

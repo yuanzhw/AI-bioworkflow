@@ -11,12 +11,6 @@ class WorkflowState(TypedDict):
     # 存放用户从前端传来的结构化表单数据（JSON格式）
     parsed_json: dict 
 
-    # 是否启用缺失 container 镜像补全
-    fill_containers: bool
-
-    # 离线 container 候选，格式为 {"tool@version": ["image", ...]}
-    container_image_candidates: dict[str, list[str]]
-
     # 标准化后的内部工作流表示，后续节点只处理这个 IR
     workflow_ir: dict
 
