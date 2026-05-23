@@ -1,0 +1,9 @@
+Build a bulk RNA-seq differential expression workflow.
+
+Inputs:
+- paired-end FASTQ files
+- a Salmon transcriptome index
+- a sample metadata table with group labels
+
+Run fastp for read quality control, Salmon for quantification, and DESeq2 for
+differential expression. Return the differential expression table.

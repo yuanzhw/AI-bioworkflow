@@ -1,0 +1,48 @@
+id: fastp
+version: "0.23.2"
+aliases:
+  - fastq qc
+  - adapter trimming
+description: FASTQ quality control and adapter trimming.
+
+inputs:
+  r1:
+    type: File
+    required: true
+    description: First FASTQ read file.
+  r2:
+    type: File
+    required: false
+    description: Optional second FASTQ read file.
+
+params:
+  thread:
+    type: Int
+    default: 4
+    min: 1
+  qualified_quality_phred:
+    type: Int
+    default: 15
+    min: 0
+    max: 40
+
+outputs:
+  clean_r1:
+    type: File
+    value: '"clean_R1.fq.gz"'
+  clean_r2:
+    type: File
+    value: '"clean_R2.fq.gz"'
+
+command_template: |
+  fastp -i ~{r1}
+  {% if r2 %}-I ~{r2}{% endif %}
+  -o clean_R1.fq.gz
+  {% if r2 %}-O clean_R2.fq.gz{% endif %}
+  --thread ~{thread}
+  --qualified_quality_phred ~{qualified_quality_phred}
+
+runtime:
+  docker: quay.io/biocontainers/fastp:0.23.2
+  cpu: 4
+  memory: 8G

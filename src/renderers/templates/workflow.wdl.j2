@@ -1,0 +1,69 @@
+version 1.0
+
+workflow {{ ir.workflow.name }} {
+{% if ir.workflow.inputs %}
+  input {
+{% for name, type in ir.workflow.inputs.items() %}
+    {{ type }} {{ name }}
+{% endfor %}
+  }
+
+{% endif %}
+{% for call in ir.workflow.calls %}
+  call {{ call.task }}{{ (" as " ~ call.id) if call.id != call.task else "" }} {
+{% if call.inputs %}
+    input:
+{% for input_name, expression in call.inputs.items() %}
+      {{ input_name }} = {{ expression }}{{ "," if not loop.last else "" }}
+{% endfor %}
+{% endif %}
+  }
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}
+{% if workflow_outputs %}
+
+  output {
+{% for output in workflow_outputs %}
+    {{ output.type }} {{ output.name }} = {{ output.expression }}
+{% endfor %}
+  }
+{% endif %}
+}
+
+{% for task_name, task in ir.tasks.items() %}
+task {{ task_name }} {
+{% if task.inputs %}
+  input {
+{% for input_name, type in task.inputs.items() %}
+    {{ type }} {{ input_name }}
+{% endfor %}
+  }
+
+{% endif %}
+  command <<<
+{{ task.command | indent_command(4) }}
+  >>>
+
+{% if task.outputs %}
+  output {
+{% for output_name, output in task.outputs.items() %}
+    {{ output.type }} {{ output_name }} = {{ output.value }}
+{% endfor %}
+  }
+
+{% endif %}
+{% set runtime_values = runtime_items(task.runtime) %}
+{% if runtime_values %}
+  runtime {
+{% for key, value in runtime_values %}
+    {{ key }}: {{ value | wdl_literal }}
+{% endfor %}
+  }
+{% endif %}
+}
+{% if not loop.last %}
+
+{% endif %}
+{% endfor %}

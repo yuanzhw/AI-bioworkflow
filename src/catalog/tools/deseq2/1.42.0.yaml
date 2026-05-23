@@ -1,0 +1,38 @@
+id: deseq2
+version: "1.42.0"
+aliases:
+  - differential expression
+  - DEG
+description: Differential expression analysis from count matrix and sample groups.
+
+inputs:
+  counts:
+    type: File
+    required: true
+    description: Gene count matrix.
+  sample_groups:
+    type: File
+    required: true
+    description: Sample metadata and group labels.
+
+params:
+  contrast:
+    type: String
+    default: condition
+
+outputs:
+  deg_table:
+    type: File
+    value: '"differential_expression.tsv"'
+
+command_template: |
+  Rscript run_deseq2.R
+  --counts ~{counts}
+  --sample-groups ~{sample_groups}
+  --contrast ~{contrast}
+  --output differential_expression.tsv
+
+runtime:
+  docker: bioconductor/bioconductor_docker:RELEASE_3_18
+  cpu: 4
+  memory: 16G

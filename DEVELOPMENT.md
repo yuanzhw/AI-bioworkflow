@@ -1,6 +1,8 @@
 # AI-bioworkflow 开发与架构指南
 
-本文档用于记录基于 LangGraph 和 DeepSeek 搭建的 WDL 自动生成 Agent 的目录结构与核心设计理念，以供后续开发参考。
+本文档用于记录基于 LangGraph 的 WDL 工作流生成系统目录结构与核心设计理念，以供后续开发参考。
+
+当前工程方向是“Workflow IR 编译器 + LLM 辅助规划/修复”，而不是让大模型直接手写最终 WDL。标准 IR 到 WDL 的过程必须保持确定性、可测试。
 
 ## 📁 核心目录结构
 
@@ -16,18 +18,38 @@ AI-bioworkflow/
 │   │
 │   ├── state.py          # 1. 状态定义：定义 Agent 的全局状态 (WorkflowState)
 │   │
-│   ├── prompts.py        # 2. 提示词管理：存放所有 System Prompts 和 Few-shot 示例
+│   ├── schema.py         # 2. Workflow IR 的 Pydantic Schema 与兼容转换
 │   │
-│   ├── tools/            # 3. 工具箱：存放供大模型调用的外部工具
+│   ├── analyzer.py       # 3. IR 静态分析：引用、类型、DAG 顺序等检查
+│   ├── repairer.py       # 4. IR 保守修复：call 顺序、输出字面量等确定性问题
+│   ├── nl_planner.py     # 5. 自然语言需求 -> Recipe Tool Plan
+│   │
+│   ├── catalog/          # 6. 生信工具目录：工具 schema、YAML 定义与 plan resolver
+│   │   └── container_resolver.py # Container 镜像补全边界与离线 provider
+│   │
+│   ├── recipes/          # 7. 分析配方目录：配方 schema 与步骤定义
+│   │
+│   ├── prompts.py        # 8. 提示词管理：存放所有 System Prompts 和 Few-shot 示例
+│   │
+│   ├── renderers/        # 9. 确定性代码生成器
+│   │   ├── wdl.py        # IR -> WDL
+│   │   └── templates/
+│   │       └── workflow.wdl.j2
+│   │
+│   ├── tools/            # 10. 工具箱：存放外部工具封装
 │   │   ├── __init__.py
 │   │   └── validator.py  # 生信特定工具（如 miniwdl 语法校验）
 │   │
-│   ├── nodes/            # 4. 工作节点：LangGraph 的具体执行工位
+│   ├── nodes/            # 11. 工作节点：LangGraph 的具体执行工位
 │   │   ├── __init__.py
-│   │   ├── planner.py    # 将结构化表单转化为步骤图的逻辑
-│   │   └── coder.py      # 负责输出具体 WDL 代码的逻辑
+│   │   ├── planner.py    # 将标准 IR 或 Recipe Tool Plan 标准化为 Workflow IR
+│   │   ├── analyzer.py   # 调用 IR 静态分析
+│   │   ├── repairer.py   # 调用 IR repairer 并记录修复动作
+│   │   ├── renderer.py   # 调用 WDL renderer
+│   │   ├── checker.py    # 调用 miniwdl validator
+│   │   └── coder.py      # 旧版 LLM 直出 WDL 节点，保留作对照/实验
 │   │
-│   └── graph.py          # 5. 核心图纸：组装 nodes 和 tools 的 StateGraph
+│   └── graph.py          # 12. 核心图纸：组装 nodes 和 tools 的 StateGraph
 │
 ├── tests/                # 单元与集成测试
 │   ├── test_tools.py     
@@ -38,7 +60,38 @@ AI-bioworkflow/
 
 ## 🧠 核心模块设计理念
 
-1. **状态管理 (`state.py`)**：必须保持强类型。除了 LangGraph 原生的 `messages` 列表，还需要定义好接收前端传入的 `parsed_json`（结构化表单数据）和流转中的 `current_wdl` 代码。
+1. **状态管理 (`state.py`)**：必须保持强类型。除了 LangGraph 原生的 `messages` 列表，还需要定义好接收前端传入的 `parsed_json`、标准化后的 `workflow_ir`、流转中的 `current_wdl`、`analysis_errors` 和 `validation_message`。
 2. **提示词隔离 (`prompts.py`)**：绝对不要将长篇大论的 System Prompt 硬编码在业务逻辑文件中。
-3. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立的 Tool 节点，确保大模型生成的代码闭环验证。
-4. **渐进式重构**：初期 MVP 阶段确保数据流转清晰，后期再逐步引入更复杂的查库（如自动查询 biocontainers 镜像）节点。
+3. **IR 优先 (`schema.py`)**：workflow 的调用关系与 task 的定义必须分离。`workflow.calls` 表达 DAG，`tasks` 表达可复用 task 模板。
+4. **自然语言只到 Plan (`nl_planner.py`)**：LLM 的职责是把用户需求转成 Recipe Tool Plan，不直接生成 WDL。Planner 失败需要区分 JSON 解析、plan schema、recipe/catalog 校验三类错误，便于调试真实模型输出。
+5. **Catalog 先于自由生成 (`catalog/`, `recipes/`)**：常见生信工具、版本、参数、runtime 与配方步骤应沉淀为结构化目录，Planner 可以把 Recipe Tool Plan 解析成标准 IR。
+6. **静态分析先于渲染 (`analyzer.py`)**：在生成 WDL 前先检查 task 是否存在、输入是否齐全、上游输出引用是否有效、基础类型是否匹配。
+7. **保守修复 (`repairer.py`)**：自动修复只处理可以由 IR 本身确定的问题，例如 call 拓扑顺序和明显漏引号的 File/String 输出字面量；无法确定的错误应保留给人工或后续 LLM repairer。
+8. **确定性渲染 (`renderers/`)**：标准 IR 到 WDL 必须由模板或普通代码生成，不应依赖 LLM 的自由文本输出。
+9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立 Tool，确保生成代码闭环验证。
+10. **Container 补全可插拔 (`catalog/container_resolver.py`)**：镜像解析先定义 provider 协议与确定性离线实现；CLI 只能通过显式 `--fill-containers` / `--container-images` 启用补全。真实 Biocontainers / Quay 查询应作为 provider 或独立节点接入，避免让主编译链路默认依赖网络。
+11. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步引入 LLM repairer、Biocontainers 镜像查询节点。
+
+## 当前 LangGraph 流程
+
+```text
+START
+  ↓
+nl_planner        # 自然语言需求 -> Recipe Tool Plan（CLI 自然语言入口）
+  ↓
+planner_node     # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR
+  ↓
+analyzer_node    # IR 静态分析
+  ↓
+renderer_node    # Workflow IR -> WDL
+  ↓
+checker_node     # miniwdl check
+  ↓
+END
+
+analyzer_node 或 checker_node 发现错误时，如果 repairer 还有重试预算，会进入：
+
+repairer_node    # 可确定修复时更新 IR
+  ↓
+analyzer_node    # 修复后重新分析、渲染、校验
+```

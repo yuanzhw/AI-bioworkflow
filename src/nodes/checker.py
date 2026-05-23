@@ -1,12 +1,19 @@
+import logging
+
 from langchain_core.messages import HumanMessage
+
 from src.state import WorkflowState
 from src.tools.validator import wdl_validator
+
+
+logger = logging.getLogger(__name__)
+
 
 def checker_node(state: WorkflowState):
     """
     负责调用 miniwdl 工具校验代码的节点
     """
-    print("🔍 Checker 节点正在运行 miniwdl 校验...")
+    logger.info("Checker node is running miniwdl validation.")
     
     wdl_code = state.get("current_wdl", "")
     current_error_count = state.get("error_count", 0)
@@ -19,13 +26,18 @@ def checker_node(state: WorkflowState):
 
     # 2. 判断结果并更新状态笔记本
     if is_valid:
-        print("🎉 校验通过！")
-        return {"error_count": current_error_count, "is_valid": True} # 没报错，只更新状态，不增加消息
+        logger.info("WDL validation passed.")
+        return {
+            "error_count": current_error_count,
+            "is_valid": True,
+            "validation_message": message,
+        }
     else:
-        print("❌ 校验失败！准备打回重写...")
-        # 报错了！伪造一个人类的消息，把报错糊在模型脸上，并记录失败次数
+        logger.info("WDL validation failed.")
+        # 报错了！把校验错误写入消息，后续 LLM repairer 可以基于它修复 IR
         return {
             "messages": [HumanMessage(content=message)],
             "error_count": current_error_count + 1,
-            "is_valid": False
+            "is_valid": False,
+            "validation_message": message,
         }

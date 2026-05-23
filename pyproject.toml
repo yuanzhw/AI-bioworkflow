@@ -1,7 +1,7 @@
 [project]
 name = "ai-bioworkflow"
 version = "0.1.0"
-description = "Add your description here"
+description = "Agentic compiler for bioinformatics Workflow IR to WDL"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -13,4 +13,10 @@ dependencies = [
     "langgraph>=1.1.10",
     "miniwdl>=1.14.2",
     "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+]
+
+[dependency-groups]
+dev = [
+    "isort>=8.0.1",
 ]
