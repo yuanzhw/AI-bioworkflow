@@ -1,28 +1,37 @@
-from langchain_core.prompts import (ChatPromptTemplate, PromptTemplate,
-                                    SystemMessagePromptTemplate)
+import json
+from typing import Any
 
-_CODER_SYSTEM_TEMPLATE = """
-你是一个世界顶级的生物信息学工程师，精通 WDL (Workflow Description Language) 1.0 规范。
-你的任务是将用户提供的结构化 JSON 步骤说明，翻译成标准的、无语法错误的 WDL 代码。
 
-【约束条件】
-1. 必须包含一个 workflow {} 块和所有必需的 task {} 块。
-2. 变量传递必须严格使用 ~{variable} 语法。
-3. 每个 task 必须包含 command <<< >>>、runtime 和 output 块。
-4. 你只需要输出 WDL 代码，不需要提供任何 markdown 格式或解释性的废话。直接输出纯文本代码。
-
-【用户的 JSON 描述如下】：
-{{ json_data }}
-"""
-
-# 明确指定 template_format="jinja2"
-jinja2_prompt = PromptTemplate(
-    template=_CODER_SYSTEM_TEMPLATE,
-    template_format="jinja2",
-    input_variables=["json_data"]
-)
-
-# 暴露出最终的 ChatPromptTemplate
-coder_prompt = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate(prompt=jinja2_prompt)
-])
+def render_natural_language_planner_prompt(
+    request: str,
+    catalog_context: dict[str, Any],
+) -> str:
+    return (
+        "You are a bioinformatics workflow planner. Convert the user's natural-language "
+        "request into a strict JSON Recipe Tool Plan for AI-bioworkflow.\n\n"
+        "Rules:\n"
+        "- Return JSON only. Do not include markdown or explanations.\n"
+        "- Prefer an existing recipe from the catalog.\n"
+        "- Use only tools and versions listed in the catalog.\n"
+        "- Use workflow input names from the recipe required_inputs when possible.\n"
+        "- Use call ids that are valid WDL identifiers.\n"
+        "- Connect upstream tool outputs with call_id.output_name expressions.\n"
+        "- Include explicit workflow outputs requested by the user, or the final useful output.\n\n"
+        "Output shape:\n"
+        "{\n"
+        '  "workflow": {\n'
+        '    "name": "ValidWorkflowName",\n'
+        '    "recipe": "recipe_id",\n'
+        '    "inputs": {"input_name": "WDLType"},\n'
+        '    "tool_calls": [\n'
+        '      {"id": "call_id", "step": "recipe_step_id", "tool": "tool_id", '
+        '"version": "tool_version", "inputs": {}, "params": {}}\n'
+        "    ],\n"
+        '    "outputs": {"output_name": "call_id.output_name"}\n'
+        "  }\n"
+        "}\n\n"
+        "Catalog:\n"
+        f"{json.dumps(catalog_context, indent=2, ensure_ascii=False)}\n\n"
+        "User request:\n"
+        f"{request.strip()}\n"
+    )

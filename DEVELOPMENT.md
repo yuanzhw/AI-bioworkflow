@@ -28,7 +28,7 @@ AI-bioworkflow/
 │   │
 │   ├── recipes/          # 7. 分析配方目录：配方 schema 与步骤定义
 │   │
-│   ├── prompts.py        # 8. 提示词管理：存放所有 System Prompts 和 Few-shot 示例
+│   ├── prompts.py        # 8. 提示词管理：存放自然语言 Planner Prompt 模板
 │   │
 │   ├── renderers/        # 9. 确定性代码生成器
 │   │   ├── wdl.py        # IR -> WDL
@@ -45,8 +45,7 @@ AI-bioworkflow/
 │   │   ├── analyzer.py   # 调用 IR 静态分析
 │   │   ├── repairer.py   # 调用 IR repairer 并记录修复动作
 │   │   ├── renderer.py   # 调用 WDL renderer
-│   │   ├── checker.py    # 调用 miniwdl validator
-│   │   └── coder.py      # 旧版 LLM 直出 WDL 节点，保留作对照/实验
+│   │   └── checker.py    # 调用 miniwdl validator
 │   │
 │   └── graph.py          # 12. 核心图纸：组装 nodes 和 tools 的 StateGraph
 │
