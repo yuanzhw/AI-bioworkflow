@@ -149,8 +149,6 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
 def initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
     state: WorkflowState = {
         "parsed_json": parsed_json,
-        "fill_containers": False,
-        "container_image_candidates": {},
         "workflow_ir": {},
         "analysis_errors": [],
         "analysis_warnings": [],

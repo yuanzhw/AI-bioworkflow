@@ -81,7 +81,10 @@ class ToolSpec(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_command_template(self):
+    def validate_tool_spec(self):
+        if not self.runtime.docker:
+            raise ValueError(f"tool '{self.id}@{self.version}' must define runtime.docker")
+
         duplicate_names = set(self.inputs).intersection(self.params)
         if duplicate_names:
             joined = ", ".join(sorted(duplicate_names))

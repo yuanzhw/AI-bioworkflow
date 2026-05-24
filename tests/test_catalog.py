@@ -3,7 +3,8 @@ import unittest
 from typing import Any
 
 from src.analyzer import analyze_workflow_ir
-from src.catalog import StaticContainerImageProvider, ToolCatalog, load_tool_catalog, resolve_tool_plan
+from src.catalog import load_tool_catalog, resolve_tool_plan
+from src.catalog.schema import ToolSpec
 from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
 
@@ -97,35 +98,32 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("-I ~{r2}\n    -o clean_R1.fq.gz", wdl)
         self.assertIn("-O clean_R2.fq.gz\n    --thread ~{thread}", wdl)
 
-    def test_resolver_fills_missing_container_when_provider_is_supplied(self):
-        tools = {
-            (tool.id, tool.version): tool
-            for tool in self.tool_catalog.all()
-        }
-        fastp = tools[("fastp", "0.23.2")]
-        runtime_without_docker = fastp.runtime.model_copy(update={"docker": None})
-        tools[("fastp", "0.23.2")] = fastp.model_copy(update={"runtime": runtime_without_docker})
-        tool_catalog = ToolCatalog(tools)
-        recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)
-        container_provider = StaticContainerImageProvider(
-            {
-                ("fastp", "0.23.2"): [
-                    "quay.io/biocontainers/fastp:0.23.2--h5f740d0_0",
-                ]
-            }
-        )
-
-        workflow_ir = resolve_tool_plan(
-            sample_rnaseq_tool_plan(),
-            recipe_catalog,
-            tool_catalog,
-            container_provider=container_provider,
-        )
-
-        self.assertEqual(
-            workflow_ir.tasks["fastp_qc"].runtime.docker,
-            "quay.io/biocontainers/fastp:0.23.2--h5f740d0_0",
-        )
+    def test_tool_spec_requires_runtime_docker(self):
+        with self.assertRaisesRegex(ValueError, "must define runtime.docker"):
+            ToolSpec.model_validate(
+                {
+                    "id": "fastp",
+                    "version": "0.23.2",
+                    "description": "FASTQ quality control.",
+                    "inputs": {
+                        "r1": {
+                            "type": "File",
+                            "required": True,
+                        }
+                    },
+                    "outputs": {
+                        "clean_r1": {
+                            "type": "File",
+                            "value": '"clean_R1.fq.gz"',
+                        }
+                    },
+                    "command_template": "fastp -i ~{r1} -o clean_R1.fq.gz",
+                    "runtime": {
+                        "cpu": 4,
+                        "memory": "8G",
+                    },
+                }
+            )
 
     def test_resolver_rejects_tool_not_allowed_for_recipe_step(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())

@@ -4,7 +4,7 @@ from langgraph.graph import END, START, StateGraph
 
 from src.nodes.analyzer import analyzer_node
 from src.nodes.checker import checker_node
-from src.nodes.planner import planner_node
+from src.nodes.ir_normalizer import ir_normalizer_node
 from src.nodes.repairer import repairer_node
 from src.nodes.renderer import renderer_node
 from src.state import WorkflowState
@@ -14,7 +14,7 @@ MAX_REPAIR_ATTEMPTS = 2
 logger = logging.getLogger(__name__)
 
 
-def route_after_planner(state: WorkflowState):
+def route_after_ir_normalizer(state: WorkflowState):
     if state.get("analysis_errors"):
         return END
     return "analyzer"
@@ -57,17 +57,17 @@ builder = StateGraph(WorkflowState)
 
 # 2. 添加工作节点
 # 第一个参数是节点的内部名称（随便起），第二个参数是我们刚才写的处理函数
-builder.add_node("planner", planner_node)
+builder.add_node("ir_normalizer", ir_normalizer_node)
 builder.add_node("analyzer", analyzer_node)
 builder.add_node("renderer", renderer_node)
 builder.add_node("checker", checker_node)
 builder.add_node("repairer", repairer_node)
 
 # 3. 规划工作流向 (连线)
-# START -> planner -> analyzer -> renderer -> checker -> END
+# START -> ir_normalizer -> analyzer -> renderer -> checker -> END
 # analyzer/checker can branch to repairer, then repairer returns to analyzer.
-builder.add_edge(START, "planner")
-builder.add_conditional_edges("planner", route_after_planner)
+builder.add_edge(START, "ir_normalizer")
+builder.add_conditional_edges("ir_normalizer", route_after_ir_normalizer)
 builder.add_conditional_edges("analyzer", route_after_analyzer)
 builder.add_edge("renderer", "checker")
 builder.add_conditional_edges("checker", route_after_checker)

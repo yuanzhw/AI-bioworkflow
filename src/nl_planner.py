@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from src.catalog.loader import ToolCatalog, load_tool_catalog
 from src.catalog.resolver import ToolCallPlan, resolve_tool_plan
+from src.prompts import render_natural_language_planner_prompt
 from src.recipes.loader import RecipeCatalog, load_recipe_catalog
 
 
@@ -149,35 +150,7 @@ def build_planner_prompt(
         ],
     }
 
-    return (
-        "You are a bioinformatics workflow planner. Convert the user's natural-language "
-        "request into a strict JSON Recipe Tool Plan for AI-bioworkflow.\n\n"
-        "Rules:\n"
-        "- Return JSON only. Do not include markdown or explanations.\n"
-        "- Prefer an existing recipe from the catalog.\n"
-        "- Use only tools and versions listed in the catalog.\n"
-        "- Use workflow input names from the recipe required_inputs when possible.\n"
-        "- Use call ids that are valid WDL identifiers.\n"
-        "- Connect upstream tool outputs with call_id.output_name expressions.\n"
-        "- Include explicit workflow outputs requested by the user, or the final useful output.\n\n"
-        "Output shape:\n"
-        "{\n"
-        '  "workflow": {\n'
-        '    "name": "ValidWorkflowName",\n'
-        '    "recipe": "recipe_id",\n'
-        '    "inputs": {"input_name": "WDLType"},\n'
-        '    "tool_calls": [\n'
-        '      {"id": "call_id", "step": "recipe_step_id", "tool": "tool_id", '
-        '"version": "tool_version", "inputs": {}, "params": {}}\n'
-        "    ],\n"
-        '    "outputs": {"output_name": "call_id.output_name"}\n'
-        "  }\n"
-        "}\n\n"
-        "Catalog:\n"
-        f"{json.dumps(catalog_context, indent=2, ensure_ascii=False)}\n\n"
-        "User request:\n"
-        f"{request.strip()}\n"
-    )
+    return render_natural_language_planner_prompt(request, catalog_context)
 
 
 def build_default_planner_prompt(request: str) -> str:
