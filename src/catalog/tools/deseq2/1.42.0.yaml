@@ -33,6 +33,6 @@ command_template: |
   --output differential_expression.tsv
 
 runtime:
-  docker: bioconductor/bioconductor_docker:RELEASE_3_18
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0
   cpu: 4
   memory: 16G

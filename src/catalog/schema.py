@@ -41,6 +41,14 @@ class ToolOutputSpec(BaseModel):
     type: str
     value: str
     description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value: list[str]) -> list[str]:
+        for tag in value:
+            validate_identifier(tag, "tool output tag")
+        return value
 
 
 class ToolSpec(BaseModel):

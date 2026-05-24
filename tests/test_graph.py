@@ -92,9 +92,11 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
             "name": "RNASeqDEG",
             "recipe": "rnaseq_differential_expression",
             "inputs": {
-                "raw_r1": "File",
-                "raw_r2": "File",
+                "sample_ids": "Array[String]",
+                "raw_r1s": "Array[File]",
+                "raw_r2s": "Array[File]",
                 "transcriptome_index": "File",
+                "tx2gene": "File",
                 "sample_groups": "File",
             },
             "tool_calls": [
@@ -104,8 +106,8 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "tool": "fastp",
                     "version": "0.23.2",
                     "inputs": {
-                        "r1": "raw_r1",
-                        "r2": "raw_r2",
+                        "r1": "raw_r1s",
+                        "r2": "raw_r2s",
                     },
                     "params": {
                         "thread": 4,
@@ -126,21 +128,48 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     },
                 },
                 {
+                    "id": "summarize",
+                    "step": "summarize_transcripts",
+                    "tool": "tximport",
+                    "version": "1.30.0",
+                    "inputs": {
+                        "quant_files": "quantify.quant_file",
+                        "sample_ids": "sample_ids",
+                        "tx2gene": "tx2gene",
+                    },
+                    "params": {},
+                },
+                {
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
                     "version": "1.42.0",
                     "inputs": {
-                        "counts": "quantify.gene_counts",
+                        "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",
                     },
                     "params": {
                         "contrast": "condition",
                     },
                 },
+                {
+                    "id": "report",
+                    "step": "qc_report",
+                    "tool": "multiqc",
+                    "version": "1.21",
+                    "inputs": {
+                        "report_files": [
+                            "qc.html_report",
+                            "qc.json_report",
+                            "quantify.log_file",
+                        ],
+                    },
+                    "params": {},
+                },
             ],
             "outputs": {
                 "deg_table": "deg.deg_table",
+                "multiqc_report": "report.multiqc_report",
             },
         }
     }
@@ -212,6 +241,146 @@ class WorkflowCompilationTests(unittest.TestCase):
 
         self.assertTrue(report.is_valid, report.errors)
 
+    def test_explicit_scatter_steps_analyze_and_render(self):
+        raw_ir = {
+            "workflow": {
+                "name": "ScatterQC",
+                "inputs": {
+                    "raw_fastqs": "Array[File]",
+                },
+                "steps": [
+                    {
+                        "kind": "scatter",
+                        "id": "per_sample",
+                        "item": "i",
+                        "over": "range(length(raw_fastqs))",
+                        "body": [
+                            {
+                                "kind": "call",
+                                "id": "qc",
+                                "task": "fastp_single",
+                                "inputs": {
+                                    "fastq": "raw_fastqs[i]",
+                                },
+                            }
+                        ],
+                    }
+                ],
+                "outputs": {
+                    "clean_fastqs": "qc.clean_fastq",
+                },
+            },
+            "tasks": {
+                "fastp_single": {
+                    "inputs": {
+                        "fastq": "File",
+                    },
+                    "command": "cp ~{fastq} clean.fq.gz",
+                    "outputs": {
+                        "clean_fastq": {
+                            "type": "File",
+                            "value": '"clean.fq.gz"',
+                        }
+                    },
+                    "runtime": {
+                        "docker": "ubuntu:22.04",
+                    },
+                }
+            },
+        }
+
+        workflow_ir = coerce_workflow_ir(raw_ir)
+        report = analyze_workflow_ir(workflow_ir)
+        wdl = render_wdl(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertIn("scatter (i in range(length(raw_fastqs)))", wdl)
+        self.assertIn("fastq = raw_fastqs[i]", wdl)
+        self.assertIn("Array[File] clean_fastqs = qc.clean_fastq", wdl)
+
+    def test_array_call_inputs_can_collect_scatter_outputs(self):
+        raw_ir = {
+            "workflow": {
+                "name": "ScatterReport",
+                "inputs": {
+                    "raw_fastqs": "Array[File]",
+                    "extra_report": "File",
+                },
+                "steps": [
+                    {
+                        "kind": "scatter",
+                        "id": "per_sample",
+                        "item": "i",
+                        "over": "range(length(raw_fastqs))",
+                        "body": [
+                            {
+                                "kind": "call",
+                                "id": "qc",
+                                "task": "qc_task",
+                                "inputs": {
+                                    "fastq": "raw_fastqs[i]",
+                                },
+                            }
+                        ],
+                    },
+                    {
+                        "kind": "call",
+                        "id": "report",
+                        "task": "report_task",
+                        "inputs": {
+                            "files": ["qc.html_report", "qc.json_report", "extra_report"],
+                        },
+                    },
+                ],
+                "outputs": {
+                    "report": "report.html",
+                },
+            },
+            "tasks": {
+                "qc_task": {
+                    "inputs": {
+                        "fastq": "File",
+                    },
+                    "command": "touch report.html report.json",
+                    "outputs": {
+                        "html_report": {
+                            "type": "File",
+                            "value": '"report.html"',
+                        },
+                        "json_report": {
+                            "type": "File",
+                            "value": '"report.json"',
+                        },
+                    },
+                    "runtime": {
+                        "docker": "ubuntu:22.04",
+                    },
+                },
+                "report_task": {
+                    "inputs": {
+                        "files": "Array[File]",
+                    },
+                    "command": "touch combined.html",
+                    "outputs": {
+                        "html": {
+                            "type": "File",
+                            "value": '"combined.html"',
+                        }
+                    },
+                    "runtime": {
+                        "docker": "ubuntu:22.04",
+                    },
+                },
+            },
+        }
+
+        workflow_ir = coerce_workflow_ir(raw_ir)
+        report = analyze_workflow_ir(workflow_ir)
+        wdl = render_wdl(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertIn("files = flatten([qc.html_report, qc.json_report, [extra_report]])", wdl)
+
     def test_legacy_json_is_normalized_to_ir(self):
         legacy_json = {
             "workflow_name": "SimpleQC",
@@ -263,10 +432,20 @@ class WorkflowCompilationTests(unittest.TestCase):
 
         self.assertTrue(final_state["is_valid"], final_state["validation_message"])
         self.assertEqual(final_state["analysis_errors"], [])
+        self.assertEqual(final_state["workflow_ir"]["workflow"]["steps"][0]["kind"], "scatter")
+        self.assertIn("scatter (i in range(length(sample_ids)))", final_state["current_wdl"])
         self.assertIn("call fastp_qc as qc", final_state["current_wdl"])
         self.assertIn("call salmon_quantify as quantify", final_state["current_wdl"])
+        self.assertIn("call tximport_summarize as summarize", final_state["current_wdl"])
         self.assertIn("call deseq2_deg as deg", final_state["current_wdl"])
+        self.assertIn("call multiqc_report as report", final_state["current_wdl"])
+        self.assertIn("Array[File] quant_files", final_state["current_wdl"])
+        self.assertIn(
+            "report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])",
+            final_state["current_wdl"],
+        )
         self.assertIn("File deg_table = deg.deg_table", final_state["current_wdl"])
+        self.assertIn("File multiqc_report = report.multiqc_report", final_state["current_wdl"])
 
 
 if __name__ == "__main__":

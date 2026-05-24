@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from langchain_deepseek import ChatDeepSeek
 from pydantic import SecretStr
 
+from src.analyzer import analyze_workflow_ir
 from src.catalog.loader import ToolCatalog, load_tool_catalog
 from src.catalog.resolver import ToolCallPlan, resolve_tool_plan
 from src.prompts import render_natural_language_planner_prompt
@@ -90,7 +91,11 @@ def create_natural_language_plan(
         raise PlannerSchemaError(f"LLM planner plan schema validation failed: {exc}") from exc
 
     try:
-        resolve_tool_plan(plan, recipe_catalog, tool_catalog)
+        workflow_ir = resolve_tool_plan(plan, recipe_catalog, tool_catalog)
+        analysis_report = analyze_workflow_ir(workflow_ir)
+        if not analysis_report.is_valid:
+            joined_errors = "; ".join(analysis_report.errors)
+            raise ValueError(joined_errors)
     except Exception as exc:
         raise PlannerCatalogError(f"LLM planner recipe/catalog validation failed: {exc}") from exc
 
@@ -121,6 +126,7 @@ def build_planner_prompt(
                         "id": step.id,
                         "role": step.role,
                         "optional": step.optional,
+                        "scatter": step.scatter.model_dump(exclude_none=True) if step.scatter else None,
                         "allowed_tools": step.allowed_tools,
                     }
                     for step in recipe.steps
