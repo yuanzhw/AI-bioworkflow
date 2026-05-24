@@ -12,6 +12,8 @@ AI-bioworkflow/
 ├── pyproject.toml        # uv 依赖配置文件
 ├── README.md             # 项目基础说明
 ├── DEVELOPMENT.md        # 本开发指南
+├── docs/
+│   └── workflow-ir.md    # Workflow IR 结构、表达式规则与后端映射规范
 │
 ├── src/                  # 核心源代码目录
 │   ├── __init__.py
@@ -70,6 +72,14 @@ AI-bioworkflow/
 10. **Catalog 镜像权威来源 (`catalog/`)**：每个 Tool Catalog 条目必须显式声明 `runtime.docker`。编译链路不搜索、不猜测、不联网补全镜像；新增或升级工具时由维护者明确选择镜像并写入 catalog。
 11. **辅助脚本镜像化 (`containers/`)**：tximport、DESeq2、MultiQC 等辅助脚本随项目镜像构建进入容器，不作为 WDL 输入，也不内联到 command 中。
 12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
+
+## Workflow IR 规范
+
+Workflow IR 是本项目的核心编译契约。字段结构、表达式系统、scatter 类型提升、Recipe Tool Plan 到 IR 的转换，以及 IR 到 WDL 1.0 的映射规则，统一维护在：
+
+👉 **[Workflow IR 规范与后端映射](./docs/workflow-ir.md)**
+
+后续新增 IR 数据结构、表达式形式、renderer backend 或 Nextflow 支持时，应先更新该规范，再实现代码与测试。
 
 ## 后续待办
 

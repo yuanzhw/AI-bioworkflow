@@ -158,6 +158,10 @@ Recipe Tool Plan 示例：
 
 👉 **[查看 DEVELOPMENT.md 开发指南](./DEVELOPMENT.md)**
 
+Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详见：
+
+👉 **[Workflow IR 规范与后端映射](./docs/workflow-ir.md)**
+
 ## 📅 未来路线图 (Roadmap)
 
 - [x] 搭建基础 LangGraph 状态机。
