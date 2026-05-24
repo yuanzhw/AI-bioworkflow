@@ -1,0 +1,37 @@
+id: tximport
+version: "1.30.0"
+aliases:
+  - transcript to gene counts
+  - Salmon aggregation
+description: Summarize Salmon transcript quantifications into a gene-level count matrix.
+
+inputs:
+  quant_files:
+    type: Array[File]
+    required: true
+    description: Salmon quant.sf files, one per sample.
+  sample_ids:
+    type: Array[String]
+    required: true
+    description: Sample identifiers matching quant_files order.
+  tx2gene:
+    type: File
+    required: true
+    description: Transcript-to-gene mapping table.
+
+outputs:
+  gene_counts:
+    type: File
+    value: '"gene_counts.tsv"'
+
+command_template: |
+  run_tximport.R
+  --quant-files ~{write_lines(quant_files)}
+  --sample-ids ~{write_lines(sample_ids)}
+  --tx2gene ~{tx2gene}
+  --output gene_counts.tsv
+
+runtime:
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
+  cpu: 2
+  memory: 8G

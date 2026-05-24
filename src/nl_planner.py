@@ -121,6 +121,7 @@ def build_planner_prompt(
                         "id": step.id,
                         "role": step.role,
                         "optional": step.optional,
+                        "scatter": step.scatter.model_dump(exclude_none=True) if step.scatter else None,
                         "allowed_tools": step.allowed_tools,
                     }
                     for step in recipe.steps

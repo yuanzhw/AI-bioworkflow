@@ -9,19 +9,7 @@ workflow {{ ir.workflow.name }} {
   }
 
 {% endif %}
-{% for call in ir.workflow.calls %}
-  call {{ call.task }}{{ (" as " ~ call.id) if call.id != call.task else "" }} {
-{% if call.inputs %}
-    input:
-{% for input_name, expression in call.inputs.items() %}
-      {{ input_name }} = {{ expression }}{{ "," if not loop.last else "" }}
-{% endfor %}
-{% endif %}
-  }
-{% if not loop.last %}
-
-{% endif %}
-{% endfor %}
+{{ workflow_steps }}
 {% if workflow_outputs %}
 
   output {

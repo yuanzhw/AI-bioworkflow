@@ -15,9 +15,11 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
             "name": "RNASeqDEG",
             "recipe": "rnaseq_differential_expression",
             "inputs": {
-                "raw_r1": "File",
-                "raw_r2": "File",
+                "sample_ids": "Array[String]",
+                "raw_r1s": "Array[File]",
+                "raw_r2s": "Array[File]",
                 "transcriptome_index": "File",
+                "tx2gene": "File",
                 "sample_groups": "File",
             },
             "tool_calls": [
@@ -27,8 +29,8 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "tool": "fastp",
                     "version": "0.23.2",
                     "inputs": {
-                        "r1": "raw_r1",
-                        "r2": "raw_r2",
+                        "r1": "raw_r1s",
+                        "r2": "raw_r2s",
                     },
                     "params": {
                         "thread": 4,
@@ -49,21 +51,44 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     },
                 },
                 {
+                    "id": "summarize",
+                    "step": "summarize_transcripts",
+                    "tool": "tximport",
+                    "version": "1.30.0",
+                    "inputs": {
+                        "quant_files": "quantify.quant_file",
+                        "sample_ids": "sample_ids",
+                        "tx2gene": "tx2gene",
+                    },
+                    "params": {},
+                },
+                {
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
                     "version": "1.42.0",
                     "inputs": {
-                        "counts": "quantify.gene_counts",
+                        "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",
                     },
                     "params": {
                         "contrast": "condition",
                     },
                 },
+                {
+                    "id": "report",
+                    "step": "qc_report",
+                    "tool": "multiqc",
+                    "version": "1.21",
+                    "inputs": {
+                        "report_files": "qc.html_report",
+                    },
+                    "params": {},
+                },
             ],
             "outputs": {
                 "deg_table": "deg.deg_table",
+                "multiqc_report": "report.multiqc_report",
             },
         }
     }
@@ -86,17 +111,27 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertEqual(workflow_ir.workflow.name, "RNASeqDEG")
         self.assertIn("fastp_qc", workflow_ir.tasks)
         self.assertIn("salmon_quantify", workflow_ir.tasks)
+        self.assertIn("tximport_summarize", workflow_ir.tasks)
         self.assertIn("deseq2_deg", workflow_ir.tasks)
+        self.assertIn("multiqc_report", workflow_ir.tasks)
+        self.assertEqual(workflow_ir.workflow.steps[0].kind, "scatter")
 
         wdl = render_wdl(workflow_ir)
+        self.assertIn("scatter (i in range(length(sample_ids)))", wdl)
         self.assertIn("call fastp_qc as qc", wdl)
         self.assertIn("call salmon_quantify as quantify", wdl)
+        self.assertIn("r1 = raw_r1s[i]", wdl)
+        self.assertIn("r2 = raw_r2s[i]", wdl)
+        self.assertIn("call tximport_summarize as summarize", wdl)
         self.assertIn("call deseq2_deg as deg", wdl)
+        self.assertIn("call multiqc_report as report", wdl)
         self.assertIn("File deg_table = deg.deg_table", wdl)
+        self.assertIn("File multiqc_report = report.multiqc_report", wdl)
+        self.assertIn("quant_files = quantify.quant_file", wdl)
         self.assertIn("--contrast ~{contrast}", wdl)
         self.assertIn('contrast = "condition"', wdl)
         self.assertIn("-I ~{r2}\n    -o clean_R1.fq.gz", wdl)
-        self.assertIn("-O clean_R2.fq.gz\n    --thread ~{thread}", wdl)
+        self.assertIn("-O clean_R2.fq.gz\n    --html fastp.html", wdl)
 
     def test_tool_spec_requires_runtime_docker(self):
         with self.assertRaisesRegex(ValueError, "must define runtime.docker"):
@@ -142,7 +177,11 @@ class CatalogResolutionTests(unittest.TestCase):
 
     def test_resolver_rejects_missing_required_recipe_step(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())
-        plan["workflow"]["tool_calls"] = plan["workflow"]["tool_calls"][:-1]
+        plan["workflow"]["tool_calls"] = [
+            tool_call
+            for tool_call in plan["workflow"]["tool_calls"]
+            if tool_call["step"] != "differential_expression"
+        ]
 
         with self.assertRaisesRegex(ValueError, "missing required recipe step\\(s\\): differential_expression"):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)

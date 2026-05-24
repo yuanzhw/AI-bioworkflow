@@ -3,9 +3,11 @@
     "name": "RNASeqDEG",
     "recipe": "rnaseq_differential_expression",
     "inputs": {
-      "raw_r1": "File",
-      "raw_r2": "File",
+      "sample_ids": "Array[String]",
+      "raw_r1s": "Array[File]",
+      "raw_r2s": "Array[File]",
       "transcriptome_index": "File",
+      "tx2gene": "File",
       "sample_groups": "File"
     },
     "tool_calls": [
@@ -15,8 +17,8 @@
         "tool": "fastp",
         "version": "0.23.2",
         "inputs": {
-          "r1": "raw_r1",
-          "r2": "raw_r2"
+          "r1": "raw_r1s",
+          "r2": "raw_r2s"
         },
         "params": {
           "thread": 4
@@ -37,21 +39,44 @@
         }
       },
       {
+        "id": "summarize",
+        "step": "summarize_transcripts",
+        "tool": "tximport",
+        "version": "1.30.0",
+        "inputs": {
+          "quant_files": "quantify.quant_file",
+          "sample_ids": "sample_ids",
+          "tx2gene": "tx2gene"
+        },
+        "params": {}
+      },
+      {
         "id": "deg",
         "step": "differential_expression",
         "tool": "deseq2",
         "version": "1.42.0",
         "inputs": {
-          "counts": "quantify.gene_counts",
+          "counts": "summarize.gene_counts",
           "sample_groups": "sample_groups"
         },
         "params": {
           "contrast": "condition"
         }
+      },
+      {
+        "id": "report",
+        "step": "qc_report",
+        "tool": "multiqc",
+        "version": "1.21",
+        "inputs": {
+          "report_files": "qc.html_report"
+        },
+        "params": {}
       }
     ],
     "outputs": {
-      "deg_table": "deg.deg_table"
+      "deg_table": "deg.deg_table",
+      "multiqc_report": "report.multiqc_report"
     }
   }
 }

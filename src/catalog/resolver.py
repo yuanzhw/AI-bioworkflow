@@ -90,6 +90,8 @@ def resolve_tool_plan(
 
     task_defs: dict[str, dict[str, Any]] = {}
     calls: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
+    scatter_steps: dict[str, dict[str, Any]] = {}
 
     for tool_call in plan.workflow.tool_calls:
         step = recipe.step_by_id(tool_call.step)
@@ -115,19 +117,20 @@ def resolve_tool_plan(
             "runtime": tool.runtime.model_dump(mode="json", exclude_none=True),
         }
 
-        calls.append(
-            {
-                "id": tool_call.id,
-                "task": task_name,
-                "inputs": {
-                    **_resolve_inputs(tool_call, tool),
-                    **{
-                        param_name: _format_wdl_literal(param_value)
-                        for param_name, param_value in params.items()
-                    },
+        call_step = {
+            "kind": "call",
+            "id": tool_call.id,
+            "task": task_name,
+            "inputs": {
+                **_resolve_inputs(tool_call, tool, plan.workflow.inputs, step.scatter),
+                **{
+                    param_name: _format_wdl_literal(param_value)
+                    for param_name, param_value in params.items()
                 },
-            }
-        )
+            },
+        }
+        calls.append(call_step)
+        _append_workflow_step(steps, scatter_steps, call_step, step.scatter)
 
     workflow_outputs = plan.workflow.outputs or _default_workflow_outputs(calls, task_defs)
     return WorkflowIR.model_validate(
@@ -137,6 +140,7 @@ def resolve_tool_plan(
                 "name": plan.workflow.name,
                 "inputs": plan.workflow.inputs,
                 "calls": calls,
+                "steps": steps,
                 "outputs": workflow_outputs,
             },
             "tasks": task_defs,
@@ -207,7 +211,12 @@ def _types_compatible(expected: str, actual: str) -> bool:
     return expected.strip().rstrip("?") == actual.strip().rstrip("?")
 
 
-def _resolve_inputs(tool_call: PlannedToolCall, tool: ToolSpec) -> dict[str, str]:
+def _resolve_inputs(
+    tool_call: PlannedToolCall,
+    tool: ToolSpec,
+    workflow_inputs: dict[str, str],
+    scatter,
+) -> dict[str, str]:
     provided = set(tool_call.inputs)
     expected = set(tool.inputs)
 
@@ -217,7 +226,34 @@ def _resolve_inputs(tool_call: PlannedToolCall, tool: ToolSpec) -> dict[str, str
         if spec.required and input_name not in tool_call.inputs:
             raise ValueError(f"tool call '{tool_call.id}' is missing required input '{input_name}'")
 
-    return dict(tool_call.inputs)
+    resolved = {}
+    for input_name, expression in tool_call.inputs.items():
+        resolved[input_name] = _index_scatter_input_if_needed(
+            expression=expression,
+            target_type=tool.inputs[input_name].type,
+            workflow_inputs=workflow_inputs,
+            scatter=scatter,
+        )
+    return resolved
+
+
+def _index_scatter_input_if_needed(
+    expression: str,
+    target_type: str,
+    workflow_inputs: dict[str, str],
+    scatter,
+) -> str:
+    if scatter is None:
+        return expression
+
+    source_type = workflow_inputs.get(expression)
+    if source_type is None:
+        return expression
+
+    inner_type = _array_inner_type(source_type)
+    if inner_type is not None and _types_compatible(inner_type, target_type):
+        return f"{expression}[{scatter.item}]"
+    return expression
 
 
 def _resolve_params(tool_call: PlannedToolCall, tool: ToolSpec) -> dict[str, Any]:
@@ -306,3 +342,34 @@ def _format_wdl_literal(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
+
+
+def _append_workflow_step(
+    steps: list[dict[str, Any]],
+    scatter_steps: dict[str, dict[str, Any]],
+    call_step: dict[str, Any],
+    scatter,
+) -> None:
+    if scatter is None:
+        steps.append(call_step)
+        return
+
+    if scatter.id not in scatter_steps:
+        scatter_step = {
+            "kind": "scatter",
+            "id": scatter.id,
+            "item": scatter.item,
+            "over": scatter.over,
+            "body": [],
+        }
+        scatter_steps[scatter.id] = scatter_step
+        steps.append(scatter_step)
+
+    scatter_steps[scatter.id]["body"].append(call_step)
+
+
+def _array_inner_type(value: str) -> str | None:
+    normalized = value.strip().rstrip("?")
+    if not normalized.startswith("Array[") or not normalized.endswith("]"):
+        return None
+    return normalized[len("Array["):-1]

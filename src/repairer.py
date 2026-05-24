@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.schema import IDENTIFIER_PATTERN, WorkflowIR, coerce_workflow_ir
+from src.schema import IDENTIFIER_PATTERN, CallSpec, ScatterSpec, WorkflowIR, coerce_workflow_ir
 
 
 CALL_OUTPUT_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$")
@@ -32,53 +32,117 @@ def repair_workflow_ir(workflow_ir: WorkflowIR | dict[str, Any]) -> RepairReport
 
 
 def _repair_call_order(ir: WorkflowIR, actions: list[str]) -> None:
-    calls = list(ir.workflow.calls)
-    if len(calls) < 2:
+    repaired_steps, changed = _repair_step_order(list(ir.workflow.steps))
+    if not changed:
         return
 
-    call_by_id = {call.id: call for call in calls}
-    original_order = [call.id for call in calls]
-    dependencies_by_call = {
-        call.id: _call_dependencies(call.inputs.values(), call_by_id)
-        for call in calls
-    }
+    ir.workflow.steps = repaired_steps
+    ir.workflow.calls = _flatten_calls(repaired_steps)
+    actions.append(
+        "Reordered workflow steps to satisfy upstream output dependencies: "
+        f"{' -> '.join(_step_labels(repaired_steps))}"
+    )
 
-    ordered_calls = []
-    ordered_ids = set()
-    remaining_ids = list(original_order)
 
-    while remaining_ids:
-        ready_id = next(
+def _repair_step_order(steps: list[CallSpec | ScatterSpec]) -> tuple[list[CallSpec | ScatterSpec], bool]:
+    if not steps:
+        return steps, False
+
+    changed = False
+    repaired_steps = []
+    for step in steps:
+        if isinstance(step, ScatterSpec):
+            repaired_body, body_changed = _repair_step_order(list(step.body))
+            if body_changed:
+                step.body = repaired_body
+                changed = True
+        repaired_steps.append(step)
+
+    if len(repaired_steps) < 2:
+        return repaired_steps, changed
+
+    produced_by_step = [_step_produced_calls(step) for step in repaired_steps]
+    all_produced = set().union(*produced_by_step)
+    dependencies_by_index = []
+    for index, step in enumerate(repaired_steps):
+        dependencies = _call_dependencies(_step_expressions(step), all_produced)
+        dependencies -= produced_by_step[index]
+        dependencies_by_index.append(dependencies)
+
+    ordered_steps = []
+    ordered_call_ids = set()
+    remaining_indexes = list(range(len(repaired_steps)))
+
+    while remaining_indexes:
+        ready_index = next(
             (
-                call_id
-                for call_id in remaining_ids
-                if dependencies_by_call[call_id].issubset(ordered_ids)
+                index
+                for index in remaining_indexes
+                if dependencies_by_index[index].issubset(ordered_call_ids)
             ),
             None,
         )
-        if ready_id is None:
-            return
+        if ready_index is None:
+            return repaired_steps, changed
 
-        ordered_calls.append(call_by_id[ready_id])
-        ordered_ids.add(ready_id)
-        remaining_ids.remove(ready_id)
+        ordered_steps.append(repaired_steps[ready_index])
+        ordered_call_ids.update(produced_by_step[ready_index])
+        remaining_indexes.remove(ready_index)
 
-    repaired_order = [call.id for call in ordered_calls]
-    if repaired_order != original_order:
-        ir.workflow.calls = ordered_calls
-        actions.append(
-            "Reordered workflow calls to satisfy upstream output dependencies: "
-            f"{' -> '.join(repaired_order)}"
-        )
+    if _step_labels(ordered_steps) != _step_labels(repaired_steps):
+        changed = True
+        repaired_steps = ordered_steps
+
+    return repaired_steps, changed
 
 
-def _call_dependencies(expressions, call_by_id) -> set[str]:
+def _call_dependencies(expressions, available_call_ids) -> set[str]:
     dependencies = set()
     for expression in expressions:
         match = CALL_OUTPUT_PATTERN.match(expression.strip())
-        if match and match.group(1) in call_by_id:
+        if match and match.group(1) in available_call_ids:
             dependencies.add(match.group(1))
     return dependencies
+
+
+def _step_expressions(step: CallSpec | ScatterSpec) -> list[str]:
+    if isinstance(step, CallSpec):
+        return list(step.inputs.values())
+
+    expressions = [step.over]
+    for child in step.body:
+        expressions.extend(_step_expressions(child))
+    return expressions
+
+
+def _step_produced_calls(step: CallSpec | ScatterSpec) -> set[str]:
+    if isinstance(step, CallSpec):
+        return {step.id}
+
+    produced = set()
+    for child in step.body:
+        produced.update(_step_produced_calls(child))
+    return produced
+
+
+def _flatten_calls(steps: list[CallSpec | ScatterSpec]) -> list[CallSpec]:
+    calls = []
+    for step in steps:
+        if isinstance(step, CallSpec):
+            calls.append(step)
+        else:
+            calls.extend(_flatten_calls(step.body))
+    return calls
+
+
+def _step_labels(steps: list[CallSpec | ScatterSpec]) -> list[str]:
+    labels = []
+    for step in steps:
+        if isinstance(step, CallSpec):
+            labels.append(step.id)
+        else:
+            labels.append(step.id)
+    return labels
 
 
 def _repair_output_literals(ir: WorkflowIR, actions: list[str]) -> None:

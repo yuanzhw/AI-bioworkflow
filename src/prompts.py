@@ -14,6 +14,8 @@ def render_natural_language_planner_prompt(
         "- Prefer an existing recipe from the catalog.\n"
         "- Use only tools and versions listed in the catalog.\n"
         "- Use workflow input names from the recipe required_inputs when possible.\n"
+        "- For per-sample scatter steps, connect tool inputs to the array workflow input names; "
+        "the compiler will index them inside scatter.\n"
         "- Use call ids that are valid WDL identifiers.\n"
         "- Connect upstream tool outputs with call_id.output_name expressions.\n"
         "- Include explicit workflow outputs requested by the user, or the final useful output.\n\n"

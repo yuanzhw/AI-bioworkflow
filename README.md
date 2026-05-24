@@ -15,7 +15,7 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 
 ## ✨ 核心特性
 
-- **Workflow IR 驱动**：将 workflow 调用关系与 task 定义分离，支持多个 task、复用 task 和明确的数据依赖。
+- **Workflow IR 驱动**：将 workflow 调用关系与 task 定义分离，支持多个 task、复用 task、scatter 和明确的数据依赖。
 - **确定性 WDL 编译**：通过 Jinja2 Renderer 从 IR 生成 WDL，避免让 LLM 承担模板引擎职责。
 - **静态分析**：在渲染前检查 task/call 引用、输入完整性、上游输出引用和基础类型匹配。
 - **Recipe / Tool Catalog**：支持用预定义生信工具目录和分析配方生成 Workflow IR。
@@ -62,7 +62,7 @@ uv run main.py
 也可以直接传入自然语言需求：
 
 ```bash
-uv run main.py --prompt "做一个 bulk RNA-seq 差异表达分析流程，输入双端 FASTQ、Salmon index 和样本分组表，先 fastp，再 salmon，最后 DESeq2。"
+uv run main.py --prompt "做一个 bulk RNA-seq 差异表达分析流程，输入多个样本的双端 FASTQ、样本 ID、Salmon index、tx2gene 和样本分组表，先 fastp，再 salmon，然后 tximport、DESeq2 和 MultiQC。"
 ```
 
 或者从文本文件读取需求并写出 WDL：
@@ -113,7 +113,7 @@ uv run main.py \
 
 结构化输入用于开发、调试和集成测试，目前支持两类：
 
-1. **标准 Workflow IR**：直接提供 `workflow.calls` 和 `tasks`，适合精确控制每个 task 的命令、输入、输出和 runtime。
+1. **标准 Workflow IR**：直接提供 `workflow.steps` / `workflow.calls` 和 `tasks`，适合精确控制每个 task 的命令、输入、输出、scatter 和 runtime。
 2. **Recipe Tool Plan**：提供 `workflow.recipe` 和 `workflow.tool_calls`，由内置 recipe/tool catalog 自动解析为 Workflow IR。
 
 Recipe Tool Plan 示例：
@@ -124,9 +124,11 @@ Recipe Tool Plan 示例：
     "name": "RNASeqDEG",
     "recipe": "rnaseq_differential_expression",
     "inputs": {
-      "raw_r1": "File",
-      "raw_r2": "File",
+      "sample_ids": "Array[String]",
+      "raw_r1s": "Array[File]",
+      "raw_r2s": "Array[File]",
       "transcriptome_index": "File",
+      "tx2gene": "File",
       "sample_groups": "File"
     },
     "tool_calls": [
@@ -136,8 +138,8 @@ Recipe Tool Plan 示例：
         "tool": "fastp",
         "version": "0.23.2",
         "inputs": {
-          "r1": "raw_r1",
-          "r2": "raw_r2"
+          "r1": "raw_r1s",
+          "r2": "raw_r2s"
         },
         "params": {
           "thread": 4
@@ -163,6 +165,7 @@ Recipe Tool Plan 示例：
 - [x] 接入 Recipe / Tool Catalog 输入到 LangGraph Planner。
 - [x] 闭环修复机制初版：当分析器或校验器发现可确定修复的问题时，优先修复 IR 并重新编译 WDL。
 - [x] Tool Catalog 强制显式声明 `runtime.docker`，作为镜像来源的唯一权威。
+- [x] 支持 `workflow.steps` 与 WDL scatter，RNA-seq DEG recipe 升级为多样本 Salmon -> tximport -> DESeq2 -> MultiQC。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证

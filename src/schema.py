@@ -1,12 +1,23 @@
+from __future__ import annotations
+
 import copy
 import re
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-COMMAND_INPUT_PATTERN = re.compile(r"~\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
+COMMAND_INTERPOLATION_PATTERN = re.compile(r"~\{([^}]*)\}")
+EXPRESSION_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+WDL_BUILTIN_IDENTIFIERS = {
+    "false",
+    "length",
+    "range",
+    "sep",
+    "true",
+    "write_lines",
+}
 
 
 class RuntimeSpec(BaseModel):
@@ -49,6 +60,7 @@ class TaskSpec(BaseModel):
 class CallSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    kind: Literal["call"] = "call"
     id: str
     task: str
     inputs: dict[str, str] = Field(default_factory=dict)
@@ -66,12 +78,32 @@ class CallSpec(BaseModel):
         return value
 
 
+class ScatterSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["scatter"] = "scatter"
+    id: str
+    item: str
+    over: str
+    body: list[WorkflowStepSpec] = Field(default_factory=list)
+
+    @field_validator("id", "item")
+    @classmethod
+    def validate_scatter_identifiers(cls, value: str) -> str:
+        _validate_identifier(value, "scatter identifier")
+        return value
+
+
+WorkflowStepSpec = Annotated[CallSpec | ScatterSpec, Field(discriminator="kind")]
+
+
 class WorkflowSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
     inputs: dict[str, str] = Field(default_factory=dict)
     calls: list[CallSpec] = Field(default_factory=list)
+    steps: list[WorkflowStepSpec] = Field(default_factory=list)
     outputs: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("name")
@@ -127,12 +159,18 @@ def coerce_workflow_ir(data: WorkflowIR | dict[str, Any]) -> WorkflowIR:
 
 
 def extract_command_inputs(command: str) -> set[str]:
-    return set(COMMAND_INPUT_PATTERN.findall(command or ""))
+    inputs = set()
+    for interpolation in COMMAND_INTERPOLATION_PATTERN.findall(command or ""):
+        for identifier in EXPRESSION_IDENTIFIER_PATTERN.findall(interpolation):
+            if identifier not in WDL_BUILTIN_IDENTIFIERS:
+                inputs.add(identifier)
+    return inputs
 
 
 def _normalize_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
     normalized = copy.deepcopy(data)
     tasks = normalized.get("tasks", {})
+    workflow = normalized.get("workflow", {})
 
     if isinstance(tasks, list):
         normalized["tasks"] = {
@@ -144,6 +182,18 @@ def _normalize_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
             task_name: _normalize_task_dict(task_data)
             for task_name, task_data in tasks.items()
         }
+
+    if isinstance(workflow, dict):
+        calls = workflow.get("calls", [])
+        steps = workflow.get("steps")
+
+        if steps is None:
+            workflow["steps"] = [_normalize_call_step(call) for call in calls]
+        else:
+            workflow["steps"] = [_normalize_step_dict(step) for step in steps]
+
+        if "calls" not in workflow:
+            workflow["calls"] = _flatten_call_steps(workflow["steps"])
 
     return normalized
 
@@ -197,6 +247,7 @@ def _legacy_to_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
             "name": data["workflow_name"],
             "inputs": workflow_inputs,
             "calls": calls,
+            "steps": [_normalize_call_step(call) for call in calls],
             "outputs": workflow_outputs,
         },
         "tasks": task_defs,
@@ -231,6 +282,39 @@ def _normalize_runtime(task_data: dict[str, Any]) -> dict[str, Any]:
     if docker and "docker" not in runtime:
         runtime["docker"] = docker
     return runtime
+
+
+def _normalize_call_step(call: dict[str, Any]) -> dict[str, Any]:
+    normalized = copy.deepcopy(call)
+    normalized.setdefault("kind", "call")
+    return normalized
+
+
+def _normalize_step_dict(step: dict[str, Any]) -> dict[str, Any]:
+    normalized = copy.deepcopy(step)
+    normalized.setdefault("kind", "call")
+
+    if normalized["kind"] == "call":
+        return _normalize_call_step(normalized)
+
+    if normalized["kind"] == "scatter":
+        normalized["body"] = [
+            _normalize_step_dict(child)
+            for child in normalized.get("body", [])
+        ]
+        return normalized
+
+    return normalized
+
+
+def _flatten_call_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    calls = []
+    for step in steps:
+        if step.get("kind", "call") == "call":
+            calls.append(_normalize_call_step(step))
+        elif step.get("kind") == "scatter":
+            calls.extend(_flatten_call_steps(step.get("body", [])))
+    return calls
 
 
 def _infer_source_type(

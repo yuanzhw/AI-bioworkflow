@@ -26,12 +26,9 @@ params:
     min: 1
 
 outputs:
-  gene_counts:
+  quant_file:
     type: File
-    value: '"gene_counts.tsv"'
-  quant_dir:
-    type: File
-    value: '"salmon_quant"'
+    value: '"salmon_quant/quant.sf"'
 
 command_template: |
   salmon quant
@@ -40,7 +37,6 @@ command_template: |
   -2 ~{r2}
   -p ~{thread}
   -o salmon_quant
-  && touch gene_counts.tsv
 
 runtime:
   docker: quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2
