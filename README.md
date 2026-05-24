@@ -19,7 +19,7 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 - **确定性 WDL 编译**：通过 Jinja2 Renderer 从 IR 生成 WDL，避免让 LLM 承担模板引擎职责。
 - **静态分析**：在渲染前检查 task/call 引用、输入完整性、上游输出引用和基础类型匹配。
 - **Recipe / Tool Catalog**：支持用预定义生信工具目录和分析配方生成 Workflow IR。
-- **Agentic 架构**：基于 LangGraph 串联 Planner、Analyzer、Repairer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
+- **Agentic 架构**：基于 LangGraph 串联 IR Normalizer、Analyzer、Repairer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
 - **模块化设计**：高度解耦的 State、Prompts、Nodes 与 Tools 设计，极佳的代码可维护性。
 
 ## 🛠️ 快速开始

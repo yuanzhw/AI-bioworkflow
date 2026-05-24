@@ -11,20 +11,20 @@ from src.state import WorkflowState
 logger = logging.getLogger(__name__)
 
 
-def planner_node(state: WorkflowState):
+def ir_normalizer_node(state: WorkflowState):
     """
-    Normalize user JSON into the internal WorkflowIR.
+    Normalize structured input into the internal Workflow IR.
 
-    This node is intentionally deterministic for structured inputs. A future
-    LLM planner can sit before this step and produce the same IR schema from
-    natural language or incomplete forms.
+    Natural-language planning happens before the LangGraph run. This node is
+    intentionally deterministic: it accepts Recipe Tool Plans, standard
+    Workflow IR, or legacy JSON and converts them into the canonical IR shape.
     """
-    logger.info("Planner node is normalizing Workflow IR.")
+    logger.info("IR normalizer node is normalizing Workflow IR.")
 
     raw_input = state.get("workflow_ir") or state.get("parsed_json", {})
 
     try:
-        workflow_ir, message = _normalize_planner_input(raw_input, state)
+        workflow_ir, message = _normalize_ir_input(raw_input, state)
     except Exception as exc:
         message = f"Workflow JSON 无法转换为标准 IR: {exc}"
         return {
@@ -42,7 +42,7 @@ def planner_node(state: WorkflowState):
     }
 
 
-def _normalize_planner_input(raw_input: dict, state: WorkflowState):
+def _normalize_ir_input(raw_input: dict, state: WorkflowState):
     if _is_tool_call_plan(raw_input):
         tool_catalog = load_tool_catalog()
         recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)

@@ -190,7 +190,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0, stderr.getvalue())
         self.assertTrue(stdout.getvalue().startswith("version 1.0\n"))
-        self.assertNotIn("Planner node", stdout.getvalue())
+        self.assertNotIn("IR normalizer node", stdout.getvalue())
         self.assertIn("WDL syntax validation skipped", stderr.getvalue())
 
     def test_cli_verbose_logs_stay_on_stderr(self):
@@ -209,7 +209,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0, stderr.getvalue())
         self.assertTrue(stdout.getvalue().startswith("version 1.0\n"))
-        self.assertIn("Planner node is normalizing Workflow IR.", stderr.getvalue())
+        self.assertIn("IR normalizer node is normalizing Workflow IR.", stderr.getvalue())
 
 
 if __name__ == "__main__":

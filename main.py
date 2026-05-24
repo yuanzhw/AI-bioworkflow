@@ -16,7 +16,7 @@ from src.nl_planner import (
     create_natural_language_plan,
 )
 from src.nodes.analyzer import analyzer_node
-from src.nodes.planner import planner_node
+from src.nodes.ir_normalizer import ir_normalizer_node
 from src.nodes.renderer import renderer_node
 from src.nodes.repairer import repairer_node
 from src.state import WorkflowState
@@ -225,7 +225,7 @@ def compile_workflow(
     if check:
         return cast(WorkflowState, agent.invoke(state))
 
-    _merge_state(state, planner_node(state))
+    _merge_state(state, ir_normalizer_node(state))
     if state["analysis_errors"]:
         return state
 

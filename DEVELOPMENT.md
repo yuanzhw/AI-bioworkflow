@@ -41,7 +41,7 @@ AI-bioworkflow/
 │   │
 │   ├── nodes/            # 11. 工作节点：LangGraph 的具体执行工位
 │   │   ├── __init__.py
-│   │   ├── planner.py    # 将标准 IR 或 Recipe Tool Plan 标准化为 Workflow IR
+│   │   ├── ir_normalizer.py # 将标准 IR、Legacy JSON 或 Recipe Tool Plan 标准化为 Workflow IR
 │   │   ├── analyzer.py   # 调用 IR 静态分析
 │   │   ├── repairer.py   # 调用 IR repairer 并记录修复动作
 │   │   ├── renderer.py   # 调用 WDL renderer
@@ -71,6 +71,10 @@ AI-bioworkflow/
 10. **Catalog 镜像权威来源 (`catalog/`)**：每个 Tool Catalog 条目必须显式声明 `runtime.docker`。编译链路不搜索、不猜测、不联网补全镜像；新增或升级工具时由维护者明确选择镜像并写入 catalog。
 11. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
 
+## 后续待办
+
+- [ ] **低优先级：自建工具镜像管理规范**：当 Catalog 中某些工具没有合适公共镜像时，考虑在 `containers/<tool>/<version>/` 维护 Dockerfile、smoke test 与构建说明；镜像构建并推送到内部 registry 后，只把最终 tag 或 digest 显式写入 Tool Catalog。该工作不接入编译链路，也不恢复镜像搜索或自动补全。
+
 ## 当前 LangGraph 流程
 
 ```text
@@ -78,7 +82,7 @@ START
   ↓
 nl_planner        # 自然语言需求 -> Recipe Tool Plan（CLI 自然语言入口）
   ↓
-planner_node     # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR
+ir_normalizer    # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR
   ↓
 analyzer_node    # IR 静态分析
   ↓
