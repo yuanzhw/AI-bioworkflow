@@ -1,7 +1,14 @@
 import re
 from dataclasses import dataclass, field
 
-from src.schema import IDENTIFIER_PATTERN, CallSpec, ScatterSpec, WorkflowIR, extract_command_inputs
+from src.schema import (
+    IDENTIFIER_PATTERN,
+    CallSpec,
+    ExpressionValue,
+    ScatterSpec,
+    WorkflowIR,
+    extract_command_inputs,
+)
 
 
 INDEX_EXPRESSION_PATTERN = re.compile(r"^(.+)\[([^\[\]]+)\]$")
@@ -169,7 +176,12 @@ def _analyze_call(
         target_type = task.inputs[input_name]
 
         if source_type is None:
-            if "." in expression:
+            if isinstance(expression, list):
+                report.errors.append(
+                    f"call '{call.id}' input '{input_name}' has invalid array expression "
+                    f"'{_format_expression(expression)}'"
+                )
+            elif "." in expression:
                 report.errors.append(
                     f"call '{call.id}' input '{input_name}' references unavailable output "
                     f"'{expression}'"
@@ -183,7 +195,7 @@ def _analyze_call(
         if not _types_compatible(target_type, source_type):
             report.errors.append(
                 f"call '{call.id}' input '{input_name}' expects {target_type} "
-                f"but received {source_type} from '{expression}'"
+                f"but received {source_type} from '{_format_expression(expression)}'"
             )
 
     return True
@@ -204,10 +216,13 @@ def _analyze_workflow_outputs(
 
 def _resolve_expression_type(
     ir: WorkflowIR,
-    expression: str,
+    expression: ExpressionValue,
     available_calls: dict[str, AvailableCall],
     variables: dict[str, str],
 ) -> str | None:
+    if isinstance(expression, list):
+        return _resolve_array_expression_type(ir, expression, available_calls, variables)
+
     expression = expression.strip()
 
     if expression in variables:
@@ -253,6 +268,31 @@ def _resolve_expression_type(
     return None
 
 
+def _resolve_array_expression_type(
+    ir: WorkflowIR,
+    expressions: list[str],
+    available_calls: dict[str, AvailableCall],
+    variables: dict[str, str],
+) -> str | None:
+    if not expressions:
+        return None
+
+    element_type: str | None = None
+    for item in expressions:
+        item_type = _resolve_expression_type(ir, item, available_calls, variables)
+        if item_type is None:
+            return None
+
+        item_inner_type = _array_inner_type(item_type)
+        candidate_type = _normalize_type(item_inner_type or item_type)
+        if element_type is None:
+            element_type = candidate_type
+        elif element_type != candidate_type:
+            return None
+
+    return f"Array[{element_type}]"
+
+
 def _available_calls_after_steps(
     ir: WorkflowIR,
     steps: list[CallSpec | ScatterSpec],
@@ -295,6 +335,12 @@ def _looks_like_unknown_expression(expression: str) -> bool:
     if IDENTIFIER_PATTERN.match(expression):
         return True
     return INDEX_EXPRESSION_PATTERN.match(expression) is not None
+
+
+def _format_expression(expression: ExpressionValue) -> str:
+    if isinstance(expression, list):
+        return "[" + ", ".join(expression) + "]"
+    return expression
 
 
 def _types_compatible(expected: str, actual: str) -> bool:

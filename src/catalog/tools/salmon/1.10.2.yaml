@@ -29,6 +29,11 @@ outputs:
   quant_file:
     type: File
     value: '"salmon_quant/quant.sf"'
+  log_file:
+    type: File
+    value: '"salmon_quant/logs/salmon_quant.log"'
+    tags:
+      - multiqc_input
 
 command_template: |
   salmon quant

@@ -36,9 +36,13 @@ outputs:
   html_report:
     type: File
     value: '"fastp.html"'
+    tags:
+      - multiqc_input
   json_report:
     type: File
     value: '"fastp.json"'
+    tags:
+      - multiqc_input
 
 command_template: |
   fastp -i ~{r1}

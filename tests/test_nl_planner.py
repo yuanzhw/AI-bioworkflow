@@ -88,7 +88,11 @@ def sample_rnaseq_tool_plan():
                     "tool": "multiqc",
                     "version": "1.21",
                     "inputs": {
-                        "report_files": "qc.html_report",
+                        "report_files": [
+                            "qc.html_report",
+                            "qc.json_report",
+                            "quantify.log_file",
+                        ],
                     },
                     "params": {},
                 },
@@ -179,6 +183,19 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
         fake_llm = FakePlannerLlm(json.dumps(plan))
 
         with self.assertRaisesRegex(PlannerCatalogError, "recipe/catalog validation failed"):
+            plan_from_natural_language(
+                "Run RNA-seq differential expression.",
+                llm=fake_llm,
+            )
+
+    def test_plan_from_natural_language_rejects_unanalyzable_array_concatenation(self):
+        plan = sample_rnaseq_tool_plan()
+        plan["workflow"]["tool_calls"][-1]["inputs"] = {
+            "report_files": "qc.html_report + qc.json_report",
+        }
+        fake_llm = FakePlannerLlm(json.dumps(plan))
+
+        with self.assertRaisesRegex(PlannerCatalogError, "references unavailable output"):
             plan_from_natural_language(
                 "Run RNA-seq differential expression.",
                 llm=fake_llm,

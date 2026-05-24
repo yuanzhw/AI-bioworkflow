@@ -19,6 +19,8 @@ WDL_BUILTIN_IDENTIFIERS = {
     "write_lines",
 }
 
+ExpressionValue = str | list[str]
+
 
 class RuntimeSpec(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -34,6 +36,7 @@ class OutputSpec(BaseModel):
 
     type: str
     value: str
+    tags: list[str] = Field(default_factory=list)
 
 
 class TaskSpec(BaseModel):
@@ -63,7 +66,7 @@ class CallSpec(BaseModel):
     kind: Literal["call"] = "call"
     id: str
     task: str
-    inputs: dict[str, str] = Field(default_factory=dict)
+    inputs: dict[str, ExpressionValue] = Field(default_factory=dict)
 
     @field_validator("id", "task")
     @classmethod
@@ -73,7 +76,7 @@ class CallSpec(BaseModel):
 
     @field_validator("inputs")
     @classmethod
-    def validate_call_input_names(cls, value: dict[str, str]) -> dict[str, str]:
+    def validate_call_input_names(cls, value: dict[str, ExpressionValue]) -> dict[str, ExpressionValue]:
         _validate_mapping_keys(value, "call input")
         return value
 
@@ -263,7 +266,7 @@ def _normalize_task_dict(task_data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _normalize_outputs(outputs: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _normalize_outputs(outputs: dict[str, Any]) -> dict[str, dict[str, Any]]:
     normalized = {}
     for output_name, output_spec in outputs.items():
         if isinstance(output_spec, str):

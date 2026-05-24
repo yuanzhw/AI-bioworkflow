@@ -69,7 +69,11 @@
         "tool": "multiqc",
         "version": "1.21",
         "inputs": {
-          "report_files": "qc.html_report"
+          "report_files": [
+            "qc.html_report",
+            "qc.json_report",
+            "quantify.log_file"
+          ]
         },
         "params": {}
       }

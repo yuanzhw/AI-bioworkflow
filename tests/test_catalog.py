@@ -81,7 +81,11 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "tool": "multiqc",
                     "version": "1.21",
                     "inputs": {
-                        "report_files": "qc.html_report",
+                        "report_files": [
+                            "qc.html_report",
+                            "qc.json_report",
+                            "quantify.log_file",
+                        ],
                     },
                     "params": {},
                 },
@@ -125,6 +129,7 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("call tximport_summarize as summarize", wdl)
         self.assertIn("call deseq2_deg as deg", wdl)
         self.assertIn("call multiqc_report as report", wdl)
+        self.assertIn("report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])", wdl)
         self.assertIn("File deg_table = deg.deg_table", wdl)
         self.assertIn("File multiqc_report = report.multiqc_report", wdl)
         self.assertIn("quant_files = quantify.quant_file", wdl)
@@ -218,6 +223,26 @@ class CatalogResolutionTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "unknown param 'magic'"):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+
+    def test_multiqc_report_files_can_be_auto_collected_from_output_tags(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        report_call = plan["workflow"]["tool_calls"][-1]
+        report_call["inputs"] = {}
+
+        workflow_ir = resolve_tool_plan(
+            plan,
+            self.recipe_catalog,
+            self.tool_catalog,
+        )
+        report = analyze_workflow_ir(workflow_ir)
+        wdl = render_wdl(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertEqual(
+            workflow_ir.workflow.calls[-1].inputs["report_files"],
+            ["qc.html_report", "qc.json_report", "quantify.log_file"],
+        )
+        self.assertIn("report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])", wdl)
 
 
 if __name__ == "__main__":

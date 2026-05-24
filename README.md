@@ -150,6 +150,8 @@ Recipe Tool Plan 示例：
 }
 ```
 
+`tool_calls[].inputs` 的值既可以是单个表达式字符串，也可以是表达式数组。数组会被编译成 WDL `Array[...]` 输入；例如 MultiQC 的 `report_files` 可以写成 `["qc.html_report", "qc.json_report", "quantify.log_file"]`，scatter 内产生的多个 `Array[File]` 会在渲染时自动展开为 `flatten([...])`。Catalog output 也可以用 `tags: [multiqc_input]` 标记可汇总文件；MultiQC 未显式提供 `report_files` 时会自动收集前序带标签输出。
+
 ## 🏗️ 架构与开发指南
 
 对于希望了解本项目底层实现原理、LangGraph 状态图设计，或有志于参与二次开发的工程师，请务必阅读我们的开发文档：

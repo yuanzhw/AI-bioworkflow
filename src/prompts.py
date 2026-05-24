@@ -18,6 +18,10 @@ def render_natural_language_planner_prompt(
         "the compiler will index them inside scatter.\n"
         "- Use call ids that are valid WDL identifiers.\n"
         "- Connect upstream tool outputs with call_id.output_name expressions.\n"
+        "- For Array inputs, use JSON arrays of expressions like "
+        '["qc.html_report", "qc.json_report"]; do not join expressions with +.\n'
+        "- For MultiQC report_files, provide a JSON array of QC output expressions or omit it "
+        "so tagged QC outputs can be collected automatically.\n"
         "- Include explicit workflow outputs requested by the user, or the final useful output.\n\n"
         "Output shape:\n"
         "{\n"

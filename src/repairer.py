@@ -3,7 +3,14 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.schema import IDENTIFIER_PATTERN, CallSpec, ScatterSpec, WorkflowIR, coerce_workflow_ir
+from src.schema import (
+    IDENTIFIER_PATTERN,
+    CallSpec,
+    ExpressionValue,
+    ScatterSpec,
+    WorkflowIR,
+    coerce_workflow_ir,
+)
 
 
 CALL_OUTPUT_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$")
@@ -107,12 +114,25 @@ def _call_dependencies(expressions, available_call_ids) -> set[str]:
 
 def _step_expressions(step: CallSpec | ScatterSpec) -> list[str]:
     if isinstance(step, CallSpec):
-        return list(step.inputs.values())
+        return _flatten_expression_values(step.inputs.values())
 
     expressions = [step.over]
     for child in step.body:
         expressions.extend(_step_expressions(child))
     return expressions
+
+
+def _flatten_expression_values(expressions) -> list[str]:
+    flattened = []
+    for expression in expressions:
+        flattened.extend(_flatten_expression_value(expression))
+    return flattened
+
+
+def _flatten_expression_value(expression: ExpressionValue) -> list[str]:
+    if isinstance(expression, list):
+        return list(expression)
+    return [expression]
 
 
 def _step_produced_calls(step: CallSpec | ScatterSpec) -> set[str]:
