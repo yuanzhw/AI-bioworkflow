@@ -290,7 +290,7 @@ def _index_scatter_input_if_needed(
     if isinstance(expression, list):
         item_target_type = _array_inner_type(target_type) or target_type
         return [
-            _index_scatter_input_if_needed(
+            _index_scalar_scatter_input_if_needed(
                 expression=item,
                 target_type=item_target_type,
                 workflow_inputs=workflow_inputs,
@@ -299,6 +299,20 @@ def _index_scatter_input_if_needed(
             for item in expression
         ]
 
+    return _index_scalar_scatter_input_if_needed(
+        expression=expression,
+        target_type=target_type,
+        workflow_inputs=workflow_inputs,
+        scatter=scatter,
+    )
+
+
+def _index_scalar_scatter_input_if_needed(
+    expression: str,
+    target_type: str,
+    workflow_inputs: dict[str, str],
+    scatter,
+) -> str:
     if scatter is None:
         return expression
 
