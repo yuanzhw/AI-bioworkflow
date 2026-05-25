@@ -22,9 +22,11 @@ def sample_rnaseq_tool_plan():
             "name": "RNASeqDEG",
             "recipe": "rnaseq_differential_expression",
             "inputs": {
-                "raw_r1": "File",
-                "raw_r2": "File",
+                "sample_ids": "Array[String]",
+                "raw_r1s": "Array[File]",
+                "raw_r2s": "Array[File]",
                 "transcriptome_index": "File",
+                "tx2gene": "File",
                 "sample_groups": "File",
             },
             "tool_calls": [
@@ -34,8 +36,8 @@ def sample_rnaseq_tool_plan():
                     "tool": "fastp",
                     "version": "0.23.2",
                     "inputs": {
-                        "r1": "raw_r1",
-                        "r2": "raw_r2",
+                        "r1": "raw_r1s",
+                        "r2": "raw_r2s",
                     },
                     "params": {
                         "thread": 4,
@@ -56,21 +58,48 @@ def sample_rnaseq_tool_plan():
                     },
                 },
                 {
+                    "id": "summarize",
+                    "step": "summarize_transcripts",
+                    "tool": "tximport",
+                    "version": "1.30.0",
+                    "inputs": {
+                        "quant_files": "quantify.quant_file",
+                        "sample_ids": "sample_ids",
+                        "tx2gene": "tx2gene",
+                    },
+                    "params": {},
+                },
+                {
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
                     "version": "1.42.0",
                     "inputs": {
-                        "counts": "quantify.gene_counts",
+                        "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",
                     },
                     "params": {
                         "contrast": "condition",
                     },
                 },
+                {
+                    "id": "report",
+                    "step": "qc_report",
+                    "tool": "multiqc",
+                    "version": "1.21",
+                    "inputs": {
+                        "report_files": [
+                            "qc.html_report",
+                            "qc.json_report",
+                            "quantify.log_file",
+                        ],
+                    },
+                    "params": {},
+                },
             ],
             "outputs": {
                 "deg_table": "deg.deg_table",
+                "multiqc_report": "report.multiqc_report",
             },
         }
     }
@@ -108,6 +137,8 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
 
         self.assertIn("rnaseq_differential_expression", prompt)
         self.assertIn("fastp", prompt)
+        self.assertIn("per_sample", prompt)
+        self.assertIn("tximport", prompt)
         self.assertIn("Run RNA-seq differential expression.", prompt)
 
     def test_plan_from_natural_language_validates_llm_plan(self):
@@ -144,10 +175,27 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
 
     def test_plan_from_natural_language_reports_catalog_error(self):
         plan = sample_rnaseq_tool_plan()
-        plan["workflow"]["tool_calls"] = plan["workflow"]["tool_calls"][:-1]
+        plan["workflow"]["tool_calls"] = [
+            tool_call
+            for tool_call in plan["workflow"]["tool_calls"]
+            if tool_call["step"] != "differential_expression"
+        ]
         fake_llm = FakePlannerLlm(json.dumps(plan))
 
         with self.assertRaisesRegex(PlannerCatalogError, "recipe/catalog validation failed"):
+            plan_from_natural_language(
+                "Run RNA-seq differential expression.",
+                llm=fake_llm,
+            )
+
+    def test_plan_from_natural_language_rejects_unanalyzable_array_concatenation(self):
+        plan = sample_rnaseq_tool_plan()
+        plan["workflow"]["tool_calls"][-1]["inputs"] = {
+            "report_files": "qc.html_report + qc.json_report",
+        }
+        fake_llm = FakePlannerLlm(json.dumps(plan))
+
+        with self.assertRaisesRegex(PlannerCatalogError, "references unavailable output"):
             plan_from_natural_language(
                 "Run RNA-seq differential expression.",
                 llm=fake_llm,

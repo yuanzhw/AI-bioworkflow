@@ -10,12 +10,27 @@ class RequiredInputSpec(BaseModel):
     description: str | None = None
 
 
+class RecipeScatterSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    item: str
+    over: str
+
+    @field_validator("id", "item")
+    @classmethod
+    def validate_scatter_ids(cls, value: str) -> str:
+        validate_identifier(value, "recipe scatter identifier")
+        return value
+
+
 class RecipeStepSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     role: str
     optional: bool = False
+    scatter: RecipeScatterSpec | None = None
     allowed_tools: list[str] = Field(default_factory=list)
 
     @field_validator("id")

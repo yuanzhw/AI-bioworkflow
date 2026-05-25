@@ -12,6 +12,8 @@ AI-bioworkflow/
 ├── pyproject.toml        # uv 依赖配置文件
 ├── README.md             # 项目基础说明
 ├── DEVELOPMENT.md        # 本开发指南
+├── docs/
+│   └── workflow-ir.md    # Workflow IR 结构、表达式规则与后端映射规范
 │
 ├── src/                  # 核心源代码目录
 │   ├── __init__.py
@@ -60,7 +62,7 @@ AI-bioworkflow/
 
 1. **状态管理 (`state.py`)**：必须保持强类型。除了 LangGraph 原生的 `messages` 列表，还需要定义好接收前端传入的 `parsed_json`、标准化后的 `workflow_ir`、流转中的 `current_wdl`、`analysis_errors` 和 `validation_message`。
 2. **提示词隔离 (`prompts.py`)**：绝对不要将长篇大论的 System Prompt 硬编码在业务逻辑文件中。
-3. **IR 优先 (`schema.py`)**：workflow 的调用关系与 task 的定义必须分离。`workflow.calls` 表达 DAG，`tasks` 表达可复用 task 模板。
+3. **IR 优先 (`schema.py`)**：workflow 的调用关系与 task 的定义必须分离。`workflow.steps` 表达 call/scatter DAG，`workflow.calls` 作为旧输入兼容，`tasks` 表达可复用 task 模板。
 4. **自然语言只到 Plan (`nl_planner.py`)**：LLM 的职责是把用户需求转成 Recipe Tool Plan，不直接生成 WDL。Planner 失败需要区分 JSON 解析、plan schema、recipe/catalog 校验三类错误，便于调试真实模型输出。
 5. **Catalog 先于自由生成 (`catalog/`, `recipes/`)**：常见生信工具、版本、参数、runtime 与配方步骤应沉淀为结构化目录，Planner 可以把 Recipe Tool Plan 解析成标准 IR。
 6. **静态分析先于渲染 (`analyzer.py`)**：在生成 WDL 前先检查 task 是否存在、输入是否齐全、上游输出引用是否有效、基础类型是否匹配。
@@ -68,11 +70,20 @@ AI-bioworkflow/
 8. **确定性渲染 (`renderers/`)**：标准 IR 到 WDL 必须由模板或普通代码生成，不应依赖 LLM 的自由文本输出。
 9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立 Tool，确保生成代码闭环验证。
 10. **Catalog 镜像权威来源 (`catalog/`)**：每个 Tool Catalog 条目必须显式声明 `runtime.docker`。编译链路不搜索、不猜测、不联网补全镜像；新增或升级工具时由维护者明确选择镜像并写入 catalog。
-11. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
+11. **辅助脚本镜像化 (`containers/`)**：tximport、DESeq2、MultiQC 等辅助脚本随项目镜像构建进入容器，不作为 WDL 输入，也不内联到 command 中。
+12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
+
+## Workflow IR 规范
+
+Workflow IR 是本项目的核心编译契约。字段结构、表达式系统、scatter 类型提升、Recipe Tool Plan 到 IR 的转换，以及 IR 到 WDL 1.0 的映射规则，统一维护在：
+
+👉 **[Workflow IR 规范与后端映射](./docs/workflow-ir.md)**
+
+后续新增 IR 数据结构、表达式形式、renderer backend 或 Nextflow 支持时，应先更新该规范，再实现代码与测试。
 
 ## 后续待办
 
-- [ ] **低优先级：自建工具镜像管理规范**：当 Catalog 中某些工具没有合适公共镜像时，考虑在 `containers/<tool>/<version>/` 维护 Dockerfile、smoke test 与构建说明；镜像构建并推送到内部 registry 后，只把最终 tag 或 digest 显式写入 Tool Catalog。该工作不接入编译链路，也不恢复镜像搜索或自动补全。
+- [x] **自建工具镜像管理规范初版**：当 Catalog 中某些工具没有合适公共镜像时，在 `containers/<tool>/<version>/` 维护 Dockerfile、smoke test 与构建说明；镜像构建并推送到 registry 后，只把最终 tag 或 digest 显式写入 Tool Catalog。该工作不接入编译链路，也不恢复镜像搜索或自动补全。
 
 ## 当前 LangGraph 流程
 
@@ -81,11 +92,11 @@ START
   ↓
 nl_planner        # 自然语言需求 -> Recipe Tool Plan（CLI 自然语言入口）
   ↓
-ir_normalizer    # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR
+ir_normalizer    # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR steps
   ↓
 analyzer_node    # IR 静态分析
   ↓
-renderer_node    # Workflow IR -> WDL
+renderer_node    # Workflow IR steps/scatter -> WDL
   ↓
 checker_node     # miniwdl check
   ↓

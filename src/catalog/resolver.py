@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from src.catalog.loader import ToolCatalog
 from src.catalog.schema import (
+    ToolInputSpec,
     ToolParamSpec,
     ToolSpec,
     validate_identifier,
@@ -16,7 +17,10 @@ from src.catalog.schema import (
 )
 from src.recipes.loader import RecipeCatalog
 from src.recipes.schema import RecipeSpec
-from src.schema import WorkflowIR
+from src.schema import ExpressionValue, WorkflowIR
+
+
+MULTIQC_INPUT_TAG = "multiqc_input"
 
 
 class PlannedToolCall(BaseModel):
@@ -26,7 +30,7 @@ class PlannedToolCall(BaseModel):
     step: str
     tool: str
     version: str
-    inputs: dict[str, str] = Field(default_factory=dict)
+    inputs: dict[str, ExpressionValue] = Field(default_factory=dict)
     params: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("id", "step", "tool")
@@ -90,6 +94,9 @@ def resolve_tool_plan(
 
     task_defs: dict[str, dict[str, Any]] = {}
     calls: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
+    scatter_steps: dict[str, dict[str, Any]] = {}
+    tagged_outputs: dict[str, list[str]] = {MULTIQC_INPUT_TAG: []}
 
     for tool_call in plan.workflow.tool_calls:
         step = recipe.step_by_id(tool_call.step)
@@ -109,25 +116,33 @@ def resolve_tool_plan(
             "inputs": task_inputs,
             "command": command,
             "outputs": {
-                output_name: output.model_dump(mode="json", exclude_none=True)
+                output_name: output.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
                 for output_name, output in tool.outputs.items()
             },
             "runtime": tool.runtime.model_dump(mode="json", exclude_none=True),
         }
 
-        calls.append(
-            {
-                "id": tool_call.id,
-                "task": task_name,
-                "inputs": {
-                    **_resolve_inputs(tool_call, tool),
-                    **{
-                        param_name: _format_wdl_literal(param_value)
-                        for param_name, param_value in params.items()
-                    },
+        call_step = {
+            "kind": "call",
+            "id": tool_call.id,
+            "task": task_name,
+            "inputs": {
+                **_resolve_inputs(
+                    tool_call,
+                    tool,
+                    plan.workflow.inputs,
+                    step.scatter,
+                    tagged_outputs,
+                ),
+                **{
+                    param_name: _format_wdl_literal(param_value)
+                    for param_name, param_value in params.items()
                 },
-            }
-        )
+            },
+        }
+        calls.append(call_step)
+        _append_workflow_step(steps, scatter_steps, call_step, step.scatter)
+        _record_tagged_outputs(tagged_outputs, tool_call.id, tool)
 
     workflow_outputs = plan.workflow.outputs or _default_workflow_outputs(calls, task_defs)
     return WorkflowIR.model_validate(
@@ -137,6 +152,7 @@ def resolve_tool_plan(
                 "name": plan.workflow.name,
                 "inputs": plan.workflow.inputs,
                 "calls": calls,
+                "steps": steps,
                 "outputs": workflow_outputs,
             },
             "tasks": task_defs,
@@ -207,17 +223,93 @@ def _types_compatible(expected: str, actual: str) -> bool:
     return expected.strip().rstrip("?") == actual.strip().rstrip("?")
 
 
-def _resolve_inputs(tool_call: PlannedToolCall, tool: ToolSpec) -> dict[str, str]:
+def _resolve_inputs(
+    tool_call: PlannedToolCall,
+    tool: ToolSpec,
+    workflow_inputs: dict[str, str],
+    scatter,
+    tagged_outputs: dict[str, list[str]],
+) -> dict[str, ExpressionValue]:
     provided = set(tool_call.inputs)
     expected = set(tool.inputs)
+    input_expressions = dict(tool_call.inputs)
 
     for unexpected in sorted(provided - expected):
         raise ValueError(f"tool call '{tool_call.id}' provides unknown input '{unexpected}'")
     for input_name, spec in tool.inputs.items():
-        if spec.required and input_name not in tool_call.inputs:
+        if input_name in input_expressions:
+            continue
+        auto_expression = _auto_collect_input(tool, input_name, spec, tagged_outputs)
+        if auto_expression is not None:
+            input_expressions[input_name] = auto_expression
+        elif spec.required:
             raise ValueError(f"tool call '{tool_call.id}' is missing required input '{input_name}'")
 
-    return dict(tool_call.inputs)
+    resolved = {}
+    for input_name, expression in input_expressions.items():
+        resolved[input_name] = _index_scatter_input_if_needed(
+            expression=expression,
+            target_type=tool.inputs[input_name].type,
+            workflow_inputs=workflow_inputs,
+            scatter=scatter,
+        )
+    return resolved
+
+
+def _auto_collect_input(
+    tool: ToolSpec,
+    input_name: str,
+    input_spec: ToolInputSpec,
+    tagged_outputs: dict[str, list[str]],
+) -> ExpressionValue | None:
+    if tool.id != "multiqc" or input_name != "report_files":
+        return None
+    if _types_compatible(input_spec.type, "Array[File]"):
+        collected = tagged_outputs.get(MULTIQC_INPUT_TAG, [])
+        if collected:
+            return list(collected)
+    return None
+
+
+def _record_tagged_outputs(
+    tagged_outputs: dict[str, list[str]],
+    call_id: str,
+    tool: ToolSpec,
+) -> None:
+    for output_name, output_spec in tool.outputs.items():
+        for tag in output_spec.tags:
+            tagged_outputs.setdefault(tag, []).append(f"{call_id}.{output_name}")
+
+
+def _index_scatter_input_if_needed(
+    expression: ExpressionValue,
+    target_type: str,
+    workflow_inputs: dict[str, str],
+    scatter,
+) -> ExpressionValue:
+    if isinstance(expression, list):
+        item_target_type = _array_inner_type(target_type) or target_type
+        return [
+            _index_scatter_input_if_needed(
+                expression=item,
+                target_type=item_target_type,
+                workflow_inputs=workflow_inputs,
+                scatter=scatter,
+            )
+            for item in expression
+        ]
+
+    if scatter is None:
+        return expression
+
+    source_type = workflow_inputs.get(expression)
+    if source_type is None:
+        return expression
+
+    inner_type = _array_inner_type(source_type)
+    if inner_type is not None and _types_compatible(inner_type, target_type):
+        return f"{expression}[{scatter.item}]"
+    return expression
 
 
 def _resolve_params(tool_call: PlannedToolCall, tool: ToolSpec) -> dict[str, Any]:
@@ -306,3 +398,34 @@ def _format_wdl_literal(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
+
+
+def _append_workflow_step(
+    steps: list[dict[str, Any]],
+    scatter_steps: dict[str, dict[str, Any]],
+    call_step: dict[str, Any],
+    scatter,
+) -> None:
+    if scatter is None:
+        steps.append(call_step)
+        return
+
+    if scatter.id not in scatter_steps:
+        scatter_step = {
+            "kind": "scatter",
+            "id": scatter.id,
+            "item": scatter.item,
+            "over": scatter.over,
+            "body": [],
+        }
+        scatter_steps[scatter.id] = scatter_step
+        steps.append(scatter_step)
+
+    scatter_steps[scatter.id]["body"].append(call_step)
+
+
+def _array_inner_type(value: str) -> str | None:
+    normalized = value.strip().rstrip("?")
+    if not normalized.startswith("Array[") or not normalized.endswith("]"):
+        return None
+    return normalized[len("Array["):-1]

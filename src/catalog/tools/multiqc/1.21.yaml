@@ -1,0 +1,27 @@
+id: multiqc
+version: "1.21"
+aliases:
+  - QC report
+  - workflow summary
+description: Aggregate per-step quality control files into a MultiQC HTML report.
+
+inputs:
+  report_files:
+    type: Array[File]
+    required: true
+    description: QC and summary files to include in the MultiQC report.
+
+outputs:
+  multiqc_report:
+    type: File
+    value: '"multiqc_report.html"'
+
+command_template: |
+  run_multiqc.sh
+  ~{write_lines(report_files)}
+  multiqc_report.html
+
+runtime:
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
+  cpu: 2
+  memory: 4G

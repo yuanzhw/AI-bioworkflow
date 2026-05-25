@@ -8,15 +8,21 @@ aliases:
   - transcriptome differential expression
 
 required_inputs:
-  raw_r1:
-    type: File
-    description: First FASTQ read file.
-  raw_r2:
-    type: File
-    description: Second FASTQ read file.
+  sample_ids:
+    type: Array[String]
+    description: Sample identifiers in the same order as the FASTQ arrays.
+  raw_r1s:
+    type: Array[File]
+    description: First FASTQ read files.
+  raw_r2s:
+    type: Array[File]
+    description: Second FASTQ read files.
   transcriptome_index:
     type: File
     description: Salmon transcriptome index archive or directory.
+  tx2gene:
+    type: File
+    description: Transcript-to-gene mapping table.
   sample_groups:
     type: File
     description: Sample metadata table with group labels.
@@ -24,15 +30,34 @@ required_inputs:
 steps:
   - id: qc
     role: read_quality_control
+    scatter:
+      id: per_sample
+      item: i
+      over: range(length(sample_ids))
     allowed_tools:
       - fastp
 
   - id: quantify
     role: expression_quantification
+    scatter:
+      id: per_sample
+      item: i
+      over: range(length(sample_ids))
     allowed_tools:
       - salmon
+
+  - id: summarize_transcripts
+    role: transcript_to_gene_count_summary
+    allowed_tools:
+      - tximport
 
   - id: differential_expression
     role: differential_expression
     allowed_tools:
       - deseq2
+
+  - id: qc_report
+    role: quality_control_summary
+    optional: true
+    allowed_tools:
+      - multiqc
