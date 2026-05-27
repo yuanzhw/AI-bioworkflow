@@ -81,14 +81,34 @@ Workflow IR 是本项目的核心编译契约。字段结构、表达式系统�
 
 后续新增 IR 数据结构、表达式形式、renderer backend 或 Nextflow 支持时，应先更新该规范，再实现代码与测试。
 
-## 当前 LangGraph 流程
+## 当前端到端调用链路与编译子图
+
+当前自然语言 Planner 尚未注册为 LangGraph 节点。`main.py` 在图外先调用 `src/nl_planner.py` 将自然语言需求转换为 Recipe Tool Plan，再将结构化 plan 提交给 LangGraph。`src/graph.py` 当前注册的是面向结构化输入的 **Compiler Graph**，而不是完整的自然语言编排图。
+
+### 当前端到端调用链路
+
+```text
+自然语言请求
+  ↓
+main.py -> nl_planner          # 图外 LLM 调用，生成 Recipe Tool Plan
+  ↓
+Recipe Tool Plan
+  ↓
+Compiler Graph
+
+--input 开发/调试入口
+  ↓
+Recipe Tool Plan / Workflow IR / Legacy JSON
+  ↓
+Compiler Graph                 # 不需要 LLM 或 API Key
+```
+
+### 当前 Compiler Graph (`src/graph.py`)
 
 ```text
 START
   ↓
-nl_planner        # 自然语言需求 -> Recipe Tool Plan（CLI 自然语言入口）
-  ↓
-ir_normalizer    # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR steps
+ir_normalizer     # 标准 IR / Legacy JSON / Recipe Tool Plan -> Workflow IR steps
   ↓
 analyzer_node    # IR 静态分析
   ↓
@@ -129,8 +149,13 @@ analyzer_node    # 修复后重新分析、渲染、校验
 8. **GitHub Actions 只负责发布和晋升**：正式镜像推送、provenance / attestation 及 Catalog 准入可由 GitHub Actions 承担；未来的即时构建由专用隔离 builder 承担，避免阻塞用户任务。
 9. **IR 到 WDL 保持确定性**：任何新增 Agent 都不替代 renderer，也不允许绕过 Analyzer 与 Checker。
 10. **全程可追踪**：检索来源、Agent 建议、IR 修改、资源覆盖、镜像验证和回退结果均应进入任务审计记录。
+11. **双层图边界**：上层 Orchestration Graph 承担自然语言与多 Agent 协作，下层 Compiler Graph 接受结构化输入并完成 IR 校验与 WDL 编译；结构化调试入口始终可以绕过上层图直达编译子图。
 
 ## 目标智能流程（规划中）
+
+目标架构拆分为两个职责清晰的 LangGraph 图，而不是将所有 LLM 节点直接接到现有编译子图之前。
+
+### Orchestration Graph
 
 ```text
 用户自然语言 / 文献方法描述
@@ -147,8 +172,41 @@ Planner / Tool Resolver    # 生成 Recipe Tool Plan，完整 Catalog 最终校�
   ↓
 Resource Agent             # 仅补充有来源记录的资源建议或 override
   ↓
-IR Normalizer -> Analyzer -> Renderer -> Checker -> Execution
+Recipe Tool Plan
+  ↓
+Compiler Graph             # 调用稳定编译子图
 ```
+
+### Compiler Graph
+
+```text
+Recipe Tool Plan / Workflow IR / Legacy JSON
+  ↓
+IR Normalizer -> Analyzer -> Renderer -> Checker
+                   ↑              │
+                   └─ Repairer <──┘  # analyzer/checker 失败时触发
+  ↓
+Validated Workflow IR / WDL / Diagnostic Report
+```
+
+编译子图仍保留以下直接入口：
+
+```text
+--input / 测试 / 集成调用 -> Compiler Graph
+```
+
+### 两层状态与入口边界
+
+| 层级 | 负责的数据与行为 | 不负责的行为 |
+| --- | --- | --- |
+| Orchestration Graph | 自然语言请求、planner trace、审查告警、检索候选、资源建议、Recipe Tool Plan | 不渲染最终 WDL，不绕过正式 Catalog 校验 |
+| Compiler Graph | 结构化输入、Workflow IR、静态分析、受控修复、WDL 渲染、语法验证 | 不负责理解自然语言或自由选择未知工具 |
+
+落地后，CLI 和前端入口遵循以下路由：
+
+- 自然语言输入调用 Orchestration Graph，再将产出的 Recipe Tool Plan 提交给 Compiler Graph。
+- `--input`、测试和集成接口继续直接调用 Compiler Graph，保持无 LLM、无 API Key 的确定性编译模式。
+- Reviewer LLM 未来可以作为 Compiler Graph 中的受控失败恢复分支接入，但只能修改 IR；IR 到 WDL 的 renderer 仍然保持确定性。
 
 ### 有界反思与自愈
 
@@ -296,20 +354,30 @@ Candidate ToolSpec
 
 候选蓝图必须区分文献明确描述的步骤与 AI 推断补充的步骤，并标注缺失的软件版本、参考资源、参数和工具映射依据。
 
+## 两层图迁移步骤（规划中）
+
+1. **明确现状与 API 边界**：将当前 `src/graph.py` 视为 Compiler Graph，保持它接收 Recipe Tool Plan、Workflow IR 和 Legacy JSON 的既有能力。
+2. **显式命名编译子图**：后续代码中将编译图暴露为 `compiler_graph` 或等价清晰命名，并为结构化入口补齐回归测试；迁移期间可以保留旧导出别名以减少破坏性修改。
+3. **定义 Orchestration State**：为自然语言请求、Planner 结果、Reviewer 告警、Retriever 候选、资源建议和审计记录建立独立状态 schema，避免污染编译状态。
+4. **将现有 Natural Language Planner 纳入上层图**：第一版 Orchestration Graph 只需实现 `natural_language_planner -> compiler_graph`，同时保证 `--input` 路径不触发 LLM。
+5. **统一 CLI / 前端路由**：自然语言入口改调 Orchestration Graph，结构化入口继续调 Compiler Graph，并移除 `main.py` 中重复的人工编排逻辑。
+6. **逐步接入新增 Agent**：在上层图稳定后依次接入 Architect、Bioinfo Reviewer、Tool Retriever 和 Resource Agent；Reviewer LLM 作为编译失败恢复分支单独接入 Compiler Graph。
+
 ## 分阶段开发路线图（规划中）
 
 | 阶段 | 建设内容 | 主要交付 |
 | --- | --- | --- |
 | P0 | 稳定现有 Recipe / Catalog / 执行测试 | 可靠的编译与执行评测基线 |
-| P1 | 有界 Reviewer LLM 与 IR 修复闭环 | 结构化修复、诊断记录、失败报告 |
-| P2 | Architect 与 Bioinfo Reviewer 分层 | 分析方案和科学性告警职责分离 |
-| P3 | Approved Catalog Tool Retriever | 高召回候选工具筛选和 prompt 缩减 |
-| P4 | Resource Agent | 可追踪的 CPU / memory / disk 建议与 override |
-| P5 | External Retrieval 与 Candidate ToolSpec | 未知工具发现和候选定义 |
-| P6 | On-demand Experimental Container Build | 临时镜像支持当前探索任务 |
-| P7 | Validated Container Promotion | GHCR 正式发布及 Catalog digest 准入 |
-| P8 | 文献驱动 Workflow Blueprint | 从文献方法提取候选流程 |
-| P9 | 完整 Multi-Agent 编排与评测 | 在边界成熟后扩大协作自治程度 |
+| P1 | Compiler Graph 明确化与 Orchestration Graph 外壳 | 自然语言和结构化入口分层，Planner 可在上层图运行 |
+| P2 | 有界 Reviewer LLM 与 IR 修复闭环 | 结构化修复、诊断记录、失败报告 |
+| P3 | Architect 与 Bioinfo Reviewer 分层 | 分析方案和科学性告警职责分离 |
+| P4 | Approved Catalog Tool Retriever | 高召回候选工具筛选和 prompt 缩减 |
+| P5 | Resource Agent | 可追踪的 CPU / memory / disk 建议与 override |
+| P6 | External Retrieval 与 Candidate ToolSpec | 未知工具发现和候选定义 |
+| P7 | On-demand Experimental Container Build | 临时镜像支持当前探索任务 |
+| P8 | Validated Container Promotion | GHCR 正式发布及 Catalog digest 准入 |
+| P9 | 文献驱动 Workflow Blueprint | 从文献方法提取候选流程 |
+| P10 | 完整 Multi-Agent 编排与评测 | 在边界成熟后扩大协作自治程度 |
 
 ## 评测重点（规划中）
 
