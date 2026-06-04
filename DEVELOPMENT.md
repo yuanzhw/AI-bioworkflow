@@ -81,6 +81,18 @@ Workflow IR 是本项目的核心编译契约。字段结构、表达式系统�
 
 后续新增 IR 数据结构、表达式形式、renderer backend 或 Nextflow 支持时，应先更新该规范，再实现代码与测试。
 
+## 项目展示定位与 Web 产品化目标（规划中）
+
+本项目同时承担求职作品集项目的职责：展示开发者能够将生物信息学领域知识转化为可解释、可测试、可交付的 AI Agent 工程系统。因此 Web 层不是简单的结果展示壳，而是用于呈现 Agent 决策过程、结构化中间产物、验证闭环和领域可信边界的产品入口。
+
+Web 产品化遵循以下目标：
+
+1. **突出 Agent 工程能力**：页面应能够展示从自然语言需求、规划过程、Workflow IR、静态分析/修复到 WDL 校验结果的完整链路，而不是只提供一个返回代码的聊天框。
+2. **突出领域建模能力**：通过 recipe、tool catalog、工作流 DAG、运行输出和科学性告警展示生物信息学问题如何被结构化。
+3. **突出可解释与可审计性**：关键状态变化、修复动作、错误诊断、候选工具来源和镜像可信等级应能够被记录并在详情页回看。
+4. **保留核心编译器独立性**：Web API、CLI 与测试复用相同的 Python 服务层；UI 不侵入 Workflow IR 到 WDL 的确定性编译路径。
+5. **控制非核心投入**：第一版优先完成可演示的 Agent 工作台，不提前引入用户权限、计费、复杂微服务或大规模任务调度基础设施。
+
 ## 当前端到端调用链路与编译子图
 
 当前自然语言 Planner 尚未注册为 LangGraph 节点。`main.py` 在图外先调用 `src/nl_planner.py` 将自然语言需求转换为 Recipe Tool Plan，再将结构化 plan 提交给 LangGraph。`src/graph.py` 当前注册的是面向结构化输入的 **Compiler Graph**，而不是完整的自然语言编排图。
@@ -207,6 +219,166 @@ Validated Workflow IR / WDL / Diagnostic Report
 - 自然语言输入调用 Orchestration Graph，再将产出的 Recipe Tool Plan 提交给 Compiler Graph。
 - `--input`、测试和集成接口继续直接调用 Compiler Graph，保持无 LLM、无 API Key 的确定性编译模式。
 - Reviewer LLM 未来可以作为 Compiler Graph 中的受控失败恢复分支接入，但只能修改 IR；IR 到 WDL 的 renderer 仍然保持确定性。
+
+## Web 展示系统技术方案（规划中）
+
+### 技术选型
+
+Web 展示系统与 Agent 核心代码继续保留在同一仓库中，以便 Workflow IR、API 契约、前端可视化和集成测试能够在同一次变更中演进。前端和后端作为独立进程部署，通过 HTTP API 与事件流通信。
+
+| 层级 | 选型 | 在本项目中的职责 |
+| --- | --- | --- |
+| Agent / Compiler Core | Python + LangGraph + Pydantic + Jinja2 + `miniwdl` | 维护结构化状态、规划/编译流程、确定性输出和验证闭环 |
+| Backend API | FastAPI + Pydantic | 暴露 workflow 创建、查询、catalog 读取、历史详情和事件流接口 |
+| 实时状态推送 | Server-Sent Events (SSE) | 将单次 Agent run 的节点状态、诊断与产物更新推送给工作台 |
+| 数据持久化 | SQLite（展示版）/ PostgreSQL（部署升级） | 保存 run 摘要、状态事件、结构化产物和错误记录 |
+| Frontend | Next.js + TypeScript | 承载介绍站、交互工作台、DAG 视图和历史详情页 |
+| UI 与样式 | Tailwind CSS + shadcn/ui | 建立一致、可扩展的产品界面组件 |
+| DAG 可视化 | React Flow | 展示 Workflow IR 中 steps/calls/scatter 的依赖图 |
+| 结构化产物展示 | Monaco Editor 或轻量只读代码查看器 | 展示 JSON Plan、Workflow IR 和 WDL，并支持复制/对比 |
+
+第一阶段使用 SSE 而不是 WebSocket：当前主要需求是后端向前端单向推送执行阶段与中间产物，SSE 的实现和调试成本更低。当后续引入运行中人工批准、交互式修订或双向协作时，再评估 WebSocket。
+
+### 系统边界
+
+```text
+Next.js Web Application
+  ├─ 项目介绍页 / 示例案例
+  ├─ Workflow 生成工作台
+  ├─ 工作流 DAG 可视化
+  └─ Agent 执行历史详情
+          │
+          │ REST API + SSE
+          ▼
+FastAPI Application
+  ├─ 请求/响应 Schema 与错误映射
+  ├─ Run 管理、事件记录与结果查询
+  ├─ Recipe / Tool Catalog 查询
+  └─ Application Service Layer
+          │
+          ├─ 自然语言入口 -> Orchestration Graph -> Compiler Graph
+          └─ 结构化入口 -------------------------> Compiler Graph
+                                                       │
+                                                       ▼
+                              Workflow IR / WDL / Diagnostics / Artifacts
+```
+
+边界约束：
+
+- Next.js 不实现 Agent 编排、Catalog 解析或 WDL 生成逻辑，也不以其 API Route 取代 Python 后端。
+- FastAPI 不通过 shell 调用 `main.py`；应抽取可复用的 Python application service，供 CLI 与 API 共同调用。
+- `src/schema.py` 与 Workflow IR 规范仍是编译契约权威来源；前端展示模型从公开 API schema 派生或显式同步。
+- API 层可以管理 run、流式事件和持久化，但不能绕过 Analyzer、Renderer 与 Checker 直接产生最终 WDL。
+- 页面显示的修复、告警、容器可信等级与执行状态必须来自可保存的结构化记录，不能仅依靠前端拼装文案。
+
+### 目标仓库目录
+
+以下目录是在现有核心代码基础上的产品化目标结构，按迭代逐步创建：
+
+```text
+AI-bioworkflow/
+├── src/
+│   ├── ...                         # 现有 Agent / Compiler 核心模块
+│   ├── services/                   # CLI 与 FastAPI 共用的应用服务层
+│   │   ├── workflow_service.py     # 创建/编译 workflow run
+│   │   └── catalog_service.py      # recipe / tool 查询
+│   └── api/
+│       ├── app.py                  # FastAPI app factory 与中间件
+│       ├── models/                 # 对外请求/响应 DTO
+│       └── routes/                 # workflows、runs、catalog、events
+├── web/                            # Next.js + TypeScript 前端
+│   ├── app/
+│   │   ├── page.tsx                # 项目介绍页
+│   │   ├── workspace/              # Workflow 生成工作台
+│   │   ├── workflows/[id]/graph/   # DAG 可视化页
+│   │   └── runs/[id]/              # Agent 执行历史详情页
+│   ├── components/
+│   │   ├── workflow-graph/         # React Flow 图组件
+│   │   ├── run-timeline/           # Agent 阶段与事件组件
+│   │   └── code-viewer/            # Plan / IR / WDL 查看组件
+│   └── lib/                        # API client、SSE client 与 TypeScript types
+├── tests/
+│   ├── ...                         # 现有核心测试
+│   └── api/                        # FastAPI contract / integration tests
+└── main.py                         # CLI，改为调用 services 层
+```
+
+### 页面范围与展示重点
+
+| 页面 | 核心内容 | 招聘展示价值 | 第一版完成标准 |
+| --- | --- | --- | --- |
+| 项目介绍页 | 问题背景、Agent/Compiler 架构、RNA-seq DEG 示例、技术栈与项目边界 | 快速说明生信经验如何转化为 Agent 产品能力 | 可以从介绍跳转到预填充示例的工作台 |
+| Workflow 生成工作台 | 自然语言输入、执行阶段流、Plan / IR / WDL 标签页、校验和修复信息 | 展示端到端 Agent 工程链路与可解释输出 | 提交一个示例请求后可实时看到状态与最终校验结果 |
+| 工作流 DAG 可视化页 | calls、scatter、依赖边、输入输出以及节点状态 | 展示结构化建模、领域工作流理解和可视化能力 | 能从生成的 IR 渲染 RNA-seq 示例 DAG 并选中节点查看详情 |
+| Agent 执行历史详情页 | 原始请求、事件时间线、模型/编译步骤、修复动作、产物与诊断 | 展示可观测性、审计能力和失败处理意识 | 刷新页面后仍可重看一次成功或失败 run 的关键产物 |
+
+第一版工作台重点呈现的阶段为：
+
+```text
+需求输入
+  -> Planner / Recipe Tool Plan
+  -> IR Normalizer
+  -> Analyzer
+  -> Repairer（仅触发时显示）
+  -> Renderer
+  -> miniwdl Checker
+  -> Validated WDL 或 Diagnostic Report
+```
+
+### 后端 API 与事件契约
+
+API 第一版围绕“生成并查看一次可解释 workflow run”设计，不直接引入登录、多租户或正式执行集群：
+
+| Endpoint | 用途 | 主要返回 |
+| --- | --- | --- |
+| `POST /api/runs` | 从自然语言需求创建一次 Agent run | `run_id`、初始状态、事件流 URL |
+| `POST /api/compile` | 从 Recipe Tool Plan 或 Workflow IR 发起确定性编译 | `run_id`、初始状态、事件流 URL |
+| `GET /api/runs/{run_id}` | 查询详情页所需的 run 快照 | 请求、状态、Plan、IR、WDL、诊断、修复记录 |
+| `GET /api/runs/{run_id}/events` | 订阅当前 run 的 SSE 事件 | 节点开始/完成/失败、产物更新、最终结果 |
+| `GET /api/recipes` | 查询支持的分析配方 | recipe 元数据与所需步骤 |
+| `GET /api/tools` | 查询批准的工具目录 | tool、版本、runtime 与可信状态 |
+
+事件建议采用可持久化的统一 envelope，便于 SSE 实时显示和历史页回放使用同一份数据：
+
+```json
+{
+  "event_id": "evt_001",
+  "run_id": "run_001",
+  "sequence": 1,
+  "type": "node.completed",
+  "node": "analyzer",
+  "timestamp": "2026-05-28T12:00:00Z",
+  "summary": "Workflow IR static analysis passed.",
+  "payload": {}
+}
+```
+
+建议第一版事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、`artifact.updated`、`repair.applied`、`validation.completed` 和 `run.completed`。事件中不保存 API key、原始模型鉴权信息或其他秘密环境变量。
+
+### 持久化与部署边界
+
+- 本地展示和开发第一版使用 SQLite，保存 run、event、artifact 与 diagnostic 等必要信息，减少环境安装成本。
+- 公开部署并需要并发或长期保存历史记录时，迁移到 PostgreSQL；持久化 schema 不应绑定到 SQLite 特有行为。
+- Agent 调用与 WDL 生成可以先作为 API 进程内任务运行；真正接入耗时 WDL 执行或容器构建后，再引入任务队列或专门 worker。
+- 前端与 API 可以独立部署，但必须基于同一公开 API contract；仓库仍保留为 monorepo，保证演示迭代效率。
+
+### Web 产品化实施里程碑
+
+Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经具备的核心编译能力形成可演示产品，不等待全部未来 Agent 完成。
+
+| 阶段 | 建设内容 | 主要交付 | 依赖 |
+| --- | --- | --- | --- |
+| W0 | 抽取 application service 层 | CLI 调用可复用 service；自然语言与结构化编译均有稳定 Python 接口 | 当前 Compiler Graph |
+| W1 | FastAPI API 基础 | `POST /api/runs`、`POST /api/compile`、catalog 查询与 API 测试 | W0 |
+| W2 | Run 事件与展示级持久化 | SQLite 数据模型、SSE 事件流、成功/失败历史快照 | W1 |
+| W3 | Next.js 产品外壳与项目介绍页 | TypeScript/Tailwind/shadcn UI 基础、介绍页、案例入口 | W1 |
+| W4 | Workflow 生成工作台 | 输入面板、执行时间线、Plan/IR/WDL/诊断查看与 SSE 接入 | W2, W3 |
+| W5 | DAG 与历史详情 | React Flow 工作流图、run 历史详情和失败/修复回放 | W4 |
+| W6 | 部署与作品集打磨 | 在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航 | W5 |
+
+求职展示的最小可发布范围为 `W0` 至 `W5`：访问者能够使用一个预置 RNA-seq 示例触发 run，看到 Agent/Compiler 的阶段过程、Workflow IR、DAG、校验后的 WDL 与历史回放。`W6` 负责将能力包装成可在简历和项目主页直接访问、快速理解的作品。
+
+## Agent 修复闭环与职责边界（规划中）
 
 ### 有界反思与自愈
 
@@ -363,7 +535,9 @@ Candidate ToolSpec
 5. **统一 CLI / 前端路由**：自然语言入口改调 Orchestration Graph，结构化入口继续调 Compiler Graph，并移除 `main.py` 中重复的人工编排逻辑。
 6. **逐步接入新增 Agent**：在上层图稳定后依次接入 Architect、Bioinfo Reviewer、Tool Retriever 和 Resource Agent；Reviewer LLM 作为编译失败恢复分支单独接入 Compiler Graph。
 
-## 分阶段开发路线图（规划中）
+## Agent 能力分阶段开发路线图（规划中）
+
+本路线描述智能编排、检索和运行环境能力的演进；可演示 Web 产品的建设顺序见上文 `W0` 至 `W6`，两条轨道可以并行推进。
 
 | 阶段 | 建设内容 | 主要交付 |
 | --- | --- | --- |
