@@ -39,7 +39,7 @@ AI-bioworkflow/
 │   │
 │   ├── tools/            # 10. 工具箱：存放外部工具封装
 │   │   ├── __init__.py
-│   │   └── validator.py  # 生信特定工具（如 miniwdl 语法校验）
+│   │   └── validator.py  # 生信特定工具（如 WOMtool 语法校验）
 │   │
 │   ├── nodes/            # 11. 工作节点：LangGraph 的具体执行工位
 │   │   ├── __init__.py
@@ -47,7 +47,7 @@ AI-bioworkflow/
 │   │   ├── analyzer.py   # 调用 IR 静态分析
 │   │   ├── repairer.py   # 调用 IR repairer 并记录修复动作
 │   │   ├── renderer.py   # 调用 WDL renderer
-│   │   └── checker.py    # 调用 miniwdl validator
+│   │   └── checker.py    # 调用 WDL validator
 │   │
 │   └── graph.py          # 12. 核心图纸：组装 nodes 和 tools 的 StateGraph
 │
@@ -68,10 +68,10 @@ AI-bioworkflow/
 6. **静态分析先于渲染 (`analyzer.py`)**：在生成 WDL 前先检查 task 是否存在、输入是否齐全、上游输出引用是否有效、基础类型是否匹配。
 7. **保守修复 (`repairer.py`)**：自动修复只处理可以由 IR 本身确定的问题，例如 call 拓扑顺序和明显漏引号的 File/String 输出字面量；无法确定的错误应保留给人工或后续 LLM repairer。
 8. **确定性渲染 (`renderers/`)**：标准 IR 到 WDL 必须由模板或普通代码生成，不应依赖 LLM 的自由文本输出。
-9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `miniwdl check`）都必须封装为独立 Tool，确保生成代码闭环验证。
+9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `java -jar womtool.jar validate`）都必须封装为独立 Tool，确保生成代码闭环验证。
 10. **Catalog 镜像权威来源 (`catalog/`)**：每个 Tool Catalog 条目必须显式声明 `runtime.docker`。编译链路不搜索、不猜测、不联网补全镜像；新增或升级工具时由维护者明确选择镜像并写入 catalog。
 11. **辅助脚本镜像化 (`containers/`)**：tximport、DESeq2、MultiQC 等辅助脚本随项目镜像构建进入容器，不作为 WDL 输入，也不内联到 command 中。
-12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> miniwdl check 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
+12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> WOMtool validate 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
 
 ## Workflow IR 规范
 
@@ -126,7 +126,7 @@ analyzer_node    # IR 静态分析
   ↓
 renderer_node    # Workflow IR steps/scatter -> WDL
   ↓
-checker_node     # miniwdl check
+checker_node     # WOMtool validate
   ↓
 END
 
@@ -151,7 +151,7 @@ analyzer_node    # 修复后重新分析、渲染、校验
 
 已确认的设计决策：
 
-1. **Reviewer LLM 只能修改 IR**：Reviewer 可以读取当前 IR、分析错误、`miniwdl` stderr 和历史修复记录，并输出结构化 IR patch 或候选 IR；不能直接改写最终 WDL、绕过验证或引入未经准入的正式工具。
+1. **Reviewer LLM 只能修改 IR**：Reviewer 可以读取当前 IR、分析错误、WOMtool stderr 和历史修复记录，并输出结构化 IR patch 或候选 IR；不能直接改写最终 WDL、绕过验证或引入未经准入的正式工具。
 2. **Bioinfo Reviewer 只告警与建议**：科学性审查节点负责指出缺失步骤、方法学风险和推荐调整，但最终流程方案始终由 Architect Agent 决定。
 3. **Resource Agent 只处理资源字段**：该节点仅建议或覆盖 `cpu`、`memory`、`disks` 等资源字段，记录修改理由；不负责镜像选择、工具选择或分析方法选择。
 4. **Catalog 内检索优先**：Planner 不必永久读取全量正式工具库；未来由 Tool Retriever 从 approved Catalog 中高召回筛选候选工具，再由完整 Catalog 做最终校验。
@@ -228,7 +228,7 @@ Web 展示系统与 Agent 核心代码继续保留在同一仓库中，以便 Wo
 
 | 层级 | 选型 | 在本项目中的职责 |
 | --- | --- | --- |
-| Agent / Compiler Core | Python + LangGraph + Pydantic + Jinja2 + `miniwdl` | 维护结构化状态、规划/编译流程、确定性输出和验证闭环 |
+| Agent / Compiler Core | Python + LangGraph + Pydantic + Jinja2 + WOMtool | 维护结构化状态、规划/编译流程、确定性输出和验证闭环 |
 | Backend API | FastAPI + Pydantic | 暴露 workflow 创建、查询、catalog 读取、历史详情和事件流接口 |
 | 实时状态推送 | Server-Sent Events (SSE) | 将单次 Agent run 的节点状态、诊断与产物更新推送给工作台 |
 | 数据持久化 | SQLite（展示版）/ PostgreSQL（部署升级） | 保存 run 摘要、状态事件、结构化产物和错误记录 |
@@ -321,7 +321,7 @@ AI-bioworkflow/
   -> Analyzer
   -> Repairer（仅触发时显示）
   -> Renderer
-  -> miniwdl Checker
+  -> WOMtool Checker
   -> Validated WDL 或 Diagnostic Report
 ```
 
@@ -385,7 +385,7 @@ Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经
 当前确定性 `repairer` 仍作为第一层修复机制。只有在不存在安全、确定的修复动作时，才引入 Reviewer LLM：
 
 ```text
-Analyzer / miniwdl failure
+Analyzer / WOMtool failure
   ↓
 Deterministic Repairer
   ├─ 有安全修复动作 -> 重新分析和验证

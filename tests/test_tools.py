@@ -1,7 +1,6 @@
 import unittest
 
-from src.tools.validator import miniwdl_available, wdl_validator
-
+from src.tools.validator import wdl_validator, wdl_validator_available
 
 VALID_WDL = """
 version 1.0
@@ -42,13 +41,13 @@ task fastp_qc {
 
 
 class ValidatorTests(unittest.TestCase):
-    @unittest.skipIf(not miniwdl_available(), "miniwdl is not installed")
+    @unittest.skipIf(not wdl_validator_available(), "WDL validator is not installed")
     def test_validator_accepts_valid_wdl(self):
         result = wdl_validator.invoke({"wdl_code": VALID_WDL})
 
         self.assertTrue(result["is_valid"], result["message"])
 
-    @unittest.skipIf(not miniwdl_available(), "miniwdl is not installed")
+    @unittest.skipIf(not wdl_validator_available(), "WDL validator is not installed")
     def test_validator_rejects_invalid_wdl(self):
         result = wdl_validator.invoke({"wdl_code": "workflow Bad {"})
 

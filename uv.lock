@@ -13,9 +13,13 @@ dependencies = [
     { name = "langchain-deepseek" },
     { name = "langchain-openai" },
     { name = "langgraph" },
-    { name = "miniwdl" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+miniwdl = [
+    { name = "miniwdl" },
 ]
 
 [package.dev-dependencies]
@@ -31,10 +35,11 @@ requires-dist = [
     { name = "langchain-deepseek", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.2.1" },
     { name = "langgraph", specifier = ">=1.1.10" },
-    { name = "miniwdl", specifier = ">=1.14.2" },
+    { name = "miniwdl", marker = "extra == 'miniwdl'", specifier = ">=1.14.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
 ]
+provides-extras = ["miniwdl"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "isort", specifier = ">=8.0.1" }]

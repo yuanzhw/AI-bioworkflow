@@ -5,15 +5,14 @@ from langchain_core.messages import HumanMessage
 from src.state import WorkflowState
 from src.tools.validator import wdl_validator
 
-
 logger = logging.getLogger(__name__)
 
 
 def checker_node(state: WorkflowState):
     """
-    负责调用 miniwdl 工具校验代码的节点
+    负责调用 WDL 校验工具校验代码的节点
     """
-    logger.info("Checker node is running miniwdl validation.")
+    logger.info("Checker node is running WDL validation.")
     
     wdl_code = state.get("current_wdl", "")
     current_error_count = state.get("error_count", 0)

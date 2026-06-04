@@ -5,10 +5,10 @@ from langgraph.graph import END, START, StateGraph
 from src.nodes.analyzer import analyzer_node
 from src.nodes.checker import checker_node
 from src.nodes.ir_normalizer import ir_normalizer_node
-from src.nodes.repairer import repairer_node
 from src.nodes.renderer import renderer_node
+from src.nodes.repairer import repairer_node
 from src.state import WorkflowState
-
+from src.tools.validator import VALIDATOR_MISSING_MARKER
 
 MAX_REPAIR_ATTEMPTS = 2
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def _can_attempt_repair(state: WorkflowState) -> bool:
 
 
 def _missing_local_validator(state: WorkflowState) -> bool:
-    return "未找到 miniwdl" in state.get("validation_message", "")
+    return VALIDATOR_MISSING_MARKER in state.get("validation_message", "")
 
 
 # 1. 实例化状态图，传入我们的 WorkflowState 笔记本
