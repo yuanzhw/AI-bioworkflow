@@ -3,22 +3,18 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
 
-from src.graph import agent
 from src.nl_planner import (
     DEFAULT_PLANNER_MODEL,
     NaturalLanguagePlanningError,
     build_default_planner_prompt,
     create_natural_language_plan,
 )
-from src.nodes.analyzer import analyzer_node
-from src.nodes.ir_normalizer import ir_normalizer_node
-from src.nodes.renderer import renderer_node
-from src.nodes.repairer import repairer_node
+from src.services.workflow_service import compile_workflow, workflow_succeeded
 from src.state import WorkflowState
 
 
@@ -201,45 +197,6 @@ def load_prompt(prompt: str | None = None, prompt_file: Path | None = None) -> s
     return DEMO_PROMPT
 
 
-def build_initial_state(
-    parsed_json: dict[str, Any],
-) -> WorkflowState:
-    return {
-        "parsed_json": parsed_json,
-        "workflow_ir": {},
-        "analysis_errors": [],
-        "analysis_warnings": [],
-        "messages": [],
-        "current_wdl": "",
-        "validation_message": "",
-        "error_count": 0,
-        "repair_count": 0,
-        "repair_actions": [],
-        "is_valid": False,
-    }
-
-
-def compile_workflow(
-    parsed_json: dict[str, Any],
-    check: bool = True,
-) -> WorkflowState:
-    state = build_initial_state(parsed_json)
-    if check:
-        return cast(WorkflowState, agent.invoke(state))
-
-    _merge_state(state, ir_normalizer_node(state))
-    if state["analysis_errors"]:
-        return state
-
-    _analyze_with_repair(state)
-    if state["analysis_errors"]:
-        return state
-
-    _merge_state(state, renderer_node(state))
-    state["validation_message"] = "WDL syntax validation skipped (--no-check)."
-    return state
-
-
 def write_wdl_output(path: Path, wdl_code: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(wdl_code, encoding="utf-8")
@@ -253,14 +210,6 @@ def write_json_output(path: Path, data: dict[str, Any]) -> None:
 def write_text_output(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-
-
-def workflow_succeeded(state: WorkflowState, check: bool) -> bool:
-    if state["analysis_errors"]:
-        return False
-    if not state["current_wdl"]:
-        return False
-    return state["is_valid"] if check else True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -324,43 +273,6 @@ def configure_logging(verbose: bool = False) -> None:
         stream=sys.stderr,
         force=True,
     )
-
-
-def _analyze_with_repair(state: WorkflowState) -> None:
-    while True:
-        _merge_state(state, analyzer_node(state))
-        if not state["analysis_errors"]:
-            return
-
-        _merge_state(state, repairer_node(state))
-        if not state["repair_actions"]:
-            return
-
-
-def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:
-    for key, value in update.items():
-        if key == "messages":
-            state["messages"] = state["messages"] + value
-        elif key == "parsed_json":
-            state["parsed_json"] = value
-        elif key == "workflow_ir":
-            state["workflow_ir"] = value
-        elif key == "analysis_errors":
-            state["analysis_errors"] = value
-        elif key == "analysis_warnings":
-            state["analysis_warnings"] = value
-        elif key == "current_wdl":
-            state["current_wdl"] = value
-        elif key == "validation_message":
-            state["validation_message"] = value
-        elif key == "error_count":
-            state["error_count"] = value
-        elif key == "repair_count":
-            state["repair_count"] = value
-        elif key == "repair_actions":
-            state["repair_actions"] = value
-        elif key == "is_valid":
-            state["is_valid"] = value
 
 
 def _print_report(state: WorkflowState, check: bool) -> None:
