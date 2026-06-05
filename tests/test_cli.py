@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import main as cli
-from src.nl_planner import NaturalLanguagePlanningError, NaturalLanguagePlanResult
+from src.nl_planner import NaturalLanguagePlanningError
+from src.services.workflow_service import compile_structured_workflow
 
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
@@ -27,23 +28,20 @@ class CliTests(unittest.TestCase):
 
     def test_cli_compiles_natural_language_prompt_with_mock_planner(self):
         planned = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")
-        plan_result = NaturalLanguagePlanResult(
-            plan=planned,
-            planner_prompt="planner prompt",
-            raw_response=json.dumps(planned),
-        )
+        result = compile_structured_workflow(planned, check=False)
+        request = "Run bulk RNA-seq differential expression."
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "rnaseq_deg.wdl"
             stdout = io.StringIO()
             stderr = io.StringIO()
 
-            with patch("main.create_natural_language_plan", return_value=plan_result) as planner:
+            with patch("main.plan_and_compile_workflow", return_value=result) as service:
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     exit_code = cli.main(
                         [
                             "--prompt",
-                            "Run bulk RNA-seq differential expression.",
+                            request,
                             "--output",
                             str(output_path),
                             "--print-plan",
@@ -52,17 +50,35 @@ class CliTests(unittest.TestCase):
                     )
 
             self.assertEqual(exit_code, 0, stderr.getvalue())
-            planner.assert_called_once()
+            service.assert_called_once_with(request, model=cli.DEFAULT_PLANNER_MODEL, check=False)
             self.assertIn('"recipe": "rnaseq_differential_expression"', stdout.getvalue())
             self.assertIn("workflow RNASeqDEG", output_path.read_text(encoding="utf-8"))
 
+    def test_cli_structured_input_uses_structured_service_without_planner(self):
+        planned = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")
+        result = compile_structured_workflow(planned, check=False)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with patch("main.compile_structured_workflow", return_value=result) as structured_service:
+            with patch("main.plan_and_compile_workflow") as natural_language_service:
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = cli.main(
+                        [
+                            "--input",
+                            str(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json"),
+                            "--no-check",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0, stderr.getvalue())
+        structured_service.assert_called_once_with(planned, check=False)
+        natural_language_service.assert_not_called()
+        self.assertTrue(stdout.getvalue().startswith("version 1.0\n"))
+
     def test_cli_saves_natural_language_plan_and_planner_prompt(self):
         planned = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")
-        plan_result = NaturalLanguagePlanResult(
-            plan=planned,
-            planner_prompt="planner prompt",
-            raw_response=json.dumps(planned),
-        )
+        result = compile_structured_workflow(planned, check=False)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "rnaseq_deg.wdl"
@@ -72,7 +88,7 @@ class CliTests(unittest.TestCase):
             stderr = io.StringIO()
 
             with patch("main.build_default_planner_prompt", return_value="planner prompt"):
-                with patch("main.create_natural_language_plan", return_value=plan_result):
+                with patch("main.plan_and_compile_workflow", return_value=result):
                     with redirect_stdout(stdout), redirect_stderr(stderr):
                         exit_code = cli.main(
                             [
@@ -99,7 +115,7 @@ class CliTests(unittest.TestCase):
         stderr = io.StringIO()
 
         with patch(
-            "main.create_natural_language_plan",
+            "main.plan_and_compile_workflow",
             side_effect=NaturalLanguagePlanningError("LLM planner JSON parsing failed: bad json"),
         ):
             with redirect_stdout(stdout), redirect_stderr(stderr):
@@ -118,7 +134,7 @@ class CliTests(unittest.TestCase):
             prompt_path = Path(tmpdir) / "planner_prompt.txt"
             with patch("main.build_default_planner_prompt", return_value="planner prompt"):
                 with patch(
-                    "main.create_natural_language_plan",
+                    "main.plan_and_compile_workflow",
                     side_effect=NaturalLanguagePlanningError("LLM planner JSON parsing failed: bad json"),
                 ):
                     with redirect_stdout(stdout), redirect_stderr(stderr):
