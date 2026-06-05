@@ -1,0 +1,58 @@
+import unittest
+
+from src.services.catalog_service import get_recipe, get_tool, list_recipes, list_tools
+
+
+class CatalogServiceTests(unittest.TestCase):
+    def test_list_recipes_returns_json_ready_recipe_records(self):
+        recipes = list_recipes()
+
+        self.assertGreaterEqual(len(recipes), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe["id"], "rnaseq_differential_expression")
+        self.assertIn("required_inputs", recipe)
+        self.assertIn("steps", recipe)
+        self.assertEqual(recipe["steps"][0]["id"], "qc")
+        self.assertIn("fastp", recipe["steps"][0]["allowed_tools"])
+
+    def test_get_recipe_returns_named_recipe(self):
+        recipe = get_recipe("rnaseq_differential_expression")
+
+        self.assertEqual(recipe["name"], "RNA-seq differential expression")
+        self.assertEqual(recipe["required_inputs"]["sample_ids"]["type"], "Array[String]")
+        self.assertEqual(recipe["steps"][0]["scatter"]["id"], "per_sample")
+
+    def test_list_tools_returns_json_ready_tool_records(self):
+        tools = list_tools()
+
+        self.assertGreaterEqual(len(tools), 5)
+        fastp = next(tool for tool in tools if tool["id"] == "fastp")
+        self.assertEqual(fastp["version"], "0.23.2")
+        self.assertEqual(fastp["runtime"]["docker"], "quay.io/biocontainers/fastp:0.23.2")
+        self.assertEqual(fastp["trust_status"], "catalog-approved")
+        self.assertIn("clean_r1", fastp["outputs"])
+
+    def test_get_tool_returns_explicit_version(self):
+        tool = get_tool("salmon", "1.10.2")
+
+        self.assertEqual(tool["id"], "salmon")
+        self.assertEqual(tool["version"], "1.10.2")
+        self.assertEqual(tool["inputs"]["r1"]["type"], "File")
+        self.assertIn("1.10.2", tool["versions"])
+
+    def test_get_tool_defaults_to_highest_catalog_version(self):
+        tool = get_tool("multiqc")
+
+        self.assertEqual(tool["id"], "multiqc")
+        self.assertEqual(tool["version"], "1.21")
+
+    def test_unknown_recipe_and_tool_raise_key_error(self):
+        with self.assertRaisesRegex(KeyError, "unknown recipe"):
+            get_recipe("missing_recipe")
+
+        with self.assertRaisesRegex(KeyError, "unknown tool"):
+            get_tool("missing_tool")
+
+
+if __name__ == "__main__":
+    unittest.main()

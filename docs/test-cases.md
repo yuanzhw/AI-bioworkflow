@@ -29,6 +29,16 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 - `tests/test_tools.py`：没有 WOMtool 或 miniwdl 时跳过 WDL validator 测试。
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 
+当前 W0 服务层改动后的最近一次完整验证结果：
+
+```text
+uv run python -m unittest discover -v
+Ran 53 tests
+OK (skipped=1)
+```
+
+跳过项为 `tests/test_tiny_run.py` 中依赖 miniwdl 真实执行环境的 tiny run。
+
 ## 公共测试输入
 
 ### RNA-seq Recipe Tool Plan
@@ -329,6 +339,142 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 
 - Catalog output tags 可以驱动 MultiQC 输入自动收集。
 
+## `tests/test_catalog_service.py`
+
+该文件验证 W0 catalog 查询服务。服务层返回 JSON-ready 的 recipe/tool 记录，供 W1 FastAPI 的 catalog 查询端点复用。
+
+### `test_list_recipes_returns_json_ready_recipe_records`
+
+输入：
+
+- 当前正式 Recipe Catalog。
+- 当前正式 Tool Catalog。
+
+执行：
+
+- 调用 `list_recipes()`。
+
+期望输出：
+
+- 返回至少一个 recipe。
+- 第一个 recipe 的 `id` 为 `rnaseq_differential_expression`。
+- 记录包含 `required_inputs` 和 `steps`。
+- 第一个 step 的 `id` 为 `qc`。
+- 第一个 step 的 `allowed_tools` 包含 `fastp`。
+
+覆盖点：
+
+- Catalog service 能返回 API 友好的 recipe 列表。
+- Recipe step 与 allowed tools 信息可直接供前端或 API 响应使用。
+
+### `test_get_recipe_returns_named_recipe`
+
+输入：
+
+- recipe id：`rnaseq_differential_expression`。
+
+执行：
+
+- 调用 `get_recipe("rnaseq_differential_expression")`。
+
+期望输出：
+
+- recipe `name` 为 `RNA-seq differential expression`。
+- `required_inputs["sample_ids"]["type"] == "Array[String]"`。
+- 第一个 step 的 scatter metadata 中 `id == "per_sample"`。
+
+覆盖点：
+
+- Catalog service 能查询单个 recipe。
+- scatter metadata 被保留为 JSON-ready dict，便于后续 DAG/API 展示。
+
+### `test_list_tools_returns_json_ready_tool_records`
+
+输入：
+
+- 当前正式 Tool Catalog。
+
+执行：
+
+- 调用 `list_tools()`。
+
+期望输出：
+
+- 返回至少 5 个 tool 记录。
+- `fastp` 记录中：
+  - `version == "0.23.2"`
+  - `runtime["docker"] == "quay.io/biocontainers/fastp:0.23.2"`
+  - `trust_status == "catalog-approved"`
+  - `outputs` 包含 `clean_r1`
+
+覆盖点：
+
+- Tool runtime docker 从 Catalog 权威来源读取。
+- API-facing tool 记录包含 container trust status。
+
+### `test_get_tool_returns_explicit_version`
+
+输入：
+
+- tool id：`salmon`
+- version：`1.10.2`
+
+执行：
+
+- 调用 `get_tool("salmon", "1.10.2")`。
+
+期望输出：
+
+- 返回 tool `id == "salmon"`。
+- 返回 tool `version == "1.10.2"`。
+- `inputs["r1"]["type"] == "File"`。
+- `versions` 包含 `1.10.2`。
+
+覆盖点：
+
+- Catalog service 支持按 tool id 和 version 精确查询。
+
+### `test_get_tool_defaults_to_highest_catalog_version`
+
+输入：
+
+- tool id：`multiqc`
+- 不指定 version。
+
+执行：
+
+- 调用 `get_tool("multiqc")`。
+
+期望输出：
+
+- 返回 tool `id == "multiqc"`。
+- 返回 tool `version == "1.21"`。
+
+覆盖点：
+
+- 未指定版本时，Catalog service 选择当前 catalog 中最高版本。
+
+### `test_unknown_recipe_and_tool_raise_key_error`
+
+输入：
+
+- recipe id：`missing_recipe`
+- tool id：`missing_tool`
+
+执行：
+
+1. 调用 `get_recipe("missing_recipe")`。
+2. 调用 `get_tool("missing_tool")`。
+
+期望输出：
+
+- 未知 recipe 抛出 `KeyError`，错误消息包含 `unknown recipe`。
+- 未知 tool 抛出 `KeyError`，错误消息包含 `unknown tool`。
+
+覆盖点：
+
+- API 层后续可以将未知 catalog 资源稳定映射为 404。
+
 ## `tests/test_graph.py`
 
 该文件验证 Compiler Graph、Analyzer、Renderer 和 deterministic repairer 的交互。
@@ -584,6 +730,133 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 覆盖点：
 
 - Compiler Graph 可以直接接收 Recipe Tool Plan 并完成 normalizer -> analyzer -> renderer -> checker 流程。
+
+## `tests/test_workflow_service.py`
+
+该文件验证 W0 workflow application service。服务层用于让 CLI 和未来 FastAPI 复用同一套编译入口，避免 API 层复制 `main.py` 中的业务逻辑。
+
+### `test_compile_structured_workflow_compiles_recipe_plan_without_check`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- `check=False`
+
+执行：
+
+- 调用 `compile_structured_workflow(plan, check=False)`。
+
+期望输出：
+
+- `result.succeeded == True`。
+- `result.plan is plan`。
+- `result.workflow_ir["workflow"]["name"] == "RNASeqDEG"`。
+- `result.wdl` 包含 `workflow RNASeqDEG`。
+- `result.validation_message == "WDL syntax validation skipped (--no-check)."`。
+- `result.check_performed == False`。
+
+覆盖点：
+
+- 结构化 Recipe Tool Plan 可以通过 service 入口完成 IR 标准化、分析和 WDL 渲染。
+- 跳过 checker 时仍返回稳定的成功状态和 validation message。
+
+### `test_compile_structured_workflow_compiles_workflow_ir_without_plan`
+
+输入：
+
+- `examples/rnaseq_workflow_ir.json`
+- `check=False`
+
+执行：
+
+- 调用 `compile_structured_workflow(workflow_ir, check=False)`。
+
+期望输出：
+
+- `result.succeeded == True`。
+- `result.plan is None`。
+- `result.workflow_ir["workflow"]["name"] == "RNASeqPipeline"`。
+- `result.wdl` 包含 `workflow RNASeqPipeline`。
+
+覆盖点：
+
+- 结构化 Workflow IR 入口不会触发自然语言 planner。
+- service 能区分 Recipe Tool Plan 与标准 Workflow IR。
+
+### `test_compile_structured_workflow_returns_diagnostics_for_invalid_plan`
+
+输入：
+
+- 复制 `examples/rnaseq_deg_recipe_plan.json`。
+- 删除 workflow input `sample_groups`。
+- `check=False`
+
+执行：
+
+- 调用 `compile_structured_workflow(plan, check=False)`。
+
+期望输出：
+
+- `result.succeeded == False`。
+- `result.wdl == ""`。
+- `result.analysis_errors` 包含 `missing required workflow input 'sample_groups'`。
+
+覆盖点：
+
+- service 不吞掉 resolver/catalog 诊断。
+- 无效 plan 不会产生 WDL。
+
+### `test_plan_and_compile_workflow_plans_then_compiles`
+
+输入：
+
+- 用户请求：`Run bulk RNA-seq differential expression.`
+- `FakePlannerLlm` 返回 RNA-seq Recipe Tool Plan JSON。
+- `check=False`
+
+执行：
+
+- 调用 `plan_and_compile_workflow(..., llm=fake_llm, check=False)`。
+
+期望输出：
+
+- `result.succeeded == True`。
+- `result.plan` 等于 mock LLM 返回的 plan。
+- `result.planner_prompt` 包含 `Catalog:`。
+- `result.planner_raw_response` 包含 `RNASeqDEG`。
+- `result.wdl` 包含 `workflow RNASeqDEG`。
+- fake LLM 只被调用一次。
+
+覆盖点：
+
+- 自然语言入口先生成 Recipe Tool Plan，再进入确定性编译链路。
+- LLM 仍不直接生成最终 WDL。
+- planner observability 信息被 service 结果保留。
+
+### `test_result_to_dict_exposes_json_ready_service_fields`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- `check=False`
+
+执行：
+
+1. 调用 `compile_structured_workflow(plan, check=False)`。
+2. 调用 `result.to_dict()`。
+
+期望输出：
+
+- dict 中 `plan` 等于输入 plan。
+- dict 中 `workflow_ir` 包含 `workflow`。
+- dict 中 `wdl` 包含 `workflow RNASeqDEG`。
+- dict 中 `analysis_errors == []`。
+- dict 中 `succeeded == True`。
+
+覆盖点：
+
+- `WorkflowCompilationResult` 可以转换为 API 友好的 dict。
+- API 层后续可以稳定读取 plan、IR、WDL、diagnostics 和状态字段。
 
 ## `tests/test_nl_planner.py`
 
@@ -1166,9 +1439,11 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - Recipe Tool Plan schema 与 recipe/catalog 校验。
 - Catalog runtime docker 必填约束。
 - Recipe Tool Plan 到 Workflow IR 的 resolver 主路径。
+- Catalog 查询服务的 recipe/tool JSON-ready 输出。
 - Analyzer 对引用、optional input、scatter output 类型提升的处理。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。
+- Workflow service 对结构化编译入口、自然语言规划后编译入口和 API 友好结果对象的封装。
 - CLI 的自然语言入口、结构化入口、文件输出、stdout/stderr 隔离和失败返回。
 - Planner 的 JSON 解析、prompt 构建、schema 错误和 catalog 错误归类。
 - WDL validator wrapper 和可选 miniwdl tiny run。
