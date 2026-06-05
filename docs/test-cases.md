@@ -33,7 +33,7 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 
 ```text
 uv run python -m unittest discover -v
-Ran 53 tests
+Ran 55 tests
 OK (skipped=1)
 ```
 
@@ -783,6 +783,29 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 - 结构化 Workflow IR 入口不会触发自然语言 planner。
 - service 能区分 Recipe Tool Plan 与标准 Workflow IR。
 
+### `test_compile_structured_workflow_without_check_does_not_invoke_graph`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- `check=False`
+- mock `src.services.workflow_service.agent.invoke`，如果被调用则抛出错误。
+
+执行：
+
+- 调用 `compile_structured_workflow(plan, check=False)`。
+
+期望输出：
+
+- `result.succeeded == True`。
+- `result.check_performed == False`。
+- compiled graph 的 `agent.invoke` 未被调用。
+
+覆盖点：
+
+- `check=False` 路径走手动 deterministic compiler nodes。
+- 跳过 checker 时不会进入包含 checker 的 compiled graph。
+
 ### `test_compile_structured_workflow_returns_diagnostics_for_invalid_plan`
 
 输入：
@@ -1060,7 +1083,7 @@ qc.html_report + qc.json_report
 
 ## `tests/test_cli.py`
 
-该文件验证 `main.py` CLI 层，包括文件读取、自然语言入口、结构化输入入口、stdout/stderr 隔离和失败处理。自然语言相关测试使用 mock planner，不真实调用外部 LLM。
+该文件验证 `main.py` CLI 层，包括文件读取、自然语言入口、结构化输入入口、stdout/stderr 隔离和失败处理。自然语言相关测试 mock workflow service，不真实调用外部 LLM。
 
 ### `test_load_workflow_input_reads_recipe_plan_example`
 
@@ -1114,7 +1137,7 @@ qc.html_report + qc.json_report
 --no-check
 ```
 
-- mock `main.create_natural_language_plan` 返回合法 RNA-seq plan。
+- mock `main.plan_and_compile_workflow` 返回合法 RNA-seq plan 的编译结果。
 
 执行：
 
@@ -1123,16 +1146,46 @@ qc.html_report + qc.json_report
 期望输出：
 
 - exit code 为 `0`。
-- mock planner 被调用一次。
+- mock workflow service 被调用一次。
 - stdout 包含 plan JSON 片段 `"recipe": "rnaseq_differential_expression"`。
 - 输出文件 `<tmp>/rnaseq_deg.wdl` 包含 `workflow RNASeqDEG`。
 
 覆盖点：
 
-- 自然语言 CLI 入口可以通过 planner 产物进入编译链路。
+- 自然语言 CLI 入口通过 workflow service 进入规划和编译链路。
 - `--print-plan` 将 plan 输出到 stdout。
 - `--output` 将 WDL 写入文件。
 - `--no-check` 跳过 WDL checker。
+
+### `test_cli_structured_input_uses_structured_service_without_planner`
+
+输入：
+
+- CLI args：
+
+```text
+--input examples/rnaseq_deg_recipe_plan.json
+--no-check
+```
+
+- mock `main.compile_structured_workflow` 返回合法 RNA-seq plan 的编译结果。
+- mock `main.plan_and_compile_workflow`。
+
+执行：
+
+- 调用 `cli.main(...)`。
+
+期望输出：
+
+- exit code 为 `0`。
+- `compile_structured_workflow` 被调用一次，参数为读取到的 plan 和 `check=False`。
+- `plan_and_compile_workflow` 不被调用。
+- stdout 以 `version 1.0\n` 开头。
+
+覆盖点：
+
+- 结构化 CLI 入口直接调用 workflow service 的结构化编译接口。
+- `--input` 路径不会触发自然语言规划服务。
 
 ### `test_cli_saves_natural_language_plan_and_planner_prompt`
 
@@ -1149,7 +1202,7 @@ qc.html_report + qc.json_report
 ```
 
 - mock `build_default_planner_prompt` 返回 `planner prompt`。
-- mock `create_natural_language_plan` 返回合法 RNA-seq plan 和同一 prompt。
+- mock `plan_and_compile_workflow` 返回合法 RNA-seq plan 的编译结果。
 
 执行：
 
@@ -1179,7 +1232,7 @@ qc.html_report + qc.json_report
 --prompt "Run RNA-seq differential expression."
 ```
 
-- mock `create_natural_language_plan` 抛出 `NaturalLanguagePlanningError("LLM planner JSON parsing failed: bad json")`。
+- mock `plan_and_compile_workflow` 抛出 `NaturalLanguagePlanningError("LLM planner JSON parsing failed: bad json")`。
 
 执行：
 
@@ -1195,7 +1248,7 @@ qc.html_report + qc.json_report
 
 覆盖点：
 
-- 自然语言 planner 失败时 CLI 返回失败状态，并把错误写到 stderr。
+- 自然语言 workflow service 失败时 CLI 返回失败状态，并把错误写到 stderr。
 
 ### `test_cli_saves_planner_prompt_even_when_planning_fails`
 
@@ -1209,7 +1262,7 @@ qc.html_report + qc.json_report
 ```
 
 - mock `build_default_planner_prompt` 返回 `planner prompt`。
-- mock `create_natural_language_plan` 抛出 JSON parsing 失败。
+- mock `plan_and_compile_workflow` 抛出 JSON parsing 失败。
 
 执行：
 

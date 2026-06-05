@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from src.services.workflow_service import compile_structured_workflow, plan_and_compile_workflow
 
@@ -45,6 +46,19 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertIsNone(result.plan)
         self.assertEqual(result.workflow_ir["workflow"]["name"], "RNASeqPipeline")
         self.assertIn("workflow RNASeqPipeline", result.wdl)
+
+    def test_compile_structured_workflow_without_check_does_not_invoke_graph(self):
+        plan = load_example("rnaseq_deg_recipe_plan.json")
+
+        with patch(
+            "src.services.workflow_service.agent.invoke",
+            side_effect=AssertionError("compiled graph should not run when check=False"),
+        ) as graph:
+            result = compile_structured_workflow(plan, check=False)
+
+        self.assertTrue(result.succeeded, result.analysis_errors)
+        self.assertFalse(result.check_performed)
+        graph.assert_not_called()
 
     def test_compile_structured_workflow_returns_diagnostics_for_invalid_plan(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")

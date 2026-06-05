@@ -12,9 +12,12 @@ from src.nl_planner import (
     DEFAULT_PLANNER_MODEL,
     NaturalLanguagePlanningError,
     build_default_planner_prompt,
-    create_natural_language_plan,
 )
-from src.services.workflow_service import compile_workflow, workflow_succeeded
+from src.services.workflow_service import (
+    compile_structured_workflow,
+    compile_workflow,
+    plan_and_compile_workflow,
+)
 from src.state import WorkflowState
 
 
@@ -221,24 +224,29 @@ def main(argv: list[str] | None = None) -> int:
         if args.input:
             parsed_json = load_workflow_input(args.input)
             planned_from_natural_language = False
+            result = compile_structured_workflow(
+                parsed_json,
+                check=check,
+            )
         else:
             prompt = load_prompt(args.prompt, args.prompt_file)
             if args.save_planner_prompt:
                 write_text_output(args.save_planner_prompt, build_default_planner_prompt(prompt))
                 print(f"Planner prompt written to {args.save_planner_prompt}", file=sys.stderr)
 
-            plan_result = create_natural_language_plan(prompt, model=args.planner_model)
-            parsed_json = plan_result.plan
+            result = plan_and_compile_workflow(
+                prompt,
+                model=args.planner_model,
+                check=check,
+            )
+            parsed_json = result.plan or {}
             planned_from_natural_language = True
 
             if args.save_plan:
                 write_json_output(args.save_plan, parsed_json)
                 print(f"Planner plan written to {args.save_plan}", file=sys.stderr)
 
-        final_state = compile_workflow(
-            parsed_json,
-            check=check,
-        )
+        final_state = result.state
     except NaturalLanguagePlanningError as exc:
         print(f"Natural language planning failed: {exc}", file=sys.stderr)
         return 1
@@ -251,17 +259,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_plan and planned_from_natural_language:
         print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
 
-    if args.print_ir and final_state["workflow_ir"]:
-        print(json.dumps(final_state["workflow_ir"], indent=2, ensure_ascii=False))
+    if args.print_ir and result.workflow_ir:
+        print(json.dumps(result.workflow_ir, indent=2, ensure_ascii=False))
 
-    if not workflow_succeeded(final_state, check=check):
+    if not result.succeeded:
         return 1
 
     if args.output:
-        write_wdl_output(args.output, final_state["current_wdl"])
+        write_wdl_output(args.output, result.wdl)
         print(f"WDL written to {args.output}", file=sys.stderr)
     else:
-        print(final_state["current_wdl"])
+        print(result.wdl)
 
     return 0
 
