@@ -57,8 +57,8 @@ OK (skipped=1)
   - `tx2gene: File`
   - `sample_groups: File`
 - tool calls：
-  - `qc`: recipe step `qc`, tool `fastp` `0.23.2`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
-  - `quantify`: recipe step `quantify`, tool `salmon` `1.10.2`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
+  - `qc`: recipe step `qc`, tool `fastp` `1.3.3`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
+  - `quantify`: recipe step `quantify`, tool `salmon` `1.11.4`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
   - `summarize`: recipe step `summarize_transcripts`, tool `tximport` `1.30.0`
   - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.0`, 参数 `contrast="condition"`
   - `report`: recipe step `qc_report`, tool `multiqc` `1.21`
@@ -149,7 +149,7 @@ OK (skipped=1)
 输入：
 
 - 直接构造一个 `ToolSpec`：
-  - tool id/version 为 `fastp/0.23.2`
+  - tool id/version 为 `fastp/1.3.3`
   - 有 input、output 和 command template
   - runtime 只提供 `cpu` 和 `memory`，缺少 `docker`
 
@@ -172,7 +172,7 @@ OK (skipped=1)
 输入：
 
 - 复制 `sample_rnaseq_tool_plan()`。
-- 将第一个 tool call 的 `qc` 步骤工具从 `fastp` 改为 `salmon`，版本改为 `1.10.2`。
+- 将第一个 tool call 的 `qc` 步骤工具从 `fastp` 改为 `salmon`，版本改为 `1.11.4`。
 
 执行：
 
@@ -402,8 +402,8 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 
 - 返回至少 5 个 tool 记录。
 - `fastp` 记录中：
-  - `version == "0.23.2"`
-  - `runtime["docker"] == "quay.io/biocontainers/fastp:0.23.2"`
+  - `version == "1.3.3"`
+  - `runtime["docker"] == "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0"`
   - `trust_status == "catalog-approved"`
   - `outputs` 包含 `clean_r1`
 
@@ -417,18 +417,18 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 输入：
 
 - tool id：`salmon`
-- version：`1.10.2`
+- version：`1.11.4`
 
 执行：
 
-- 调用 `get_tool("salmon", "1.10.2")`。
+- 调用 `get_tool("salmon", "1.11.4")`。
 
 期望输出：
 
 - 返回 tool `id == "salmon"`。
-- 返回 tool `version == "1.10.2"`。
+- 返回 tool `version == "1.11.4"`。
 - `inputs["r1"]["type"] == "File"`。
-- `versions` 包含 `1.10.2`。
+- `versions` 包含 `1.11.4`。
 
 覆盖点：
 
@@ -638,7 +638,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
   - `workflow_name: SimpleQC`
   - `inputs.raw_fastq: File`
   - `tasks` 列表中一个 task `fastp_qc`
-  - task runtime docker 为 `quay.io/biocontainers/fastp:0.23.2`
+  - task runtime docker 为 `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
 
 执行：
 
@@ -648,7 +648,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - 标准 IR workflow 名称为 `SimpleQC`。
 - `workflow.calls[0].id == "fastp_qc"`。
-- `workflow_ir.tasks["fastp_qc"].runtime.docker == "quay.io/biocontainers/fastp:0.23.2"`。
+- `workflow_ir.tasks["fastp_qc"].runtime.docker == "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0"`。
 
 覆盖点：
 
@@ -1449,8 +1449,8 @@ workflow Bad {
 - `miniwdl_available()` 为 true。
 - 本机存在 `docker` 或 `podman`。
 - 下列镜像已经存在于本地：
-  - `quay.io/biocontainers/fastp:0.23.2`
-  - `quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2`
+  - `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
+  - `quay.io/biocontainers/salmon:1.11.4--h7f96273_0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21`

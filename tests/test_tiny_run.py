@@ -12,8 +12,8 @@ from src.tools.validator import miniwdl_available
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
 REQUIRED_IMAGES = [
-    "quay.io/biocontainers/fastp:0.23.2",
-    "quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2",
+    "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
+    "quay.io/biocontainers/salmon:1.11.4--h7f96273_0",
     "ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0",
     "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0",
     "ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21",
