@@ -60,6 +60,42 @@ Cromwell runner 环境负责：
 - 生成与 runner 环境绑定的 inputs JSON。
 - 运行真实 RNA-seq DEG tiny workflow e2e 测试。
 
+## 当前阶段：Cromwell Compose Runner
+
+当前阶段先交付独立 Cromwell server/runner 的 Docker Compose 部署包，不做项目后端 client 联调。
+
+部署包位置：
+
+```text
+deploy/cromwell/
+  Dockerfile
+  docker-compose.yml
+  application.conf
+  options.example.json
+  labels.example.json
+  .env.example
+  README.md
+```
+
+部署包约定：
+
+- Cromwell server 固定为 `92`。
+- 使用 PostgreSQL 16 保存 Cromwell workflow metadata。
+- 使用 Docker-outside-of-Docker，通过挂载宿主机 `/var/run/docker.sock` 启动 task 容器。
+- 默认 backend 名称为 `LocalDocker`。
+- 默认 runner 根目录为 `/data/ai-bioworkflow-runner`。
+- Cromwell 容器内路径和宿主机路径必须保持一致，避免 task 容器挂载执行目录失败。
+- inputs JSON 中的 `File` 路径必须是 Cromwell runner 可见的 Linux 路径，不能使用 Windows 绝对路径。
+
+本阶段明确不包含：
+
+- 实现或修改 `src/execution/cromwell.py`。
+- 修改 `get_execution_backend()` 中 `cromwell` 未实现的状态。
+- 运行真实 RNA-seq tiny e2e。
+- 通过 AI-bioworkflow 后端 client 提交 WDL 到 Cromwell。
+
+上述联调内容应等 Cromwell runner 环境经人工确认可用后再继续。
+
 ## 计划目录结构
 
 ```text
@@ -411,7 +447,10 @@ uv run python -m unittest tests.e2e.test_tiny_run -v
 ### 阶段 6：Cromwell Runner
 
 - 准备 Linux、WSL、devcontainer 或服务器侧 Cromwell 环境。
-- 启动 Cromwell server mode。
+- 使用 `deploy/cromwell/` 中的 Docker Compose 部署 Cromwell server mode。
+- 固定 Cromwell server 版本为 `92`。
+- 使用 PostgreSQL 16 作为 Cromwell metadata database。
+- 使用 Docker-outside-of-Docker 挂载宿主机 Docker socket，不使用 Docker-in-Docker。
 - 确保 Docker 或其他已配置 backend 可用。
 - 拉取或构建所需镜像：
 
@@ -423,8 +462,9 @@ ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0
 ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
 ```
 
-- 运行 tiny fixture 准备脚本。
-- 设置 Cromwell 相关环境变量并运行 e2e 测试。
+- 手动确认 `GET /engine/v1/status` 可用。
+- 后续阶段再运行 tiny fixture 准备脚本。
+- 后续阶段再设置 Cromwell 相关环境变量并运行 e2e 测试。
 
 ### 阶段 7：P0 便捷检查
 
