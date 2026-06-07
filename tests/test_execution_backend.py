@@ -1,7 +1,14 @@
 from pathlib import Path
 import unittest
 
-from src.execution import BackendAvailability, DisabledBackend, ExecutionBackend, ExecutionResult, get_execution_backend
+from src.execution import (
+    BackendAvailability,
+    CromwellBackend,
+    DisabledBackend,
+    ExecutionBackend,
+    ExecutionResult,
+    get_execution_backend,
+)
 
 
 class DisabledBackendTests(unittest.TestCase):
@@ -63,9 +70,25 @@ class ExecutionBackendFactoryTests(unittest.TestCase):
 
         self.assertIsInstance(backend, DisabledBackend)
 
-    def test_cromwell_backend_is_not_implemented_in_phase_2(self):
-        with self.assertRaisesRegex(ValueError, "cromwell.*not implemented"):
-            get_execution_backend(name="cromwell", env={})
+    def test_factory_returns_cromwell_backend(self):
+        backend = get_execution_backend(name="cromwell", env={})
+
+        self.assertIsInstance(backend, CromwellBackend)
+
+    def test_factory_configures_cromwell_backend_from_env(self):
+        backend = get_execution_backend(
+            name="cromwell",
+            env={
+                "CROMWELL_URL": " http://cromwell.example ",
+                "CROMWELL_POLL_INTERVAL_SECONDS": "0.25",
+                "CROMWELL_TIMEOUT_SECONDS": "12",
+            },
+        )
+
+        self.assertIsInstance(backend, CromwellBackend)
+        self.assertEqual(backend.base_url, "http://cromwell.example")
+        self.assertEqual(backend.poll_interval_seconds, 0.25)
+        self.assertEqual(backend.timeout_seconds, 12)
 
     def test_local_miniwdl_backend_is_not_implemented_in_phase_2(self):
         with self.assertRaisesRegex(ValueError, "local-miniwdl.*not implemented"):
