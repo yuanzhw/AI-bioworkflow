@@ -1,0 +1,5 @@
+{
+  "project": "ai-bioworkflow",
+  "runner": "compose-localdocker",
+  "environment": "dev"
+}

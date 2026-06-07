@@ -1,0 +1,11 @@
+{
+  "backend": "LocalDocker",
+  "workflow_failure_mode": "NoNewCalls",
+  "final_workflow_outputs_dir": "/data/ai-bioworkflow-runner/outputs",
+  "final_workflow_outputs_dir_metadata": "destination",
+  "use_relative_output_paths": false,
+  "final_workflow_log_dir": "/data/ai-bioworkflow-runner/workflow-logs",
+  "final_call_logs_dir": "/data/ai-bioworkflow-runner/call-logs",
+  "read_from_cache": false,
+  "write_to_cache": false
+}
