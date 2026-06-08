@@ -73,7 +73,7 @@ def sample_rnaseq_tool_plan():
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
-                    "version": "1.42.0",
+                    "version": "1.42.1",
                     "inputs": {
                         "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",

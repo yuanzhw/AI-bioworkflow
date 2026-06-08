@@ -60,7 +60,7 @@ OK (skipped=1)
   - `qc`: recipe step `qc`, tool `fastp` `1.3.3`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
   - `quantify`: recipe step `quantify`, tool `salmon` `1.11.4`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
   - `summarize`: recipe step `summarize_transcripts`, tool `tximport` `1.30.0`
-  - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.0`, 参数 `contrast="condition"`
+  - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.1`, 参数 `contrast="condition"`
   - `report`: recipe step `qc_report`, tool `multiqc` `1.21`
 - workflow outputs：
   - `deg_table = deg.deg_table`
@@ -1452,7 +1452,7 @@ workflow Bad {
   - `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
   - `quay.io/biocontainers/salmon:1.11.4--h7f96273_0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1`
   - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21`
 - `examples/tiny/rnaseq_deg.inputs.json` 存在。
 

@@ -34,7 +34,7 @@ Useful options:
 
 ```bash
 python scripts/build_container.py multiqc 1.21 --dry-run
-python scripts/build_container.py deseq2 1.42.0 --platform linux/amd64
+python scripts/build_container.py deseq2 1.42.1 --platform linux/amd64
 python scripts/build_container.py tximport 1.30.0 --skip-smoke
 ```
 

@@ -458,7 +458,7 @@ uv run python -m unittest tests.e2e.test_tiny_run -v
 quay.io/biocontainers/fastp:1.3.3--h43da1c4_0
 quay.io/biocontainers/salmon:1.11.4--h7f96273_0
 ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
-ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0
+ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1
 ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
 ```
 

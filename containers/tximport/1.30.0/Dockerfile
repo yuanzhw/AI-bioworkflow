@@ -10,10 +10,8 @@ LABEL org.opencontainers.image.source="https://github.com/yuanzhw/AI-bioworkflow
       org.opencontainers.image.ref.name="${TOOL_NAME}:${TOOL_VERSION}" \
       org.opencontainers.image.version="${TOOL_VERSION}"
 
-RUN Rscript -e "repos <- BiocManager::repositories(version = '${BIOCONDUCTOR_RELEASE}'); \
-    deps <- c('Depends', 'Imports', 'LinkingTo'); \
-    BiocManager::install('readr', version = '${BIOCONDUCTOR_RELEASE}', dependencies = deps, ask = FALSE, update = FALSE); \
-    install.packages('https://bioconductor.org/packages/${BIOCONDUCTOR_RELEASE}/bioc/src/contrib/tximport_${TOOL_VERSION}.tar.gz', repos = repos, dependencies = deps, type = 'source'); \
+RUN Rscript -e "deps <- c('Depends', 'Imports', 'LinkingTo'); \
+    BiocManager::install(c('readr', 'tximport'), version = '${BIOCONDUCTOR_RELEASE}', dependencies = deps, ask = FALSE, update = FALSE); \
     stopifnot(as.character(packageVersion('tximport')) == '${TOOL_VERSION}')"
 
 COPY run_tximport.R /usr/local/bin/run_tximport.R
