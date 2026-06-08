@@ -78,7 +78,7 @@ class WorkflowDtoTests(unittest.TestCase):
 
 class CatalogDtoTests(unittest.TestCase):
     def test_recipe_list_response_accepts_catalog_service_records(self):
-        response = RecipeListResponse(recipes=list_recipes())
+        response = RecipeListResponse.model_validate({"recipes": list_recipes()})
 
         self.assertGreaterEqual(len(response.recipes), 1)
         recipe = response.recipes[0]
@@ -87,7 +87,7 @@ class CatalogDtoTests(unittest.TestCase):
         self.assertEqual(recipe.steps[0].allowed_tools, ["fastp"])
 
     def test_tool_list_response_accepts_catalog_service_records(self):
-        response = ToolListResponse(tools=list_tools())
+        response = ToolListResponse.model_validate({"tools": list_tools()})
 
         fastp = next(tool for tool in response.tools if tool.id == "fastp")
         self.assertEqual(fastp.version, "0.23.2")
