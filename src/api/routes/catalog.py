@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from src.api.models import RecipeDto, RecipeListResponse, ToolDto, ToolListResponse
-from src.services.catalog_service import get_recipe, get_tool, list_recipes, list_tools
+from src.services import catalog_service
 
 
 router = APIRouter(prefix="/api", tags=["catalog"])
@@ -12,14 +12,14 @@ router = APIRouter(prefix="/api", tags=["catalog"])
 @router.get("/recipes", response_model=RecipeListResponse)
 def read_recipes() -> RecipeListResponse:
     return RecipeListResponse(
-        recipes=[RecipeDto.model_validate(recipe) for recipe in list_recipes()],
+        recipes=[RecipeDto.model_validate(recipe) for recipe in catalog_service.list_recipes()],
     )
 
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDto)
 def read_recipe(recipe_id: str) -> RecipeDto:
     try:
-        return RecipeDto.model_validate(get_recipe(recipe_id))
+        return RecipeDto.model_validate(catalog_service.get_recipe(recipe_id))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=_error_detail(exc)) from exc
 
@@ -27,7 +27,7 @@ def read_recipe(recipe_id: str) -> RecipeDto:
 @router.get("/tools", response_model=ToolListResponse)
 def read_tools() -> ToolListResponse:
     return ToolListResponse(
-        tools=[ToolDto.model_validate(tool) for tool in list_tools()],
+        tools=[ToolDto.model_validate(tool) for tool in catalog_service.list_tools()],
     )
 
 
@@ -37,7 +37,7 @@ def read_tool(
     version: str | None = Query(default=None),
 ) -> ToolDto:
     try:
-        return ToolDto.model_validate(get_tool(tool_id, version))
+        return ToolDto.model_validate(catalog_service.get_tool(tool_id, version))
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=_error_detail(exc)) from exc
 

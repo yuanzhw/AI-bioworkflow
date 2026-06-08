@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from src.api.app import create_app
 from src.nl_planner import DEFAULT_PLANNER_MODEL, NaturalLanguagePlanningError
+from src.services.catalog_service import list_recipes, list_tools
 from src.services.workflow_service import compile_structured_workflow
 
 
@@ -22,9 +23,13 @@ class ApiRouteTests(unittest.TestCase):
         self.client = TestClient(create_app())
 
     def test_list_recipes(self):
-        response = self.client.get("/api/recipes")
+        recipe_records = list_recipes()
+
+        with patch("src.api.routes.catalog.catalog_service.list_recipes", return_value=recipe_records) as service:
+            response = self.client.get("/api/recipes")
 
         self.assertEqual(response.status_code, 200)
+        service.assert_called_once_with()
         body = response.json()
         self.assertGreaterEqual(len(body["recipes"]), 1)
         self.assertEqual(body["recipes"][0]["id"], "rnaseq_differential_expression")
@@ -36,9 +41,13 @@ class ApiRouteTests(unittest.TestCase):
         self.assertIn("unknown recipe", response.json()["detail"])
 
     def test_list_tools(self):
-        response = self.client.get("/api/tools")
+        tool_records = list_tools()
+
+        with patch("src.api.routes.catalog.catalog_service.list_tools", return_value=tool_records) as service:
+            response = self.client.get("/api/tools")
 
         self.assertEqual(response.status_code, 200)
+        service.assert_called_once_with()
         tools = response.json()["tools"]
         fastp = next(tool for tool in tools if tool["id"] == "fastp")
         self.assertEqual(fastp["version"], "0.23.2")
@@ -53,12 +62,17 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(body["version"], "1.10.2")
 
     def test_compile_recipe_plan(self):
-        response = self.client.post(
-            "/api/compile",
-            json={"payload": load_example("rnaseq_deg_recipe_plan.json"), "check": False},
-        )
+        plan = load_example("rnaseq_deg_recipe_plan.json")
+        result = compile_structured_workflow(plan, check=False)
+
+        with patch("src.api.routes.workflows.workflow_service.compile_structured_workflow", return_value=result) as service:
+            response = self.client.post(
+                "/api/compile",
+                json={"payload": plan, "check": False},
+            )
 
         self.assertEqual(response.status_code, 200)
+        service.assert_called_once_with(plan, check=False)
         body = response.json()
         self.assertEqual(body["status"], "succeeded")
         self.assertFalse(body["diagnostics"]["check_performed"])
@@ -93,7 +107,7 @@ class ApiRouteTests(unittest.TestCase):
         plan = load_example("rnaseq_deg_recipe_plan.json")
         result = compile_structured_workflow(plan, check=False)
 
-        with patch("src.api.routes.workflows.plan_and_compile_workflow", return_value=result) as service:
+        with patch("src.api.routes.workflows.workflow_service.plan_and_compile_workflow", return_value=result) as service:
             response = self.client.post(
                 "/api/runs",
                 json={"request": "Run RNA-seq DEG.", "check": False},
@@ -109,7 +123,7 @@ class ApiRouteTests(unittest.TestCase):
 
     def test_create_run_reports_planning_errors(self):
         with patch(
-            "src.api.routes.workflows.plan_and_compile_workflow",
+            "src.api.routes.workflows.workflow_service.plan_and_compile_workflow",
             side_effect=NaturalLanguagePlanningError("LLM planner JSON parsing failed"),
         ):
             response = self.client.post(
