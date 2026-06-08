@@ -34,7 +34,7 @@ def sample_rnaseq_tool_plan():
                     "id": "qc",
                     "step": "qc",
                     "tool": "fastp",
-                    "version": "0.23.2",
+                    "version": "1.3.3",
                     "inputs": {
                         "r1": "raw_r1s",
                         "r2": "raw_r2s",
@@ -47,7 +47,7 @@ def sample_rnaseq_tool_plan():
                     "id": "quantify",
                     "step": "quantify",
                     "tool": "salmon",
-                    "version": "1.10.2",
+                    "version": "1.11.4",
                     "inputs": {
                         "r1": "qc.clean_r1",
                         "r2": "qc.clean_r2",
@@ -73,7 +73,7 @@ def sample_rnaseq_tool_plan():
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
-                    "version": "1.42.0",
+                    "version": "1.42.1",
                     "inputs": {
                         "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",

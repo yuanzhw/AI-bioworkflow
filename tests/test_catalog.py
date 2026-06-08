@@ -1,12 +1,18 @@
 import copy
 import unittest
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ToolSpec
 from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
+
+
+CATALOG_TOOLS_DIR = Path(__file__).resolve().parents[1] / "src" / "catalog" / "tools"
 
 
 def sample_rnaseq_tool_plan() -> dict[str, Any]:
@@ -27,7 +33,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "qc",
                     "step": "qc",
                     "tool": "fastp",
-                    "version": "0.23.2",
+                    "version": "1.3.3",
                     "inputs": {
                         "r1": "raw_r1s",
                         "r2": "raw_r2s",
@@ -40,7 +46,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "quantify",
                     "step": "quantify",
                     "tool": "salmon",
-                    "version": "1.10.2",
+                    "version": "1.11.4",
                     "inputs": {
                         "r1": "qc.clean_r1",
                         "r2": "qc.clean_r2",
@@ -66,7 +72,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
-                    "version": "1.42.0",
+                    "version": "1.42.1",
                     "inputs": {
                         "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",
@@ -96,6 +102,18 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
             },
         }
     }
+
+
+class CatalogDefinitionTests(unittest.TestCase):
+    def test_catalog_file_path_matches_tool_id_and_version(self):
+        for yaml_path in sorted(CATALOG_TOOLS_DIR.rglob("*.yaml")):
+            with yaml_path.open("r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle)
+
+            with self.subTest(path=str(yaml_path.relative_to(CATALOG_TOOLS_DIR))):
+                self.assertIsInstance(data, dict)
+                self.assertEqual(yaml_path.parent.name, data.get("id"))
+                self.assertEqual(yaml_path.stem, str(data.get("version")))
 
 
 class CatalogResolutionTests(unittest.TestCase):
@@ -143,7 +161,7 @@ class CatalogResolutionTests(unittest.TestCase):
             ToolSpec.model_validate(
                 {
                     "id": "fastp",
-                    "version": "0.23.2",
+                    "version": "1.3.3",
                     "description": "FASTQ quality control.",
                     "inputs": {
                         "r1": {
@@ -168,7 +186,7 @@ class CatalogResolutionTests(unittest.TestCase):
     def test_resolver_rejects_tool_not_allowed_for_recipe_step(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())
         plan["workflow"]["tool_calls"][0]["tool"] = "salmon"
-        plan["workflow"]["tool_calls"][0]["version"] = "1.10.2"
+        plan["workflow"]["tool_calls"][0]["version"] = "1.11.4"
 
         with self.assertRaisesRegex(ValueError, "not allowed for recipe step 'qc'"):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)

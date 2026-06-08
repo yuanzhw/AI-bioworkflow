@@ -83,7 +83,7 @@ DEMO_INPUT: dict[str, Any] = {
                 },
             },
             "runtime": {
-                "docker": "quay.io/biocontainers/fastp:0.23.2",
+                "docker": "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
                 "cpu": 4,
                 "memory": "8G",
             },

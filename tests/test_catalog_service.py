@@ -27,18 +27,18 @@ class CatalogServiceTests(unittest.TestCase):
 
         self.assertGreaterEqual(len(tools), 5)
         fastp = next(tool for tool in tools if tool["id"] == "fastp")
-        self.assertEqual(fastp["version"], "0.23.2")
-        self.assertEqual(fastp["runtime"]["docker"], "quay.io/biocontainers/fastp:0.23.2")
+        self.assertEqual(fastp["version"], "1.3.3")
+        self.assertEqual(fastp["runtime"]["docker"], "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0")
         self.assertEqual(fastp["trust_status"], "catalog-approved")
         self.assertIn("clean_r1", fastp["outputs"])
 
     def test_get_tool_returns_explicit_version(self):
-        tool = get_tool("salmon", "1.10.2")
+        tool = get_tool("salmon", "1.11.4")
 
         self.assertEqual(tool["id"], "salmon")
-        self.assertEqual(tool["version"], "1.10.2")
+        self.assertEqual(tool["version"], "1.11.4")
         self.assertEqual(tool["inputs"]["r1"]["type"], "File")
-        self.assertIn("1.10.2", tool["versions"])
+        self.assertIn("1.11.4", tool["versions"])
 
     def test_get_tool_defaults_to_highest_catalog_version(self):
         tool = get_tool("multiqc")

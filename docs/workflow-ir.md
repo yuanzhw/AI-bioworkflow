@@ -204,7 +204,7 @@ output {
       }
     },
     "runtime": {
-      "docker": "quay.io/biocontainers/fastp:0.23.2",
+      "docker": "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
       "cpu": 4,
       "memory": "8G"
     }
@@ -264,7 +264,7 @@ Runtime 定义当前包含：
 
 ```json
 {
-  "docker": "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0",
+  "docker": "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1",
   "cpu": 4,
   "memory": "16G",
   "disks": "local-disk 50 HDD"
@@ -278,7 +278,7 @@ WDL 后端会渲染为：
 ```wdl
 runtime {
   cpu: 4
-  docker: "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0"
+  docker: "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1"
   memory: "16G"
 }
 ```
@@ -552,7 +552,7 @@ Recipe Tool Plan 是更接近 LLM 和 catalog 的输入格式：
         "id": "qc",
         "step": "qc",
         "tool": "fastp",
-        "version": "0.23.2",
+        "version": "1.3.3",
         "inputs": {
           "r1": "raw_r1s"
         },

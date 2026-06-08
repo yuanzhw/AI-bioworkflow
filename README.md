@@ -145,7 +145,7 @@ Recipe Tool Plan 示例：
         "id": "qc",
         "step": "qc",
         "tool": "fastp",
-        "version": "0.23.2",
+        "version": "1.3.3",
         "inputs": {
           "r1": "raw_r1s",
           "r2": "raw_r2s"

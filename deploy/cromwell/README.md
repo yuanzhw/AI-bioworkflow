@@ -102,10 +102,10 @@ docker compose down -v
 当前 RNA-seq DEG 示例需要在 runner 环境中拉取或构建以下镜像：
 
 ```bash
-docker pull quay.io/biocontainers/fastp:0.23.2
-docker pull quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2
+docker pull quay.io/biocontainers/fastp:1.3.3--h43da1c4_0
+docker pull quay.io/biocontainers/salmon:1.11.4--h7f96273_0
 docker pull ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
-docker pull ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0
+docker pull ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1
 docker pull ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
 ```
 
