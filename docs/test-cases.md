@@ -47,7 +47,7 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
   - `tx2gene: File`
   - `sample_groups: File`
 - tool calls：
-  - `qc`: recipe step `qc`, tool `fastp` `0.23.2`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
+  - `qc`: recipe step `qc`, tool `fastp` `1.3.3`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
   - `quantify`: recipe step `quantify`, tool `salmon` `1.9.0`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
   - `summarize`: recipe step `summarize_transcripts`, tool `tximport` `1.30.0`
   - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.0`, 参数 `contrast="condition"`
@@ -139,7 +139,7 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 输入：
 
 - 直接构造一个 `ToolSpec`：
-  - tool id/version 为 `fastp/0.23.2`
+  - tool id/version 为 `fastp/1.3.3`
   - 有 input、output 和 command template
   - runtime 只提供 `cpu` 和 `memory`，缺少 `docker`
 
@@ -492,7 +492,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
   - `workflow_name: SimpleQC`
   - `inputs.raw_fastq: File`
   - `tasks` 列表中一个 task `fastp_qc`
-  - task runtime docker 为 `quay.io/biocontainers/fastp:0.23.2`
+  - task runtime docker 为 `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
 
 执行：
 
@@ -502,7 +502,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - 标准 IR workflow 名称为 `SimpleQC`。
 - `workflow.calls[0].id == "fastp_qc"`。
-- `workflow_ir.tasks["fastp_qc"].runtime.docker == "quay.io/biocontainers/fastp:0.23.2"`。
+- `workflow_ir.tasks["fastp_qc"].runtime.docker == "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0"`。
 
 覆盖点：
 
@@ -1123,7 +1123,7 @@ workflow Bad {
 - `miniwdl_available()` 为 true。
 - 本机存在 `docker` 或 `podman`。
 - 下列镜像已经存在于本地：
-  - `quay.io/biocontainers/fastp:0.23.2`
+  - `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
   - `quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0`

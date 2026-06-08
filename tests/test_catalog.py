@@ -27,7 +27,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "qc",
                     "step": "qc",
                     "tool": "fastp",
-                    "version": "0.23.2",
+                    "version": "1.3.3",
                     "inputs": {
                         "r1": "raw_r1s",
                         "r2": "raw_r2s",
@@ -143,7 +143,7 @@ class CatalogResolutionTests(unittest.TestCase):
             ToolSpec.model_validate(
                 {
                     "id": "fastp",
-                    "version": "0.23.2",
+                    "version": "1.3.3",
                     "description": "FASTQ quality control.",
                     "inputs": {
                         "r1": {

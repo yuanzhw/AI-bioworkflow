@@ -416,7 +416,7 @@ uv run python -m unittest tests.e2e.test_tiny_run -v
 - 拉取或构建所需镜像：
 
 ```text
-quay.io/biocontainers/fastp:0.23.2
+quay.io/biocontainers/fastp:1.3.3--h43da1c4_0
 quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0
 ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
 ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0

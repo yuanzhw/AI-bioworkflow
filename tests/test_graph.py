@@ -58,7 +58,7 @@ def sample_multi_task_ir() -> dict[str, Any]:
                     },
                 },
                 "runtime": {
-                    "docker": "quay.io/biocontainers/fastp:0.23.2",
+                    "docker": "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
                     "cpu": 4,
                     "memory": "8G",
                 },
@@ -104,7 +104,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "qc",
                     "step": "qc",
                     "tool": "fastp",
-                    "version": "0.23.2",
+                    "version": "1.3.3",
                     "inputs": {
                         "r1": "raw_r1s",
                         "r2": "raw_r2s",
@@ -390,7 +390,7 @@ class WorkflowCompilationTests(unittest.TestCase):
             "tasks": [
                 {
                     "name": "fastp_qc",
-                    "docker": "quay.io/biocontainers/fastp:0.23.2",
+                    "docker": "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
                     "command": "fastp -i ~{raw_fastq} -o out.fq",
                     "outputs": {
                         "clean_fastq": "File",
@@ -403,7 +403,10 @@ class WorkflowCompilationTests(unittest.TestCase):
 
         self.assertEqual(workflow_ir.workflow.name, "SimpleQC")
         self.assertEqual(workflow_ir.workflow.calls[0].id, "fastp_qc")
-        self.assertEqual(workflow_ir.tasks["fastp_qc"].runtime.docker, "quay.io/biocontainers/fastp:0.23.2")
+        self.assertEqual(
+            workflow_ir.tasks["fastp_qc"].runtime.docker,
+            "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
+        )
 
     def test_agent_repairs_bare_file_output_literals(self):
         raw_ir = sample_multi_task_ir()
