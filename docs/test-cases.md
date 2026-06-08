@@ -48,7 +48,7 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
   - `sample_groups: File`
 - tool calls：
   - `qc`: recipe step `qc`, tool `fastp` `0.23.2`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
-  - `quantify`: recipe step `quantify`, tool `salmon` `1.10.2`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
+  - `quantify`: recipe step `quantify`, tool `salmon` `1.9.0`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
   - `summarize`: recipe step `summarize_transcripts`, tool `tximport` `1.30.0`
   - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.0`, 参数 `contrast="condition"`
   - `report`: recipe step `qc_report`, tool `multiqc` `1.21`
@@ -162,7 +162,7 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 输入：
 
 - 复制 `sample_rnaseq_tool_plan()`。
-- 将第一个 tool call 的 `qc` 步骤工具从 `fastp` 改为 `salmon`，版本改为 `1.10.2`。
+- 将第一个 tool call 的 `qc` 步骤工具从 `fastp` 改为 `salmon`，版本改为 `1.9.0`。
 
 执行：
 
@@ -1124,7 +1124,7 @@ workflow Bad {
 - 本机存在 `docker` 或 `podman`。
 - 下列镜像已经存在于本地：
   - `quay.io/biocontainers/fastp:0.23.2`
-  - `quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2`
+  - `quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0`
   - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21`

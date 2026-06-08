@@ -47,7 +47,7 @@ def sample_rnaseq_tool_plan():
                     "id": "quantify",
                     "step": "quantify",
                     "tool": "salmon",
-                    "version": "1.10.2",
+                    "version": "1.9.0",
                     "inputs": {
                         "r1": "qc.clean_r1",
                         "r2": "qc.clean_r2",

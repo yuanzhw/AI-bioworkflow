@@ -40,7 +40,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "quantify",
                     "step": "quantify",
                     "tool": "salmon",
-                    "version": "1.10.2",
+                    "version": "1.9.0",
                     "inputs": {
                         "r1": "qc.clean_r1",
                         "r2": "qc.clean_r2",
@@ -168,7 +168,7 @@ class CatalogResolutionTests(unittest.TestCase):
     def test_resolver_rejects_tool_not_allowed_for_recipe_step(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())
         plan["workflow"]["tool_calls"][0]["tool"] = "salmon"
-        plan["workflow"]["tool_calls"][0]["version"] = "1.10.2"
+        plan["workflow"]["tool_calls"][0]["version"] = "1.9.0"
 
         with self.assertRaisesRegex(ValueError, "not allowed for recipe step 'qc'"):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)

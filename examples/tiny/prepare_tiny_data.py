@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
+PROJECT_ROOT = Path(__file__).parents[2]
 
 SAMPLES = [
     {"sample_id": "ctrl_1", "condition": "control", "gene_a_pairs": 48, "gene_b_pairs": 12},
@@ -35,6 +37,10 @@ TRANSCRIPTS = {
     },
 }
 READ_LENGTH = 50
+CONTAINER_FIXTURE_ROOT = "/fixture"
+SALMON_TOOL_ID = "salmon"
+SALMON_TOOL_VERSION = "1.9.0"
+SALMON_TOOL_PATH = PROJECT_ROOT / "src" / "catalog" / "tools" / SALMON_TOOL_ID / f"{SALMON_TOOL_VERSION}.yaml"
 TEMPLATE_PATH = Path(__file__).with_name("rnaseq_deg.inputs.template.json")
 
 
@@ -52,17 +58,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--kmer-length", default=7, type=int, help="Salmon index k-mer length for tiny transcripts.")
     parser.add_argument(
-        "--salmon-command",
-        nargs="+",
-        default=["salmon"],
-        help="Command prefix used to run salmon. Place this option last when passing multiple words.",
+        "--container-runtime",
+        choices=("auto", "docker", "podman"),
+        default="auto",
+        help="Container runtime used to build the Salmon index from the Catalog image.",
     )
     args = parser.parse_args(argv)
 
     fixture_root = args.fixture_root.resolve()
     paths = prepare_fixture(
         fixture_root=fixture_root,
-        salmon_command=args.salmon_command,
+        container_runtime=resolve_container_runtime(args.container_runtime),
+        salmon_image=load_salmon_image(),
         kmer_length=args.kmer_length,
     )
 
@@ -75,7 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def prepare_fixture(*, fixture_root: Path, salmon_command: list[str], kmer_length: int) -> list[Path]:
+def prepare_fixture(
+    *,
+    fixture_root: Path,
+    container_runtime: str,
+    salmon_image: str,
+    kmer_length: int,
+) -> list[Path]:
     data_dir = fixture_root / "data"
     reads_dir = data_dir / "reads"
     index_dir = fixture_root / "salmon_index"
@@ -92,7 +105,9 @@ def prepare_fixture(*, fixture_root: Path, salmon_command: list[str], kmer_lengt
     prepare_salmon_index(
         transcripts_path=transcripts_path,
         index_dir=index_dir,
-        salmon_command=salmon_command,
+        fixture_root=fixture_root,
+        container_runtime=container_runtime,
+        salmon_image=salmon_image,
         kmer_length=kmer_length,
     )
 
@@ -149,24 +164,103 @@ def prepare_salmon_index(
     *,
     transcripts_path: Path,
     index_dir: Path,
-    salmon_command: list[str],
+    fixture_root: Path,
+    container_runtime: str,
+    salmon_image: str,
     kmer_length: int,
 ) -> None:
-    if index_dir.exists() and any(index_dir.iterdir()):
+    if _salmon_index_complete(index_dir):
         return
+    if index_dir.exists():
+        shutil.rmtree(index_dir)
 
     index_dir.parent.mkdir(parents=True, exist_ok=True)
+    transcripts_in_container = _container_path(fixture_root, transcripts_path)
+    index_in_container = _container_path(fixture_root, index_dir)
     command = [
-        *salmon_command,
+        container_runtime,
+        "run",
+        "--rm",
+        "-e",
+        "LC_ALL=C",
+        "-e",
+        "LANG=C",
+        "-e",
+        "LANGUAGE=C",
+        "-v",
+        f"{fixture_root.as_posix()}:{CONTAINER_FIXTURE_ROOT}",
+        salmon_image,
+        "salmon",
         "index",
         "-t",
-        str(transcripts_path),
+        transcripts_in_container,
         "-i",
-        str(index_dir),
+        index_in_container,
         "-k",
         str(kmer_length),
     ]
     subprocess.run(command, check=True)
+
+
+def _salmon_index_complete(index_dir: Path) -> bool:
+    return (index_dir / "versionInfo.json").is_file()
+
+
+def load_salmon_image() -> str:
+    try:
+        import yaml
+    except ModuleNotFoundError as exc:
+        if exc.name != "yaml":
+            raise
+        return _load_salmon_image_from_catalog_yaml(SALMON_TOOL_PATH)
+
+    with SALMON_TOOL_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{SALMON_TOOL_PATH} must contain a YAML mapping")
+    runtime = data.get("runtime")
+    if not isinstance(runtime, dict):
+        raise RuntimeError(f"{SALMON_TOOL_PATH} does not define runtime")
+    image = runtime.get("docker")
+    if not isinstance(image, str) or not image:
+        raise RuntimeError(f"{SALMON_TOOL_PATH} does not define runtime.docker")
+    return image
+
+
+def _load_salmon_image_from_catalog_yaml(path: Path) -> str:
+    in_runtime = False
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if raw_line == stripped and stripped.endswith(":"):
+            in_runtime = stripped == "runtime:"
+            continue
+        if in_runtime and stripped.startswith("docker:"):
+            image = stripped.split(":", 1)[1].strip().strip("\"'")
+            if image:
+                return image
+    raise RuntimeError(f"{path} does not define runtime.docker")
+
+
+def resolve_container_runtime(selected: str) -> str:
+    if selected != "auto":
+        runtime = shutil.which(selected)
+        if runtime is None:
+            raise RuntimeError(f"container runtime is not available on PATH: {selected}")
+        return runtime
+
+    for candidate in ("docker", "podman"):
+        runtime = shutil.which(candidate)
+        if runtime is not None:
+            return runtime
+
+    raise RuntimeError("Docker or Podman is required to build the tiny Salmon index from the Catalog image")
+
+
+def _container_path(fixture_root: Path, path: Path) -> str:
+    relative_path = path.resolve().relative_to(fixture_root.resolve()).as_posix()
+    return f"{CONTAINER_FIXTURE_ROOT}/{relative_path}"
 
 
 def write_inputs_json(path: Path, cromwell_root: str) -> None:

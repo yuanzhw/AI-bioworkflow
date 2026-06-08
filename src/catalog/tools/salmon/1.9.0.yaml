@@ -1,5 +1,5 @@
 id: salmon
-version: "1.10.2"
+version: "1.9.0"
 aliases:
   - transcript quantification
   - RNA-seq quantification
@@ -44,6 +44,6 @@ command_template: |
   -o salmon_quant
 
 runtime:
-  docker: quay.io/biocontainers/salmon:1.10.2--h6dccd9a_2
+  docker: quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0
   cpu: 8
   memory: 16G
