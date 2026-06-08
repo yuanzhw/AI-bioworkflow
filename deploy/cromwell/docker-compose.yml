@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cromwell}
+      POSTGRES_USER: ${POSTGRES_USER:-cromwell}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cromwell}
+    volumes:
+      - cromwell_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  cromwell:
+    build:
+      context: .
+      args:
+        CROMWELL_VERSION: ${CROMWELL_VERSION:-92}
+    image: ai-bioworkflow/cromwell:${CROMWELL_VERSION:-92}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CROMWELL_PORT:-8000}:8000"
+    environment:
+      CROMWELL_DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cromwell}
+      CROMWELL_DATABASE_USER: ${POSTGRES_USER:-cromwell}
+      CROMWELL_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-cromwell}
+      CROMWELL_EXECUTIONS_ROOT: ${AI_BIOWORKFLOW_RUNNER_ROOT:-/data/ai-bioworkflow-runner}/executions
+      CROMWELL_DOCKER_ROOT: ${AI_BIOWORKFLOW_RUNNER_ROOT:-/data/ai-bioworkflow-runner}/executions
+    volumes:
+      - ./application.conf:/opt/cromwell/application.conf:ro
+      - ./options.example.json:/opt/cromwell/options.example.json:ro
+      - ./labels.example.json:/opt/cromwell/labels.example.json:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${AI_BIOWORKFLOW_RUNNER_ROOT:-/data/ai-bioworkflow-runner}:${AI_BIOWORKFLOW_RUNNER_ROOT:-/data/ai-bioworkflow-runner}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/engine/v1/status >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+volumes:
+  cromwell_postgres_data:

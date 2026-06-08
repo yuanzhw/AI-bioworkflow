@@ -1,5 +1,5 @@
 id: deseq2
-version: "1.42.0"
+version: "1.42.1"
 aliases:
   - differential expression
   - DEG
@@ -33,6 +33,6 @@ command_template: |
   --output differential_expression.tsv
 
 runtime:
-  docker: ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.0
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1
   cpu: 4
   memory: 16G

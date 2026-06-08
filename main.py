@@ -3,22 +3,21 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
 
-from src.graph import agent
 from src.nl_planner import (
     DEFAULT_PLANNER_MODEL,
     NaturalLanguagePlanningError,
     build_default_planner_prompt,
-    create_natural_language_plan,
 )
-from src.nodes.analyzer import analyzer_node
-from src.nodes.ir_normalizer import ir_normalizer_node
-from src.nodes.renderer import renderer_node
-from src.nodes.repairer import repairer_node
+from src.services.workflow_service import (
+    compile_structured_workflow,
+    compile_workflow,
+    plan_and_compile_workflow,
+)
 from src.state import WorkflowState
 
 
@@ -84,7 +83,7 @@ DEMO_INPUT: dict[str, Any] = {
                 },
             },
             "runtime": {
-                "docker": "quay.io/biocontainers/fastp:0.23.2",
+                "docker": "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
                 "cpu": 4,
                 "memory": "8G",
             },
@@ -201,45 +200,6 @@ def load_prompt(prompt: str | None = None, prompt_file: Path | None = None) -> s
     return DEMO_PROMPT
 
 
-def build_initial_state(
-    parsed_json: dict[str, Any],
-) -> WorkflowState:
-    return {
-        "parsed_json": parsed_json,
-        "workflow_ir": {},
-        "analysis_errors": [],
-        "analysis_warnings": [],
-        "messages": [],
-        "current_wdl": "",
-        "validation_message": "",
-        "error_count": 0,
-        "repair_count": 0,
-        "repair_actions": [],
-        "is_valid": False,
-    }
-
-
-def compile_workflow(
-    parsed_json: dict[str, Any],
-    check: bool = True,
-) -> WorkflowState:
-    state = build_initial_state(parsed_json)
-    if check:
-        return cast(WorkflowState, agent.invoke(state))
-
-    _merge_state(state, ir_normalizer_node(state))
-    if state["analysis_errors"]:
-        return state
-
-    _analyze_with_repair(state)
-    if state["analysis_errors"]:
-        return state
-
-    _merge_state(state, renderer_node(state))
-    state["validation_message"] = "WDL syntax validation skipped (--no-check)."
-    return state
-
-
 def write_wdl_output(path: Path, wdl_code: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(wdl_code, encoding="utf-8")
@@ -255,14 +215,6 @@ def write_text_output(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def workflow_succeeded(state: WorkflowState, check: bool) -> bool:
-    if state["analysis_errors"]:
-        return False
-    if not state["current_wdl"]:
-        return False
-    return state["is_valid"] if check else True
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     configure_logging(verbose=args.verbose)
@@ -272,24 +224,29 @@ def main(argv: list[str] | None = None) -> int:
         if args.input:
             parsed_json = load_workflow_input(args.input)
             planned_from_natural_language = False
+            result = compile_structured_workflow(
+                parsed_json,
+                check=check,
+            )
         else:
             prompt = load_prompt(args.prompt, args.prompt_file)
             if args.save_planner_prompt:
                 write_text_output(args.save_planner_prompt, build_default_planner_prompt(prompt))
                 print(f"Planner prompt written to {args.save_planner_prompt}", file=sys.stderr)
 
-            plan_result = create_natural_language_plan(prompt, model=args.planner_model)
-            parsed_json = plan_result.plan
+            result = plan_and_compile_workflow(
+                prompt,
+                model=args.planner_model,
+                check=check,
+            )
+            parsed_json = result.plan or {}
             planned_from_natural_language = True
 
             if args.save_plan:
                 write_json_output(args.save_plan, parsed_json)
                 print(f"Planner plan written to {args.save_plan}", file=sys.stderr)
 
-        final_state = compile_workflow(
-            parsed_json,
-            check=check,
-        )
+        final_state = result.state
     except NaturalLanguagePlanningError as exc:
         print(f"Natural language planning failed: {exc}", file=sys.stderr)
         return 1
@@ -302,17 +259,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.print_plan and planned_from_natural_language:
         print(json.dumps(parsed_json, indent=2, ensure_ascii=False))
 
-    if args.print_ir and final_state["workflow_ir"]:
-        print(json.dumps(final_state["workflow_ir"], indent=2, ensure_ascii=False))
+    if args.print_ir and result.workflow_ir:
+        print(json.dumps(result.workflow_ir, indent=2, ensure_ascii=False))
 
-    if not workflow_succeeded(final_state, check=check):
+    if not result.succeeded:
         return 1
 
     if args.output:
-        write_wdl_output(args.output, final_state["current_wdl"])
+        write_wdl_output(args.output, result.wdl)
         print(f"WDL written to {args.output}", file=sys.stderr)
     else:
-        print(final_state["current_wdl"])
+        print(result.wdl)
 
     return 0
 
@@ -324,43 +281,6 @@ def configure_logging(verbose: bool = False) -> None:
         stream=sys.stderr,
         force=True,
     )
-
-
-def _analyze_with_repair(state: WorkflowState) -> None:
-    while True:
-        _merge_state(state, analyzer_node(state))
-        if not state["analysis_errors"]:
-            return
-
-        _merge_state(state, repairer_node(state))
-        if not state["repair_actions"]:
-            return
-
-
-def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:
-    for key, value in update.items():
-        if key == "messages":
-            state["messages"] = state["messages"] + value
-        elif key == "parsed_json":
-            state["parsed_json"] = value
-        elif key == "workflow_ir":
-            state["workflow_ir"] = value
-        elif key == "analysis_errors":
-            state["analysis_errors"] = value
-        elif key == "analysis_warnings":
-            state["analysis_warnings"] = value
-        elif key == "current_wdl":
-            state["current_wdl"] = value
-        elif key == "validation_message":
-            state["validation_message"] = value
-        elif key == "error_count":
-            state["error_count"] = value
-        elif key == "repair_count":
-            state["repair_count"] = value
-        elif key == "repair_actions":
-            state["repair_actions"] = value
-        elif key == "is_valid":
-            state["is_valid"] = value
 
 
 def _print_report(state: WorkflowState, check: bool) -> None:

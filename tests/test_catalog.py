@@ -1,12 +1,18 @@
 import copy
 import unittest
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ToolSpec
 from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
+
+
+CATALOG_TOOLS_DIR = Path(__file__).resolve().parents[1] / "src" / "catalog" / "tools"
 
 
 def sample_rnaseq_tool_plan() -> dict[str, Any]:
@@ -66,7 +72,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "deg",
                     "step": "differential_expression",
                     "tool": "deseq2",
-                    "version": "1.42.0",
+                    "version": "1.42.1",
                     "inputs": {
                         "counts": "summarize.gene_counts",
                         "sample_groups": "sample_groups",
@@ -96,6 +102,18 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
             },
         }
     }
+
+
+class CatalogDefinitionTests(unittest.TestCase):
+    def test_catalog_file_path_matches_tool_id_and_version(self):
+        for yaml_path in sorted(CATALOG_TOOLS_DIR.rglob("*.yaml")):
+            with yaml_path.open("r", encoding="utf-8") as handle:
+                data = yaml.safe_load(handle)
+
+            with self.subTest(path=str(yaml_path.relative_to(CATALOG_TOOLS_DIR))):
+                self.assertIsInstance(data, dict)
+                self.assertEqual(yaml_path.parent.name, data.get("id"))
+                self.assertEqual(yaml_path.stem, str(data.get("version")))
 
 
 class CatalogResolutionTests(unittest.TestCase):
