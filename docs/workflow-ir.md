@@ -229,14 +229,19 @@ Optional 输入使用 `T?` 表示。例如：
 Task 命令模板当前按 WDL command 语义保存，变量插值使用 `~{name}`：
 
 ```text
-salmon quant
--i ~{index}
--1 ~{r1}
--2 ~{r2}
+salmon quant \
+-l ~{lib_type} \
+-i ~{index} \
+-1 ~{r1} \
+-2 ~{r2} \
 -o salmon_quant
 ```
 
 Analyzer 会检查 command 中出现的 `~{identifier}` 是否在 `task.inputs` 中声明。当前 command 字符串仍偏 WDL；未来如果支持 Nextflow，建议引入 backend-neutral command model 或明确把 command 作为 shell script body，由各后端负责包装。
+
+当 Recipe Tool Plan 通过 Catalog resolver 生成 IR 时，Catalog `command_template`
+中非空的多行命令会被规范化为 shell 续行形式，确保类似 `fastp`、`salmon`
+和 R wrapper 的分行参数在 WDL/Cromwell 中作为同一个 shell 命令执行。
 
 ### `task.outputs`
 
@@ -753,8 +758,8 @@ task multiqc_report {
   }
 
   command <<<
-    run_multiqc.sh
-    ~{write_lines(report_files)}
+    run_multiqc.sh \
+    ~{write_lines(report_files)} \
     multiqc_report.html
   >>>
 

@@ -20,6 +20,10 @@ inputs:
     description: Salmon transcriptome index.
 
 params:
+  lib_type:
+    type: String
+    default: A
+    description: Library type passed to Salmon quant. A enables automatic inference.
   thread:
     type: Int
     default: 8
@@ -37,6 +41,7 @@ outputs:
 
 command_template: |
   salmon quant
+  -l ~{lib_type}
   -i ~{index}
   -1 ~{r1}
   -2 ~{r2}

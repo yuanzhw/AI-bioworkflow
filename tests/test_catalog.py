@@ -153,8 +153,12 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("quant_files = quantify.quant_file", wdl)
         self.assertIn("--contrast ~{contrast}", wdl)
         self.assertIn('contrast = "condition"', wdl)
-        self.assertIn("-I ~{r2}\n    -o clean_R1.fq.gz", wdl)
-        self.assertIn("-O clean_R2.fq.gz\n    --html fastp.html", wdl)
+        self.assertIn('lib_type = "A"', wdl)
+        self.assertIn("fastp -i ~{r1} \\\n    -I ~{r2}", wdl)
+        self.assertIn("-I ~{r2} \\\n    -o clean_R1.fq.gz", wdl)
+        self.assertIn("-O clean_R2.fq.gz \\\n    --html fastp.html", wdl)
+        self.assertIn("salmon quant \\\n    -l ~{lib_type}", wdl)
+        self.assertIn("-l ~{lib_type} \\\n    -i ~{index}", wdl)
 
     def test_tool_spec_requires_runtime_docker(self):
         with self.assertRaisesRegex(ValueError, "must define runtime.docker"):

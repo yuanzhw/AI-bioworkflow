@@ -58,7 +58,7 @@ OK (skipped=1)
   - `sample_groups: File`
 - tool calls：
   - `qc`: recipe step `qc`, tool `fastp` `1.3.3`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
-  - `quantify`: recipe step `quantify`, tool `salmon` `1.9.0`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
+  - `quantify`: recipe step `quantify`, tool `salmon` `1.9.0`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`、`lib_type="A"`
   - `summarize`: recipe step `summarize_transcripts`, tool `tximport` `1.30.0`
   - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.1`, 参数 `contrast="condition"`
   - `report`: recipe step `qc_report`, tool `multiqc` `1.21`
@@ -132,9 +132,11 @@ OK (skipped=1)
   - `File deg_table = deg.deg_table`
   - `File multiqc_report = report.multiqc_report`
   - `quant_files = quantify.quant_file`
+  - Salmon 默认 library type 渲染为 `lib_type = "A"` 和 `-l ~{lib_type}`
   - `--contrast ~{contrast}`
   - `contrast = "condition"`
-  - fastp paired-end 参数片段 `-I ~{r2}` 和 `-O clean_R2.fq.gz`
+  - fastp paired-end 参数片段以 shell 续行形式渲染，例如 `-I ~{r2} \`
+    和 `-O clean_R2.fq.gz \`
 
 覆盖点：
 
