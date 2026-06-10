@@ -178,6 +178,34 @@ class CromwellBackendRunTests(unittest.TestCase):
             ],
         )
 
+    def test_polling_tolerates_transient_unrecognized_workflow_id_after_submit(self):
+        session = FakeSession(
+            [
+                _json_response({"ok": True}),
+                _json_response({"id": "wf-123", "status": "Submitted"}),
+                FakeResponse(
+                    status_code=404,
+                    text='{"status":"fail","message":"Unrecognized workflow ID: wf-123"}',
+                ),
+                _json_response({"id": "wf-123", "status": "Running"}),
+                _json_response({"id": "wf-123", "status": "Succeeded"}),
+                _json_response({"outputs": {}}),
+                _json_response({"id": "wf-123", "status": "Succeeded"}),
+            ]
+        )
+        backend = CromwellBackend(
+            base_url="http://cromwell.test",
+            poll_interval_seconds=0,
+            session=session,
+        )
+        wdl_path, inputs_path = self._workflow_files()
+
+        result = backend.run(wdl_path, inputs_path)
+
+        self.assertTrue(result.succeeded, result.message)
+        self.assertEqual(result.workflow_id, "wf-123")
+        self.assertEqual(result.status, "Succeeded")
+
     def test_failed_status_returns_failed_result_with_metadata_summary(self):
         session = FakeSession(
             [

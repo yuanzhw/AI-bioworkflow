@@ -188,6 +188,12 @@ class CromwellBackend:
                 "Cromwell workflow status response",
             )
             if status_error is not None:
+                if _is_transient_unrecognized_workflow_error(status_error) and self._monotonic() < deadline:
+                    if self.poll_interval_seconds > 0:
+                        remaining = max(0.0, deadline - self._monotonic())
+                        self._sleep(min(self.poll_interval_seconds, remaining))
+                    continue
+
                 return ExecutionResult(
                     succeeded=False,
                     workflow_id=workflow_id,
@@ -359,6 +365,10 @@ def _response_preview(response: ResponseLike) -> str:
             text = content.decode("utf-8", errors="replace")
     text = text.strip()
     return f": {text[:200]}" if text else "."
+
+
+def _is_transient_unrecognized_workflow_error(message: str) -> bool:
+    return "HTTP 404" in message and "Unrecognized workflow ID" in message
 
 
 def _string_or_none(value: Any) -> str | None:
