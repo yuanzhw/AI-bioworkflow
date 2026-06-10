@@ -98,12 +98,15 @@ docker compose down -v
 ## 准备 Workflow 镜像
 
 编译器会从 Tool Catalog 读取容器镜像，并将其渲染到 WDL `runtime.docker`。Cromwell server 不负责推断或替换镜像。
+该本地 P0 runner 使用 Docker local hash lookup，避免 Cromwell remote lookup 对 registry
+支持范围的限制影响 GHCR 等镜像。请先在 runner 主机拉取所需镜像，或确保本地镜像具有
+`RepoDigests`。
 
 当前 RNA-seq DEG 示例需要在 runner 环境中拉取或构建以下镜像：
 
 ```bash
 docker pull quay.io/biocontainers/fastp:1.3.3--h43da1c4_0
-docker pull quay.io/biocontainers/salmon:1.11.4--h7f96273_0
+docker pull quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0
 docker pull ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
 docker pull ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1
 docker pull ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
