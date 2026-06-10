@@ -68,23 +68,23 @@ class ApiRouteTests(unittest.TestCase):
         service.assert_called_once_with()
         tools = response.json()["tools"]
         fastp = next(tool for tool in tools if tool["id"] == "fastp")
-        self.assertEqual(fastp["version"], "0.23.2")
+        self.assertEqual(fastp["version"], "1.3.3")
         self.assertEqual(fastp["trust_status"], "catalog-approved")
 
     def test_get_tool_with_version(self):
-        tool_record = get_tool("salmon", "1.10.2")
+        tool_record = get_tool("salmon", "1.9.0")
 
         with patch(
             "src.api.routes.catalog.catalog_service.get_tool",
             return_value=tool_record,
         ) as service:
-            response = self.client.get("/api/tools/salmon?version=1.10.2")
+            response = self.client.get("/api/tools/salmon?version=1.9.0")
 
         self.assertEqual(response.status_code, 200)
-        service.assert_called_once_with("salmon", "1.10.2")
+        service.assert_called_once_with("salmon", "1.9.0")
         body = response.json()
         self.assertEqual(body["id"], "salmon")
-        self.assertEqual(body["version"], "1.10.2")
+        self.assertEqual(body["version"], "1.9.0")
 
     def test_get_tool_not_found(self):
         with patch(

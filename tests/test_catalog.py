@@ -159,6 +159,7 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("-O clean_R2.fq.gz \\\n    --html fastp.html", wdl)
         self.assertIn("salmon quant \\\n    -l ~{lib_type}", wdl)
         self.assertIn("-l ~{lib_type} \\\n    -i ~{index}", wdl)
+        self.assertIn("run_deseq2.R \\\n    --counts ~{counts}", wdl)
 
     def test_tool_spec_requires_runtime_docker(self):
         with self.assertRaisesRegex(ValueError, "must define runtime.docker"):

@@ -688,6 +688,7 @@ OK (skipped=1)
   - `contrast = "condition"`
   - fastp paired-end 参数片段以 shell 续行形式渲染，例如 `-I ~{r2} \`
     和 `-O clean_R2.fq.gz \`
+  - DESeq2 wrapper 直接以 PATH 命令 `run_deseq2.R` 渲染，不依赖工作目录中存在脚本文件
 
 覆盖点：
 

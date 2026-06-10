@@ -15,6 +15,7 @@ RUN Rscript -e "deps <- c('Depends', 'Imports', 'LinkingTo'); \
     stopifnot(as.character(packageVersion('DESeq2')) == '${TOOL_VERSION}')"
 
 COPY run_deseq2.R /usr/local/bin/run_deseq2.R
-RUN chmod +x /usr/local/bin/run_deseq2.R
+RUN sed -i 's/\r$//' /usr/local/bin/run_deseq2.R \
+    && chmod +x /usr/local/bin/run_deseq2.R
 
 ENTRYPOINT []
