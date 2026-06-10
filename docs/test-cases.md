@@ -29,11 +29,11 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 - `tests/test_tools.py`：没有 WOMtool 或 miniwdl 时跳过 WDL validator 测试。
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 
-当前 W0 服务层改动后的最近一次完整验证结果：
+当前 W1 API 基础阶段改动后的最近一次完整验证结果：
 
 ```text
-uv run python -m unittest discover -v
-Ran 55 tests
+.venv\Scripts\python.exe -m unittest discover -v
+Ran 80 tests
 OK (skipped=1)
 ```
 
@@ -94,6 +94,557 @@ OK (skipped=1)
 - Analyzer 认为 call 顺序正确时 IR 有效。
 - Renderer 生成 `workflow RNASeqPipeline`、`call fastp as qc`、`call bwa_mem as align` 和 `File bam = align.bam`。
 - 当 calls 反转时，Analyzer 能发现前向引用；Agent repairer 能在安全情况下重排。
+
+## `tests/api/test_models.py`
+
+该文件验证 W1 FastAPI DTO。DTO 只定义 API 输入输出形状，不实现业务逻辑；业务逻辑仍由 W0 services 和编译链路承担。
+
+### `test_compile_workflow_request_accepts_structured_payload`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+
+执行：
+
+- 构造 `CompileWorkflowRequest(payload=plan)`。
+
+期望输出：
+
+- `payload` 等于输入 plan。
+- 默认 `check == True`。
+
+覆盖点：
+
+- `/api/compile` 可以接收 Recipe Tool Plan / Workflow IR / legacy JSON 这类结构化 payload。
+
+### `test_compile_workflow_request_rejects_empty_payload`
+
+输入：
+
+- 空 dict：`{}`
+
+执行：
+
+- 构造 `CompileWorkflowRequest(payload={})`。
+
+期望输出：
+
+- 抛出 `ValidationError`。
+- 错误消息包含 `payload must not be empty`。
+
+覆盖点：
+
+- API 层在进入 service 前拒绝空结构化输入。
+
+### `test_natural_language_request_strips_and_validates_text`
+
+输入：
+
+- 请求文本：`"  Run RNA-seq DEG.  "`
+- 空白请求：`"  "`
+
+执行：
+
+- 构造 `NaturalLanguageRunRequest(...)`。
+
+期望输出：
+
+- 非空请求会被 strip 为 `Run RNA-seq DEG.`。
+- 空白请求抛出 `ValidationError`，错误消息包含 `request must not be empty`。
+
+覆盖点：
+
+- `/api/runs` 的自然语言入口不会把空请求交给 planner service。
+
+### `test_compilation_result_response_maps_successful_service_result`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- `compile_structured_workflow(..., check=False)` 返回的成功 service result。
+
+执行：
+
+- 调用 `CompilationResultResponse.from_service_result(result)`。
+
+期望输出：
+
+- `status == "succeeded"`。
+- diagnostics 中 `succeeded == True`。
+- diagnostics 中 `check_performed == False`。
+- analysis errors 为空。
+- artifacts 中 workflow 名称为 `RNASeqDEG`。
+- artifacts 中 WDL 包含 `workflow RNASeqDEG`。
+
+覆盖点：
+
+- API response DTO 能稳定包装 W0 workflow service 的成功结果。
+
+### `test_compilation_result_response_maps_failed_service_result`
+
+输入：
+
+- 复制 `examples/rnaseq_deg_recipe_plan.json`。
+- 删除 required input `sample_groups`。
+- `compile_structured_workflow(..., check=False)` 返回的失败 service result。
+
+执行：
+
+- 调用 `CompilationResultResponse.from_service_result(result)`。
+
+期望输出：
+
+- `status == "failed"`。
+- diagnostics 中 `succeeded == False`。
+- artifacts 中 `wdl == ""`。
+- analysis errors 包含 `sample_groups`。
+
+覆盖点：
+
+- API response DTO 能保留 service 诊断，不把无效 plan 包装成成功响应。
+
+### `test_recipe_list_response_accepts_catalog_service_records`
+
+输入：
+
+- `list_recipes()` 返回的 JSON-ready recipe records。
+
+执行：
+
+- 调用 `RecipeListResponse.model_validate({"recipes": list_recipes()})`。
+
+期望输出：
+
+- 至少包含一个 recipe。
+- 第一个 recipe id 为 `rnaseq_differential_expression`。
+- `sample_ids` required input 类型为 `Array[String]`。
+- 第一个 step 的 allowed tools 为 `["fastp"]`。
+
+覆盖点：
+
+- Catalog service 的 recipe records 与 API DTO 兼容。
+
+### `test_tool_list_response_accepts_catalog_service_records`
+
+输入：
+
+- `list_tools()` 返回的 JSON-ready tool records。
+
+执行：
+
+- 调用 `ToolListResponse.model_validate({"tools": list_tools()})`。
+
+期望输出：
+
+- `fastp` tool version 为 `0.23.2`。
+- `trust_status == "catalog-approved"`。
+- runtime docker 为 `quay.io/biocontainers/fastp:0.23.2`。
+- outputs 包含 `clean_r1`。
+
+覆盖点：
+
+- Catalog service 的 tool records 与 API DTO 兼容。
+- Tool runtime 与 trust status 可以直接暴露给前端。
+
+### `test_run_event_defines_persistable_event_envelope`
+
+输入：
+
+- event id：`evt_001`
+- run id：`run_001`
+- sequence：`1`
+- type：`run.created`
+- timestamp：`2026-06-06T00:00:00Z`
+
+执行：
+
+- 构造 `RunEvent(...)`。
+
+期望输出：
+
+- event type 为 `RunEventType.RUN_CREATED`。
+- 默认 `payload == {}`。
+
+覆盖点：
+
+- W2 SSE / history 使用的 event envelope 形状已提前固定。
+
+### `test_run_event_requires_positive_sequence`
+
+输入：
+
+- sequence：`0`
+
+执行：
+
+- 构造 `RunEvent(...)`。
+
+期望输出：
+
+- 抛出 `ValidationError`。
+- 错误消息包含 `greater than or equal to 1`。
+
+覆盖点：
+
+- 事件序号必须从正整数开始，便于后续持久化和回放排序。
+
+## `tests/api/test_routes.py`
+
+该文件验证 W1 FastAPI endpoint contract。测试通过 `TestClient(create_app())` 打 HTTP 层，并通过 patch 断言 API routes 复用 W0 services，而不是复制 catalog resolver、planner 或 compiler 逻辑。
+
+`POST /api/runs` 当前契约为 W1 同步 RPC：请求体包含自然语言 `request`、可选 `planner_model` 和 `check`；响应直接返回 `CompilationResultResponse`，包括 `status`、Plan、Workflow IR、WDL、diagnostics 和 planner observability。W1 不返回 `run_id` 或 `events_url`，这些属于 W2 持久化与 SSE 能力。
+
+### `test_list_recipes`
+
+输入：
+
+- mock `catalog_service.list_recipes()` 返回当前 recipe records。
+- HTTP 请求：`GET /api/recipes`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- `catalog_service.list_recipes()` 被调用一次。
+- 响应中至少有一个 recipe。
+- 第一个 recipe id 为 `rnaseq_differential_expression`。
+
+覆盖点：
+
+- Recipe 列表 endpoint 复用 W0 catalog service。
+
+### `test_get_recipe_uses_catalog_service`
+
+输入：
+
+- mock `catalog_service.get_recipe("rnaseq_differential_expression")`。
+- HTTP 请求：`GET /api/recipes/rnaseq_differential_expression`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- service 调用参数为 `rnaseq_differential_expression`。
+- 响应 id 为 `rnaseq_differential_expression`。
+
+覆盖点：
+
+- 单个 recipe endpoint 复用 W0 catalog service。
+
+### `test_get_recipe_not_found`
+
+输入：
+
+- mock `catalog_service.get_recipe(...)` 抛出 `KeyError("unknown recipe: missing_recipe")`。
+- HTTP 请求：`GET /api/recipes/missing_recipe`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `404`。
+- service 调用参数为 `missing_recipe`。
+- response detail 包含 `unknown recipe`。
+
+覆盖点：
+
+- 未知 recipe 被 API 层稳定映射为 404。
+
+### `test_list_tools`
+
+输入：
+
+- mock `catalog_service.list_tools()` 返回当前 tool records。
+- HTTP 请求：`GET /api/tools`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- `catalog_service.list_tools()` 被调用一次。
+- `fastp` 记录中 `version == "0.23.2"`。
+- `fastp` 记录中 `trust_status == "catalog-approved"`。
+
+覆盖点：
+
+- Tool 列表 endpoint 复用 W0 catalog service。
+
+### `test_get_tool_with_version`
+
+输入：
+
+- mock `catalog_service.get_tool("salmon", "1.10.2")`。
+- HTTP 请求：`GET /api/tools/salmon?version=1.10.2`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- service 调用参数为 `("salmon", "1.10.2")`。
+- 响应 id 为 `salmon`。
+- 响应 version 为 `1.10.2`。
+
+覆盖点：
+
+- 单个 tool endpoint 支持通过 query string 指定版本，并复用 W0 catalog service。
+
+### `test_get_tool_not_found`
+
+输入：
+
+- mock `catalog_service.get_tool(...)` 抛出 `KeyError("unknown tool: missing_tool")`。
+- HTTP 请求：`GET /api/tools/missing_tool`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `404`。
+- service 调用参数为 `("missing_tool", None)`。
+- response detail 包含 `unknown tool`。
+
+覆盖点：
+
+- 未知 tool 被 API 层稳定映射为 404。
+
+### `test_compile_recipe_plan`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- mock `workflow_service.compile_structured_workflow(plan, check=False)` 返回成功 service result。
+- HTTP 请求：`POST /api/compile`
+
+执行：
+
+- 调用 FastAPI TestClient，请求体包含 `payload` 和 `check=False`。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- service 调用参数为 `(plan, check=False)`。
+- response `status == "succeeded"`。
+- diagnostics 中 `check_performed == False`。
+- artifacts 中 workflow 名称为 `RNASeqDEG`。
+- artifacts 中 WDL 包含 `workflow RNASeqDEG`。
+
+覆盖点：
+
+- 结构化编译 endpoint 复用 W0 workflow service。
+- API 层不绕过 Analyzer / Renderer / Checker 边界。
+
+### `test_compile_invalid_plan_returns_diagnostics`
+
+输入：
+
+- 复制 `examples/rnaseq_deg_recipe_plan.json`。
+- 删除 workflow input `sample_groups`。
+- HTTP 请求：`POST /api/compile`
+
+执行：
+
+- 调用 FastAPI TestClient，请求体包含 `payload` 和 `check=False`。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- response `status == "failed"`。
+- diagnostics 中 `succeeded == False`。
+- artifacts 中 `wdl == ""`。
+- analysis errors 包含 `sample_groups`。
+
+覆盖点：
+
+- 无效结构化输入返回诊断响应，而不是抛出未处理异常或生成 WDL。
+
+### `test_compile_rejects_empty_payload`
+
+输入：
+
+- HTTP 请求：`POST /api/compile`
+- 请求体：`{"payload": {}, "check": false}`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `422`。
+
+覆盖点：
+
+- DTO 校验会在进入 W0 service 前拒绝空 payload。
+
+### `test_create_run_uses_natural_language_service`
+
+输入：
+
+- mock `workflow_service.plan_and_compile_workflow(...)` 返回成功 service result。
+- HTTP 请求：`POST /api/runs`
+- 请求体：`{"request": "Run RNA-seq DEG.", "check": false}`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- service 调用参数为：
+
+```python
+("Run RNA-seq DEG.", model=DEFAULT_PLANNER_MODEL, check=False)
+```
+
+- response `status == "succeeded"`。
+
+覆盖点：
+
+- 自然语言 run endpoint 复用 W0 workflow service。
+- 默认 planner model 由 API 层传递给 service。
+- W1 `/api/runs` 是同步接口，成功时直接返回编译结果响应。
+
+### `test_create_run_passes_requested_planner_model`
+
+输入：
+
+- mock `workflow_service.plan_and_compile_workflow(...)` 返回成功 service result。
+- HTTP 请求：`POST /api/runs`
+- 请求体包含 `planner_model: "custom-planner"`。
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- service 调用参数中 `model == "custom-planner"`。
+
+覆盖点：
+
+- API 支持调用方显式指定 planner model。
+- `planner_model` 不在 API 层解释，原样传递给 W0 workflow service。
+
+### `test_create_run_reports_planning_errors`
+
+输入：
+
+- mock `workflow_service.plan_and_compile_workflow(...)` 抛出 `NaturalLanguagePlanningError("LLM planner JSON parsing failed")`。
+- HTTP 请求：`POST /api/runs`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `422`。
+- response detail 包含 `LLM planner JSON parsing failed`。
+
+覆盖点：
+
+- 自然语言 planner 失败被 API 层稳定映射为 422。
+- planner/parsing/schema/catalog 这类请求语义错误不会伪装成成功的 `CompilationResultResponse`。
+
+## `tests/api/test_server.py`
+
+该文件验证 W1 FastAPI 开发服务器的本地端口约定。Cromwell server 保留 `8000` 端口，本项目 API 默认使用 `8010`。
+
+### `test_default_api_port_avoids_cromwell_default_port`
+
+输入：
+
+- `DEFAULT_API_HOST`
+- `DEFAULT_API_PORT`
+
+执行：
+
+- 读取 `src.api.server` 中的默认 host 和 port。
+
+期望输出：
+
+- 默认 host 为 `127.0.0.1`。
+- 默认 API port 为 `8010`。
+- 默认 API port 不等于 Cromwell 常用端口 `8000`。
+
+覆盖点：
+
+- FastAPI 开发服务默认避开 Cromwell server 端口。
+
+### `test_api_port_can_be_overridden_by_environment`
+
+输入：
+
+- 环境变量 `AI_BIOWORKFLOW_API_PORT=8020`。
+
+执行：
+
+- 调用 `get_api_port()`。
+
+期望输出：
+
+- 返回 `8020`。
+
+覆盖点：
+
+- 本地开发时可以临时覆盖 API 端口。
+
+### `test_api_port_rejects_invalid_environment_value`
+
+输入：
+
+- 环境变量 `AI_BIOWORKFLOW_API_PORT=not-a-port`。
+- 环境变量 `AI_BIOWORKFLOW_API_PORT=70000`。
+
+执行：
+
+- 调用 `get_api_port()`。
+
+期望输出：
+
+- 非整数端口抛出 `ValueError`，错误消息包含 `must be an integer`。
+- 越界端口抛出 `ValueError`，错误消息包含 `between 1 and 65535`。
+
+覆盖点：
+
+- 开发服务不会接受无效端口配置。
+
+### `test_api_host_can_be_overridden_by_environment`
+
+输入：
+
+- 环境变量 `AI_BIOWORKFLOW_API_HOST=0.0.0.0`。
+
+执行：
+
+- 调用 `get_api_host()`。
+
+期望输出：
+
+- 返回 `0.0.0.0`。
+
+覆盖点：
+
+- 本地或容器开发场景可以临时覆盖 API host。
 
 ## `tests/test_catalog.py`
 
@@ -1499,6 +2050,9 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。
 - Workflow service 对结构化编译入口、自然语言规划后编译入口和 API 友好结果对象的封装。
+- FastAPI DTO 对 workflow、catalog 和 event envelope 的输入输出契约。
+- FastAPI endpoints 对 W0 workflow/catalog services 的复用、HTTP 状态映射和响应序列化。
+- FastAPI 开发服务器默认端口 `8010`，避免与 Cromwell server 的 `8000` 冲突。
 - CLI 的自然语言入口、结构化入口、文件输出、stdout/stderr 隔离和失败返回。
 - Planner 的 JSON 解析、prompt 构建、schema 错误和 catalog 错误归类。
 - WDL validator wrapper 和可选 miniwdl tiny run。
@@ -1511,3 +2065,4 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - Reviewer LLM / Resource Agent / Bioinfo Reviewer 等规划中 Agent。
 - Nextflow 或其他 backend。
 - 真实自然语言模型调用的在线集成测试。
+- W2 run 持久化、SSE 事件流和 run history 回放。

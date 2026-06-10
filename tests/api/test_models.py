@@ -1,0 +1,126 @@
+import json
+import unittest
+from datetime import UTC, datetime
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from src.api.models import (
+    CompileWorkflowRequest,
+    CompilationResultResponse,
+    NaturalLanguageRunRequest,
+    RecipeListResponse,
+    RunEvent,
+    RunEventType,
+    RunStatus,
+    ToolListResponse,
+)
+from src.services.catalog_service import list_recipes, list_tools
+from src.services.workflow_service import compile_structured_workflow
+
+
+EXAMPLES_DIR = Path(__file__).parents[2] / "examples"
+
+
+def load_example(name: str) -> dict:
+    return json.loads((EXAMPLES_DIR / name).read_text(encoding="utf-8"))
+
+
+class WorkflowDtoTests(unittest.TestCase):
+    def test_compile_workflow_request_accepts_structured_payload(self):
+        plan = load_example("rnaseq_deg_recipe_plan.json")
+
+        request = CompileWorkflowRequest(payload=plan)
+
+        self.assertEqual(request.payload, plan)
+        self.assertTrue(request.check)
+
+    def test_compile_workflow_request_rejects_empty_payload(self):
+        with self.assertRaisesRegex(ValidationError, "payload must not be empty"):
+            CompileWorkflowRequest(payload={})
+
+    def test_natural_language_request_strips_and_validates_text(self):
+        request = NaturalLanguageRunRequest(request="  Run RNA-seq DEG.  ", check=False)
+
+        self.assertEqual(request.request, "Run RNA-seq DEG.")
+        self.assertFalse(request.check)
+
+        with self.assertRaisesRegex(ValidationError, "request must not be empty"):
+            NaturalLanguageRunRequest(request="  ")
+
+    def test_compilation_result_response_maps_successful_service_result(self):
+        result = compile_structured_workflow(
+            load_example("rnaseq_deg_recipe_plan.json"),
+            check=False,
+        )
+
+        response = CompilationResultResponse.from_service_result(result)
+
+        self.assertEqual(response.status, RunStatus.SUCCEEDED)
+        self.assertTrue(response.diagnostics.succeeded)
+        self.assertFalse(response.diagnostics.check_performed)
+        self.assertEqual(response.diagnostics.analysis_errors, [])
+        self.assertEqual(response.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
+        self.assertIn("workflow RNASeqDEG", response.artifacts.wdl)
+
+    def test_compilation_result_response_maps_failed_service_result(self):
+        plan = load_example("rnaseq_deg_recipe_plan.json")
+        plan["workflow"]["inputs"].pop("sample_groups")
+
+        result = compile_structured_workflow(plan, check=False)
+        response = CompilationResultResponse.from_service_result(result)
+
+        self.assertEqual(response.status, RunStatus.FAILED)
+        self.assertFalse(response.diagnostics.succeeded)
+        self.assertEqual(response.artifacts.wdl, "")
+        self.assertIn("sample_groups", "\n".join(response.diagnostics.analysis_errors))
+
+
+class CatalogDtoTests(unittest.TestCase):
+    def test_recipe_list_response_accepts_catalog_service_records(self):
+        response = RecipeListResponse.model_validate({"recipes": list_recipes()})
+
+        self.assertGreaterEqual(len(response.recipes), 1)
+        recipe = response.recipes[0]
+        self.assertEqual(recipe.id, "rnaseq_differential_expression")
+        self.assertEqual(recipe.required_inputs["sample_ids"].type, "Array[String]")
+        self.assertEqual(recipe.steps[0].allowed_tools, ["fastp"])
+
+    def test_tool_list_response_accepts_catalog_service_records(self):
+        response = ToolListResponse.model_validate({"tools": list_tools()})
+
+        fastp = next(tool for tool in response.tools if tool.id == "fastp")
+        self.assertEqual(fastp.version, "0.23.2")
+        self.assertEqual(fastp.trust_status, "catalog-approved")
+        self.assertEqual(fastp.runtime.docker, "quay.io/biocontainers/fastp:0.23.2")
+        self.assertIn("clean_r1", fastp.outputs)
+
+
+class EventDtoTests(unittest.TestCase):
+    def test_run_event_defines_persistable_event_envelope(self):
+        event = RunEvent(
+            event_id="evt_001",
+            run_id="run_001",
+            sequence=1,
+            type=RunEventType.RUN_CREATED,
+            timestamp=datetime(2026, 6, 6, tzinfo=UTC),
+            summary="Run created.",
+        )
+
+        self.assertEqual(event.type, RunEventType.RUN_CREATED)
+        self.assertEqual(event.payload, {})
+
+    def test_run_event_requires_positive_sequence(self):
+        with self.assertRaisesRegex(ValidationError, "greater than or equal to 1"):
+            RunEvent(
+                event_id="evt_001",
+                run_id="run_001",
+                sequence=0,
+                type=RunEventType.RUN_CREATED,
+                timestamp=datetime(2026, 6, 6, tzinfo=UTC),
+                summary="Run created.",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
