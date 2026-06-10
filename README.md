@@ -116,6 +116,27 @@ uv run main.py \
   --output outputs/rnaseq_deg.wdl
 ```
 
+### 5. 启动 W1 FastAPI 开发服务
+
+如果本地同时运行 Cromwell server，建议保留 Cromwell 使用 `8000` 端口，本项目 FastAPI 开发服务使用 `8010` 端口，避免两个服务的 `/api/...` 路径互相混淆。
+
+```powershell
+.\.venv\Scripts\python.exe -m src.api.server
+```
+
+默认地址：
+
+```text
+http://127.0.0.1:8010/docs
+```
+
+如需临时覆盖端口：
+
+```powershell
+$env:AI_BIOWORKFLOW_API_PORT = "8020"
+.\.venv\Scripts\python.exe -m src.api.server
+```
+
 ## 📥 支持的输入格式
 
 面向用户的主要入口是自然语言。系统会先用 LLM Planner 将需求转成结构化 Recipe Tool Plan，然后交给确定性编译链路处理。

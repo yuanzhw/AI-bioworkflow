@@ -327,7 +327,85 @@ AI-bioworkflow/
 
 ### 后端 API 与事件契约
 
-API 第一版围绕“生成并查看一次可解释 workflow run”设计，不直接引入登录、多租户或正式执行集群：
+API 第一版围绕“生成并查看一次可解释 workflow run”设计，不直接引入登录、多租户或正式执行集群。
+
+当前 W1 已落地的是同步 FastAPI 基础接口：API 层接收请求、调用 W0 application service，并直接返回编译产物与诊断结果。W1 不保存 run，不分配持久化 `run_id`，也不提供 SSE 事件流；这些能力属于 W2 的 Run 事件与展示级持久化。
+
+本地开发端口约定：
+
+| 服务 | 地址 |
+| --- | --- |
+| Cromwell server | `http://127.0.0.1:8000` |
+| AI-bioworkflow FastAPI | `http://127.0.0.1:8010` |
+
+FastAPI 开发服务通过以下命令启动：
+
+```powershell
+.\.venv\Scripts\python.exe -m src.api.server
+```
+
+`src.api.server` 默认使用 `127.0.0.1:8010`，避免与 Cromwell 的 `8000` 端口冲突。需要临时覆盖时可设置 `AI_BIOWORKFLOW_API_HOST` 或 `AI_BIOWORKFLOW_API_PORT`。
+
+W1 当前接口：
+
+| Endpoint | 用途 | 主要返回 |
+| --- | --- | --- |
+| `POST /api/runs` | 从自然语言需求规划并编译 workflow | `status`、Plan、Workflow IR、WDL、diagnostics、planner observability |
+| `POST /api/compile` | 从 Recipe Tool Plan 或 Workflow IR 发起确定性编译 | `status`、Workflow IR、WDL、diagnostics |
+| `GET /api/recipes` | 查询支持的分析配方列表 | recipe 元数据、required inputs 与步骤 |
+| `GET /api/recipes/{recipe_id}` | 查询单个分析配方 | recipe 元数据、required inputs 与步骤 |
+| `GET /api/tools` | 查询批准的工具目录列表 | tool、版本、runtime、trust status |
+| `GET /api/tools/{tool_id}` | 查询单个工具，可通过 `version` query 指定版本 | tool、版本、runtime、trust status |
+
+#### W1 `POST /api/runs` 当前契约
+
+W1 中的 `/api/runs` 是同步自然语言规划与编译入口。它的语义是“立即规划并编译一次 workflow”，而不是“创建一个可持久化、可订阅的后台 run”。
+
+Request body：
+
+```json
+{
+  "request": "Run bulk RNA-seq differential expression.",
+  "planner_model": "deepseek-v4-pro",
+  "check": true
+}
+```
+
+字段说明：
+
+- `request`：必填自然语言需求，API 层会去除首尾空白；空字符串返回 422。
+- `planner_model`：可选 planner 模型名；未提供时使用后端默认 planner model。
+- `check`：是否执行 WDL syntax validation；默认为 `true`。
+
+成功或编译失败都会返回 HTTP 200，响应体使用 `CompilationResultResponse`：
+
+```json
+{
+  "status": "succeeded",
+  "artifacts": {
+    "plan": {},
+    "workflow_ir": {},
+    "wdl": "version 1.0\n..."
+  },
+  "diagnostics": {
+    "analysis_errors": [],
+    "analysis_warnings": [],
+    "repair_actions": [],
+    "validation_message": "WDL syntax validation skipped (--no-check).",
+    "is_valid": false,
+    "succeeded": true,
+    "check_performed": false
+  },
+  "planner_prompt": "...",
+  "planner_raw_response": "..."
+}
+```
+
+`status` 只表示编译结果，可为 `succeeded` 或 `failed`。当输入通过 API schema 校验但 planner/catalog/analyzer/checker 返回诊断失败时，HTTP status 仍为 200，失败信息放在 `diagnostics` 中。自然语言 planner 无法解析、schema 校验失败或 catalog 校验失败时，API 返回 HTTP 422，`detail` 为 planner 错误信息。
+
+W1 响应中不会返回 `run_id`、`events_url` 或持久化历史记录。前端在 W1 阶段应把 `/api/runs` 当作同步 RPC 使用；W2 再将它演进为创建 run、返回 `run_id` 与 SSE event URL 的异步入口。
+
+W2 目标接口：
 
 | Endpoint | 用途 | 主要返回 |
 | --- | --- | --- |
@@ -335,8 +413,6 @@ API 第一版围绕“生成并查看一次可解释 workflow run”设计，不
 | `POST /api/compile` | 从 Recipe Tool Plan 或 Workflow IR 发起确定性编译 | `run_id`、初始状态、事件流 URL |
 | `GET /api/runs/{run_id}` | 查询详情页所需的 run 快照 | 请求、状态、Plan、IR、WDL、诊断、修复记录 |
 | `GET /api/runs/{run_id}/events` | 订阅当前 run 的 SSE 事件 | 节点开始/完成/失败、产物更新、最终结果 |
-| `GET /api/recipes` | 查询支持的分析配方 | recipe 元数据与所需步骤 |
-| `GET /api/tools` | 查询批准的工具目录 | tool、版本、runtime 与可信状态 |
 
 事件建议采用可持久化的统一 envelope，便于 SSE 实时显示和历史页回放使用同一份数据：
 
