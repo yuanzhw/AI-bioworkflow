@@ -1,0 +1,126 @@
+name: Build containers
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/build-containers.yml"
+      - "containers/**"
+      - "scripts/build_container.py"
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: "Container tool name, or all"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - deseq2
+          - tximport
+          - multiqc
+      version:
+        description: "Tool version. Required unless tool=all."
+        required: false
+        default: ""
+        type: string
+      publish:
+        description: "Push images to GHCR after smoke tests"
+        required: true
+        default: false
+        type: boolean
+      platform:
+        description: "Docker build platform"
+        required: false
+        default: "linux/amd64"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate container build script
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Compile build script
+        run: python -m py_compile scripts/build_container.py
+
+      - name: Dry-run all container builds
+        run: python scripts/build_container.py --all --dry-run
+
+  build:
+    name: Build containers
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Validate inputs
+        env:
+          TOOL: ${{ inputs.tool }}
+          VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$TOOL" != "all" && -z "$VERSION" ]]; then
+            echo "::error::version is required when tool is not all"
+            exit 1
+          fi
+
+          if [[ "$PUBLISH" == "true" && "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::publish=true is only allowed from refs/heads/main"
+            exit 1
+          fi
+
+      - name: Log in to GHCR
+        if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build, smoke-test, and optionally push
+        env:
+          TOOL: ${{ inputs.tool }}
+          VERSION: ${{ inputs.version }}
+          PUBLISH: ${{ inputs.publish }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+
+          command=(python scripts/build_container.py)
+          if [[ "$TOOL" == "all" ]]; then
+            command+=(--all)
+          else
+            command+=("$TOOL" "$VERSION")
+          fi
+
+          if [[ -n "$PLATFORM" ]]; then
+            command+=(--platform "$PLATFORM")
+          fi
+
+          if [[ "$PUBLISH" == "true" ]]; then
+            command+=(--push)
+          fi
+
+          "${command[@]}"
