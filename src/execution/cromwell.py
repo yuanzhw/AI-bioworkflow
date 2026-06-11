@@ -213,16 +213,19 @@ class CromwellBackend:
                 return self._terminal_result(workflow_id, status)
 
             if self._monotonic() >= deadline:
-                metadata = self._fetch_metadata(workflow_id)
+                metadata, metadata_error = self._fetch_metadata(workflow_id)
+                message = (
+                    f"Cromwell workflow {workflow_id} timed out after "
+                    f"{self.timeout_seconds:g} seconds with last status {status}."
+                )
+                if metadata_error:
+                    message = _append_collection_issues(message, [metadata_error])
                 return ExecutionResult(
                     succeeded=False,
                     workflow_id=workflow_id,
                     status=status,
                     metadata=metadata,
-                    message=(
-                        f"Cromwell workflow {workflow_id} timed out after "
-                        f"{self.timeout_seconds:g} seconds with last status {status}."
-                    ),
+                    message=message,
                 )
 
             if self.poll_interval_seconds > 0:
@@ -230,34 +233,56 @@ class CromwellBackend:
                 self._sleep(min(self.poll_interval_seconds, remaining))
 
     def _terminal_result(self, workflow_id: str, status: str) -> ExecutionResult:
-        outputs = self._fetch_outputs(workflow_id)
-        metadata = self._fetch_metadata(workflow_id)
-        succeeded = status == "Succeeded"
+        outputs, outputs_error = self._fetch_outputs(workflow_id)
+        metadata, metadata_error = self._fetch_metadata(workflow_id)
+        collection_errors = [error for error in (outputs_error, metadata_error) if error]
+
+        if status == "Succeeded":
+            succeeded = outputs_error is None
+            if outputs_error:
+                message = (
+                    f"Cromwell workflow {workflow_id} finished with status Succeeded, "
+                    f"but output collection failed: {'; '.join(collection_errors)}"
+                )
+            elif metadata_error:
+                message = (
+                    f"Cromwell workflow {workflow_id} finished with status Succeeded, "
+                    f"but metadata collection failed: {metadata_error}"
+                )
+            else:
+                message = ""
+        else:
+            succeeded = False
+            message = _append_collection_issues(
+                _failure_message(workflow_id, status, metadata),
+                collection_errors,
+            )
+
         return ExecutionResult(
             succeeded=succeeded,
             workflow_id=workflow_id,
             status=status,
             outputs=outputs,
             metadata=metadata,
-            message="" if succeeded else _failure_message(workflow_id, status, metadata),
+            message=message,
         )
 
-    def _fetch_outputs(self, workflow_id: str) -> dict[str, Any]:
-        payload, _ = self._request_json(
+    def _fetch_outputs(self, workflow_id: str) -> tuple[dict[str, Any], str | None]:
+        payload, error = self._request_json(
             "GET",
             f"/api/workflows/v1/{workflow_id}/outputs",
             "Cromwell workflow outputs response",
         )
         outputs = payload.get("outputs")
-        return outputs if isinstance(outputs, dict) else payload
+        return outputs if isinstance(outputs, dict) else payload, error
 
-    def _fetch_metadata(self, workflow_id: str) -> dict[str, Any]:
-        payload, _ = self._request_json(
+    def _fetch_metadata(self, workflow_id: str) -> tuple[dict[str, Any], str | None]:
+        payload, error = self._request_json(
             "GET",
             f"/api/workflows/v1/{workflow_id}/metadata",
             "Cromwell workflow metadata response",
         )
-        return payload
+        return payload, error
 
     def _request_json(self, method: str, path: str, context: str) -> tuple[dict[str, Any], str | None]:
         try:
@@ -301,6 +326,12 @@ def _failure_message(workflow_id: str, status: str, metadata: Mapping[str, Any])
     if summary:
         return f"Cromwell workflow {workflow_id} finished with status {status}: {summary}"
     return f"Cromwell workflow {workflow_id} finished with status {status}."
+
+
+def _append_collection_issues(message: str, errors: Sequence[str]) -> str:
+    if not errors:
+        return message
+    return f"{message} Result collection issues: {'; '.join(errors)}"
 
 
 def _metadata_failure_summary(metadata: Mapping[str, Any]) -> str:

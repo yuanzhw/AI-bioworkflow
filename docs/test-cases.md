@@ -1943,6 +1943,33 @@ qc.html_report + qc.json_report
 
 - verbose 日志不会污染 stdout WDL 输出。
 
+## `tests/test_execution_backend.py`
+
+该文件验证执行后端协议、默认禁用行为和 factory 环境变量路由。
+
+覆盖点：
+
+- `ExecutionResult` 的 outputs 与 metadata 默认 dict 互不共享。
+- 未配置后端时返回 disabled backend。
+- `AI_BIOWORKFLOW_RUN_BACKEND=cromwell` 时 factory 返回 `CromwellBackend`，并读取 Cromwell URL、poll interval 和 timeout 配置。
+- `local-miniwdl` 后端仍保持未实现。
+
+## `tests/test_cromwell_backend.py`
+
+该文件验证 Cromwell server mode REST client 的 contract，不依赖真实 Cromwell、Docker 或生信输入文件。
+
+覆盖点：
+
+- `availability()` 调用 `/engine/v1/status`，并把连接失败、非 2xx 和无效 JSON 转成不可用原因。
+- `run()` 在 Cromwell 不可用时不提交 workflow。
+- workflow submit 使用 `/api/workflows/v1` 和 Cromwell 约定的 multipart 字段。
+- polling 能处理 `Submitted -> Running -> Succeeded`，并解析 outputs 与 metadata。
+- 刚提交后短暂出现 `Unrecognized workflow ID` 时继续轮询。
+- `Succeeded` 但 outputs 收集失败时返回失败结果并保留 metadata。
+- `Succeeded` 且 outputs 正常但 metadata 收集失败时保留成功结果，并在 message 中暴露 metadata 收集问题。
+- `Failed` / `Aborted` 返回失败结果；当 outputs 收集失败时，message 仍保留 metadata 中的 workflow failure 摘要，并追加收集阶段问题。
+- timeout 返回失败结果和清晰 message。
+
 ## `tests/test_tools.py`
 
 该文件验证 WDL validator wrapper。两个用例只有在 `wdl_validator_available()` 返回 true 时运行。
@@ -2141,6 +2168,7 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - FastAPI 开发服务器默认端口 `8010`，避免与 Cromwell server 的 `8000` 冲突。
 - CLI 的自然语言入口、结构化入口、文件输出、stdout/stderr 隔离和失败返回。
 - Planner 的 JSON 解析、prompt 构建、schema 错误和 catalog 错误归类。
+- Cromwell execution backend 的可用性检查、提交、轮询、结果收集错误语义和 factory 路由。
 - WDL validator wrapper 和可选 miniwdl tiny run。
 
 目前相对少覆盖或未覆盖的方向：

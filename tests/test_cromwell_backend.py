@@ -206,6 +206,56 @@ class CromwellBackendRunTests(unittest.TestCase):
         self.assertEqual(result.workflow_id, "wf-123")
         self.assertEqual(result.status, "Succeeded")
 
+    def test_succeeded_status_returns_failure_when_outputs_collection_fails(self):
+        session = FakeSession(
+            [
+                _json_response({"ok": True}),
+                _json_response({"id": "wf-123", "status": "Submitted"}),
+                _json_response({"id": "wf-123", "status": "Succeeded"}),
+                FakeResponse(status_code=503, text="outputs unavailable"),
+                _json_response({"id": "wf-123", "status": "Succeeded", "calls": {}}),
+            ]
+        )
+        backend = CromwellBackend(
+            base_url="http://cromwell.test",
+            poll_interval_seconds=0,
+            session=session,
+        )
+        wdl_path, inputs_path = self._workflow_files()
+
+        result = backend.run(wdl_path, inputs_path)
+
+        self.assertFalse(result.succeeded)
+        self.assertEqual(result.status, "Succeeded")
+        self.assertIn("output collection failed", result.message)
+        self.assertIn("HTTP 503", result.message)
+        self.assertEqual(result.metadata["status"], "Succeeded")
+
+    def test_succeeded_status_keeps_success_when_only_metadata_collection_fails(self):
+        session = FakeSession(
+            [
+                _json_response({"ok": True}),
+                _json_response({"id": "wf-123", "status": "Submitted"}),
+                _json_response({"id": "wf-123", "status": "Succeeded"}),
+                _json_response({"outputs": {"RNASeqDEG.deg_table": "/cromwell/deg.tsv"}}),
+                FakeResponse(status_code=503, text="metadata unavailable"),
+            ]
+        )
+        backend = CromwellBackend(
+            base_url="http://cromwell.test",
+            poll_interval_seconds=0,
+            session=session,
+        )
+        wdl_path, inputs_path = self._workflow_files()
+
+        result = backend.run(wdl_path, inputs_path)
+
+        self.assertTrue(result.succeeded, result.message)
+        self.assertEqual(result.outputs["RNASeqDEG.deg_table"], "/cromwell/deg.tsv")
+        self.assertEqual(result.metadata, {})
+        self.assertIn("metadata collection failed", result.message)
+        self.assertIn("HTTP 503", result.message)
+
     def test_failed_status_returns_failed_result_with_metadata_summary(self):
         session = FakeSession(
             [
@@ -235,6 +285,36 @@ class CromwellBackendRunTests(unittest.TestCase):
         self.assertEqual(result.status, "Failed")
         self.assertIn("task crashed", result.message)
         self.assertEqual(result.metadata["failures"][0]["message"], "task crashed")
+
+    def test_failed_status_preserves_failure_summary_when_outputs_collection_fails(self):
+        session = FakeSession(
+            [
+                _json_response({"ok": True}),
+                _json_response({"id": "wf-123", "status": "Submitted"}),
+                _json_response({"id": "wf-123", "status": "Failed"}),
+                FakeResponse(status_code=503, text="outputs unavailable"),
+                _json_response(
+                    {
+                        "id": "wf-123",
+                        "status": "Failed",
+                        "failures": [{"message": "task crashed"}],
+                    }
+                ),
+            ]
+        )
+        backend = CromwellBackend(
+            base_url="http://cromwell.test",
+            poll_interval_seconds=0,
+            session=session,
+        )
+        wdl_path, inputs_path = self._workflow_files()
+
+        result = backend.run(wdl_path, inputs_path)
+
+        self.assertFalse(result.succeeded)
+        self.assertIn("task crashed", result.message)
+        self.assertIn("Result collection issues", result.message)
+        self.assertIn("HTTP 503", result.message)
 
     def test_aborted_status_returns_failed_result(self):
         session = FakeSession(
