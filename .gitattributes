@@ -11,6 +11,7 @@
 *.sh text eol=lf
 *.R text eol=lf
 Dockerfile text eol=lf
+image_revision.txt text eol=lf
 
 *.png binary
 *.jpg binary

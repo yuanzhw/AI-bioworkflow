@@ -269,7 +269,7 @@ Runtime 定义当前包含：
 
 ```json
 {
-  "docker": "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1",
+  "docker": "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2",
   "cpu": 4,
   "memory": "16G",
   "disks": "local-disk 50 HDD"
@@ -283,7 +283,7 @@ WDL 后端会渲染为：
 ```wdl
 runtime {
   cpu: 4
-  docker: "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1"
+  docker: "ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2"
   memory: "16G"
 }
 ```
@@ -769,7 +769,7 @@ task multiqc_report {
 
   runtime {
     cpu: 2
-    docker: "ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21"
+    docker: "ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1"
     memory: "4G"
   }
 }

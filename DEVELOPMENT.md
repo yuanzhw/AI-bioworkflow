@@ -141,6 +141,7 @@ analyzer_node    # 修复后重新分析、渲染、校验
 
 - [x] **Catalog 镜像权威来源**：正式工具条目显式声明 `runtime.docker`，编译链路不搜索、不猜测、不联网补全镜像。
 - [x] **自建工具镜像管理规范初版**：对于需要项目维护脚本的工具，在 `containers/<tool>/<version>/` 管理 Dockerfile、脚本和 smoke test；构建完成后将最终镜像引用写入 Tool Catalog。
+- [x] **镜像修订版 tag**：项目维护镜像使用 `<software-version>-rN` tag，例如 `deseq2:1.42.1-r2`。目录版本和 Tool Catalog `version` 字段表示上游软件版本；`image_revision.txt` 表示项目镜像修订号。
 - [x] **当前辅助工具镜像**：tximport、DESeq2 与 MultiQC 已具备项目内构建定义，作为 RNA-seq DEG 可执行流程的依赖。
 
 ## 未来架构原则（规划中）
@@ -544,7 +545,14 @@ Candidate ToolSpec 至少记录：
 | `experimental` | 首次自动构建或验证覆盖有限 | 当前探索任务，需提示风险 |
 | `rejected` | 构建、测试或策略检查失败 | 不可运行 |
 
-正式 Catalog 中的镜像引用目标形式为：
+正式 Catalog 中的镜像引用先使用经过 smoke test 的修订版 tag，例如：
+
+```yaml
+runtime:
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
+```
+
+当镜像完成发布后审计和 digest 固定，最终目标形式为：
 
 ```yaml
 runtime:

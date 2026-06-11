@@ -32,6 +32,6 @@ command_template: |
   --output gene_counts.tsv
 
 runtime:
-  docker: ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0-r1
   cpu: 2
   memory: 8G

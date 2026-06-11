@@ -457,9 +457,9 @@ uv run python -m unittest tests.e2e.test_tiny_run -v
 ```text
 quay.io/biocontainers/fastp:1.3.3--h43da1c4_0
 quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0
-ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0
-ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1
-ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
+ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0-r1
+ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
+ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1
 ```
 
 - 手动确认 `GET /engine/v1/status` 可用。

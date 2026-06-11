@@ -28,16 +28,17 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 
 - `tests/test_tools.py`：没有 WOMtool 或 miniwdl 时跳过 WDL validator 测试。
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
+- `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
 当前 W1 API 基础阶段改动后的最近一次完整验证结果：
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 80 tests
-OK (skipped=1)
+Ran 111 tests
+OK (skipped=2)
 ```
 
-跳过项为 `tests/test_tiny_run.py` 中依赖 miniwdl 真实执行环境的 tiny run。
+跳过项为依赖真实执行环境的 tiny run，包括 Cromwell e2e 开关和本地 miniwdl 环境。
 
 ## 公共测试输入
 
@@ -2005,9 +2006,9 @@ workflow Bad {
 - 下列镜像已经存在于本地：
   - `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
   - `quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0-r1`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1`
 - `examples/tiny/rnaseq_deg.inputs.json` 存在。
 
 输入：
@@ -2038,6 +2039,90 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 
 - 从 Recipe Tool Plan 到实际 miniwdl 执行的完整路径。
 - 依赖真实本地容器镜像和 tiny 数据，因此默认开发环境中可能跳过。
+
+## `tests/test_container_build.py`
+
+该文件验证项目维护容器的构建脚本 contract，不实际调用 Docker。
+
+### `test_select_spec_uses_image_revision_in_tag`
+
+输入：
+
+- 临时 `containers/deseq2/1.42.1/` 目录。
+- `Dockerfile`
+- `smoke_test.sh`
+- `image_revision.txt` 内容为 `r2`。
+
+执行：
+
+- 调用 `select_specs(...)` 读取单个 container spec。
+- 调用 `spec.image("ghcr.io/example/project")`。
+
+期望输出：
+
+- `spec.image_revision == "r2"`。
+- `spec.image_tag == "1.42.1-r2"`。
+- 镜像名为 `ghcr.io/example/project/deseq2:1.42.1-r2`。
+
+覆盖点：
+
+- 上游软件版本与项目镜像修订版分离。
+- 构建脚本生成 `<software-version>-<image-revision>` tag。
+
+### `test_discover_specs_requires_image_revision_file`
+
+输入：
+
+- 临时 container 目录包含 `Dockerfile` 和 `smoke_test.sh`，但缺少 `image_revision.txt`。
+
+执行：
+
+- 调用 `discover_specs(...)`。
+
+期望输出：
+
+- 抛出 `SystemExit`，错误信息包含 `image_revision.txt`。
+
+覆盖点：
+
+- 每个项目维护容器必须显式声明镜像修订号。
+
+### `test_discover_specs_rejects_invalid_image_revision`
+
+输入：
+
+- 临时 container 目录的 `image_revision.txt` 内容为 `latest`。
+
+执行：
+
+- 调用 `discover_specs(...)`。
+
+期望输出：
+
+- 抛出 `SystemExit`。
+- 错误信息说明修订号必须类似 `r1`。
+
+覆盖点：
+
+- 禁止使用 `latest` 或其他不可审计的修订号格式。
+
+### `test_discover_specs_ignores_directories_without_dockerfile`
+
+输入：
+
+- 临时目录 `containers/notes/draft/`，其中没有 `Dockerfile`。
+
+执行：
+
+- 调用 `discover_specs(...)`。
+
+期望输出：
+
+- 返回空列表。
+
+覆盖点：
+
+- `--all` 只发现实际容器目录，非容器草稿目录不会被强制要求声明镜像修订号。
 
 ## 当前测试覆盖边界
 

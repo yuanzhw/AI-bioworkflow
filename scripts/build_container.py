@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -11,12 +12,15 @@ from pathlib import Path
 
 
 DEFAULT_IMAGE_PREFIX = "ghcr.io/yuanzhw/ai-bioworkflow"
+IMAGE_REVISION_FILE = "image_revision.txt"
+IMAGE_REVISION_PATTERN = re.compile(r"r[1-9][0-9]*")
 
 
 @dataclass(frozen=True)
 class ContainerSpec:
     tool: str
     version: str
+    image_revision: str
     context_dir: Path
 
     @property
@@ -27,8 +31,12 @@ class ContainerSpec:
     def smoke_test(self) -> Path:
         return self.context_dir / "smoke_test.sh"
 
+    @property
+    def image_tag(self) -> str:
+        return f"{self.version}-{self.image_revision}"
+
     def image(self, image_prefix: str) -> str:
-        return f"{image_prefix.rstrip('/')}/{self.tool}:{self.version}"
+        return f"{image_prefix.rstrip('/')}/{self.tool}:{self.image_tag}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,10 +64,13 @@ def main(argv: list[str] | None = None) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build, smoke-test, and optionally push containers under containers/<tool>/<version>.",
+        description=(
+            "Build, smoke-test, and optionally push containers under containers/<tool>/<version>. "
+            f"Image tags use <version>-<revision>, where revision is read from {IMAGE_REVISION_FILE}."
+        ),
     )
     parser.add_argument("tool", nargs="?", help="Tool name, for example tximport.")
-    parser.add_argument("version", nargs="?", help="Tool version, for example 1.30.0.")
+    parser.add_argument("version", nargs="?", help="Tool software version, for example 1.30.0.")
     parser.add_argument(
         "--all",
         action="store_true",
@@ -122,6 +133,7 @@ def select_specs(
     spec = ContainerSpec(
         tool=tool,
         version=version,
+        image_revision=read_image_revision(containers_root / tool / version),
         context_dir=containers_root / tool / version,
     )
     validate_spec(spec)
@@ -132,14 +144,16 @@ def discover_specs(containers_root: Path) -> list[ContainerSpec]:
     specs: list[ContainerSpec] = []
     for tool_dir in sorted(path for path in containers_root.iterdir() if path.is_dir()):
         for version_dir in sorted(path for path in tool_dir.iterdir() if path.is_dir()):
+            if not (version_dir / "Dockerfile").exists():
+                continue
             spec = ContainerSpec(
                 tool=tool_dir.name,
                 version=version_dir.name,
+                image_revision=read_image_revision(version_dir),
                 context_dir=version_dir,
             )
-            if spec.dockerfile.exists():
-                validate_spec(spec)
-                specs.append(spec)
+            validate_spec(spec)
+            specs.append(spec)
     return specs
 
 
@@ -150,6 +164,19 @@ def validate_spec(spec: ContainerSpec) -> None:
         raise SystemExit(f"Dockerfile not found: {spec.dockerfile}")
     if not spec.smoke_test.exists():
         raise SystemExit(f"smoke_test.sh not found: {spec.smoke_test}")
+    if not IMAGE_REVISION_PATTERN.fullmatch(spec.image_revision):
+        raise SystemExit(
+            f"{IMAGE_REVISION_FILE} for {spec.tool}@{spec.version} must contain a value like r1, r2, ..."
+        )
+
+
+def read_image_revision(context_dir: Path) -> str:
+    if not context_dir.exists():
+        raise SystemExit(f"Container directory not found: {context_dir}")
+    revision_path = context_dir / IMAGE_REVISION_FILE
+    if not revision_path.exists():
+        raise SystemExit(f"{IMAGE_REVISION_FILE} not found: {revision_path}")
+    return revision_path.read_text(encoding="utf-8").strip()
 
 
 def build_image(spec: ContainerSpec, image: str, args: argparse.Namespace) -> None:
