@@ -16,6 +16,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -41,6 +42,7 @@ requires-dist = [
     { name = "miniwdl", marker = "extra == 'miniwdl'", specifier = ">=1.14.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.32.0" },
 ]
 provides-extras = ["miniwdl"]
 

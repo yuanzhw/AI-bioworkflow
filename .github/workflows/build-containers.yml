@@ -19,7 +19,7 @@ on:
           - tximport
           - multiqc
       version:
-        description: "Tool version. Required unless tool=all."
+        description: "Tool software version. The image revision is read from containers/<tool>/<version>/image_revision.txt."
         required: false
         default: ""
         type: string

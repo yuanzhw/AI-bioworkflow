@@ -51,7 +51,26 @@ dds <- DESeqDataSetFromMatrix(
   colData = sample_groups,
   design = as.formula(paste("~", contrast_column))
 )
-dds <- DESeq(dds, quiet = TRUE)
+
+run_deseq <- function(dds) {
+  tryCatch(
+    DESeq(dds, quiet = TRUE),
+    error = function(err) {
+      message_text <- conditionMessage(err)
+      if (!grepl("all gene-wise dispersion estimates are within 2 orders of magnitude", message_text, fixed = TRUE)) {
+        stop(err)
+      }
+
+      message("DESeq dispersion fit failed for this small dataset; using gene-wise dispersion estimates.")
+      dds <- estimateSizeFactors(dds)
+      dds <- estimateDispersionsGeneEst(dds, quiet = TRUE)
+      dispersions(dds) <- mcols(dds)$dispGeneEst
+      nbinomWaldTest(dds, quiet = TRUE)
+    }
+  )
+}
+
+dds <- run_deseq(dds)
 groups <- levels(sample_groups[[contrast_column]])
 res <- results(dds, contrast = c(contrast_column, groups[[2]], groups[[1]]))
 res_df <- as.data.frame(res)
