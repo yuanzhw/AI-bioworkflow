@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import time
-from typing import Iterator
+import asyncio
+from collections.abc import AsyncIterator
 from uuid import uuid4
 
 from src.api.models import (
@@ -180,25 +180,28 @@ class RunService:
         run_id: str,
         after_sequence: int = 0,
         poll_interval: float = DEFAULT_SSE_POLL_INTERVAL_SECONDS,
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         if self.repository.get_run(run_id) is None:
             raise KeyError(f"unknown run: {run_id}")
 
-        sequence = after_sequence
-        while True:
-            events = self.repository.list_events(run_id, after_sequence=sequence)
-            for event in events:
-                sequence = event.sequence
-                yield _format_sse_event(event)
-                if event.type == RunEventType.RUN_COMPLETED:
-                    return
+        async def event_stream() -> AsyncIterator[str]:
+            sequence = after_sequence
+            while True:
+                events = self.repository.list_events(run_id, after_sequence=sequence)
+                for event in events:
+                    sequence = event.sequence
+                    yield _format_sse_event(event)
+                    if event.type == RunEventType.RUN_COMPLETED:
+                        return
 
-            run = self.repository.get_run(run_id)
-            if run is None:
-                return
-            if run.status in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
-                return
-            time.sleep(poll_interval)
+                run = self.repository.get_run(run_id)
+                if run is None:
+                    return
+                if run.status in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
+                    return
+                await asyncio.sleep(poll_interval)
+
+        return event_stream()
 
     def _complete_run(
         self,
@@ -308,7 +311,7 @@ def get_events(run_id: str, after_sequence: int = 0) -> list[RunEvent] | None:
     return get_default_run_service().get_events(run_id, after_sequence=after_sequence)
 
 
-def iter_sse_events(run_id: str, after_sequence: int = 0) -> Iterator[str]:
+def iter_sse_events(run_id: str, after_sequence: int = 0) -> AsyncIterator[str]:
     return get_default_run_service().iter_sse_events(run_id, after_sequence=after_sequence)
 
 

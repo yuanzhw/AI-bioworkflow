@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 import unittest
@@ -118,10 +119,17 @@ class RunServiceTests(unittest.TestCase):
             accepted = service.create_structured_compile_run(request)
             service.execute_structured_compile_run(accepted.run_id, request)
 
-            stream = "".join(service.iter_sse_events(accepted.run_id))
+            stream = asyncio.run(_collect_async(service.iter_sse_events(accepted.run_id)))
 
             self.assertIn("event: run.created", stream)
             self.assertIn("event: run.completed", stream)
+
+
+async def _collect_async(stream):
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+    return "".join(chunks)
 
 
 if __name__ == "__main__":
