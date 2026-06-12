@@ -226,8 +226,8 @@ class RunService:
                 workflow_ir=result.workflow_ir,
                 wdl=result.wdl,
             ),
-            planner_prompt=planner_prompt or result.planner_prompt,
-            planner_raw_response=planner_raw_response or result.planner_raw_response,
+            planner_prompt=planner_prompt if planner_prompt is not None else result.planner_prompt,
+            planner_raw_response=planner_raw_response if planner_raw_response is not None else result.planner_raw_response,
         )
         self.repository.save_diagnostics(
             run_id,

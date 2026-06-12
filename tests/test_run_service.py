@@ -151,6 +151,36 @@ class RunServiceTests(unittest.TestCase):
             self.assertEqual(snapshot.artifacts.plan, plan)
             self.assertIn("workflow RNASeqDEG", snapshot.artifacts.wdl)
 
+    def test_natural_language_run_preserves_empty_planner_observability_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            plan = load_example("rnaseq_deg_recipe_plan.json")
+            request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
+            plan_result = SimpleNamespace(
+                plan=plan,
+                planner_prompt="",
+                raw_response="",
+            )
+
+            with patch("src.services.run_service.create_natural_language_plan", return_value=plan_result):
+                accepted = service.create_natural_language_run(request)
+                service.execute_natural_language_run(accepted.run_id, request)
+
+            with service.repository._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT planner_prompt, planner_raw_response
+                    FROM run_artifacts
+                    WHERE run_id = ?
+                    """,
+                    (accepted.run_id,),
+                ).fetchone()
+
+            self.assertIsNotNone(row)
+            assert row is not None
+            self.assertEqual(row["planner_prompt"], "")
+            self.assertEqual(row["planner_raw_response"], "")
+
     def test_natural_language_compile_exception_preserves_planner_artifacts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
