@@ -71,6 +71,35 @@ class RunRepositoryTests(unittest.TestCase):
 
             self.assertIsNone(repository.get_snapshot("missing"))
 
+    def test_partial_artifact_updates_preserve_existing_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="natural_language",
+                request="Run demo.",
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+            repository.save_artifacts(
+                "run_001",
+                WorkflowArtifacts(
+                    plan={"workflow": {"recipe": "demo"}},
+                    workflow_ir={"workflow": {"name": "OldDemo"}},
+                    wdl="version 1.0\nworkflow OldDemo {}",
+                ),
+            )
+
+            repository.save_workflow_ir_artifact("run_001", {"workflow": {"name": "Demo"}})
+            repository.save_wdl_artifact("run_001", "version 1.0\nworkflow Demo {}")
+
+            snapshot = repository.get_snapshot("run_001")
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
+            self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
+            self.assertIn("workflow Demo", snapshot.artifacts.wdl)
+
     def test_complete_run_persists_terminal_event_and_status_together(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")

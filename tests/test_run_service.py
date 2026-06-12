@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from src.api.models import CompileWorkflowRequest, NaturalLanguageRunRequest, RunEventType, RunStatus
+from src.api.models import CompileWorkflowRequest, NaturalLanguageRunRequest, RunEventType, RunStatus, WorkflowArtifacts
 from src.nl_planner import NaturalLanguagePlanningError
 from src.services.run_repository import RunRepository
 from src.services.run_service import RunService
@@ -189,10 +189,61 @@ class RunServiceTests(unittest.TestCase):
             accepted = service.create_structured_compile_run(request)
             service.execute_structured_compile_run(accepted.run_id, request)
 
-            stream = asyncio.run(_collect_async(service.iter_sse_events(accepted.run_id)))
+            to_thread_calls = []
+
+            async def fake_to_thread(func, /, *args, **kwargs):
+                to_thread_calls.append(func.__name__)
+                return func(*args, **kwargs)
+
+            with patch("src.services.run_service.asyncio.to_thread", side_effect=fake_to_thread):
+                stream = asyncio.run(_collect_async(service.iter_sse_events(accepted.run_id)))
 
             self.assertIn("event: run.created", stream)
             self.assertIn("event: run.completed", stream)
+            self.assertIn("list_events", to_thread_calls)
+
+    def test_compiler_artifact_update_persists_snapshot_before_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            request = CompileWorkflowRequest(
+                payload=load_example("rnaseq_deg_recipe_plan.json"),
+                check=False,
+            )
+            accepted = service.create_structured_compile_run(request)
+            service.repository.save_artifacts(
+                accepted.run_id,
+                WorkflowArtifacts(plan={"workflow": {"recipe": "demo"}}),
+            )
+
+            callback = service._compiler_event_callback(accepted.run_id)
+            workflow_ir = {"workflow": {"name": "Demo"}}
+            callback(
+                RunEventType.ARTIFACT_UPDATED.value,
+                "ir_normalizer",
+                "Workflow IR artifact updated.",
+                {"workflow_ir": workflow_ir, "current_wdl": ""},
+                {"artifact": "workflow_ir"},
+            )
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
+            self.assertEqual(snapshot.artifacts.workflow_ir, workflow_ir)
+
+            callback(
+                RunEventType.ARTIFACT_UPDATED.value,
+                "renderer",
+                "WDL artifact updated.",
+                {"workflow_ir": workflow_ir, "current_wdl": "version 1.0\nworkflow Demo {}"},
+                {"artifact": "wdl"},
+            )
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
+            self.assertIn("workflow Demo", snapshot.artifacts.wdl)
 
 
 async def _collect_async(stream):

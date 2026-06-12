@@ -189,14 +189,14 @@ class RunService:
         async def event_stream() -> AsyncIterator[str]:
             sequence = after_sequence
             while True:
-                events = self.repository.list_events(run_id, after_sequence=sequence)
+                events = await asyncio.to_thread(self.repository.list_events, run_id, sequence)
                 for event in events:
                     sequence = event.sequence
                     yield _format_sse_event(event)
                     if event.type == RunEventType.RUN_COMPLETED:
                         return
 
-                run = self.repository.get_run(run_id)
+                run = await asyncio.to_thread(self.repository.get_run, run_id)
                 if run is None:
                     return
                 if run.status in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
@@ -270,7 +270,8 @@ class RunService:
         )
 
     def _compiler_event_callback(self, run_id: str):
-        def callback(event_type: str, node: str | None, summary: str, _state, payload):
+        def callback(event_type: str, node: str | None, summary: str, state, payload):
+            self._persist_updated_artifact(run_id, event_type, state, payload)
             self.repository.append_event(
                 run_id=run_id,
                 event_type=RunEventType(event_type),
@@ -280,6 +281,18 @@ class RunService:
             )
 
         return callback
+
+    def _persist_updated_artifact(self, run_id: str, event_type: str, state, payload) -> None:
+        if event_type != RunEventType.ARTIFACT_UPDATED.value or not isinstance(payload, dict):
+            return
+        if not isinstance(state, dict):
+            return
+
+        artifact = payload.get("artifact")
+        if artifact == "workflow_ir":
+            self.repository.save_workflow_ir_artifact(run_id, state.get("workflow_ir") or {})
+        elif artifact == "wdl":
+            self.repository.save_wdl_artifact(run_id, state.get("current_wdl") or "")
 
 
 _default_run_service: RunService | None = None

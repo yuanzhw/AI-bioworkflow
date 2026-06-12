@@ -215,6 +215,36 @@ class RunRepository:
                 ),
             )
 
+    def save_workflow_ir_artifact(self, run_id: str, workflow_ir: dict[str, Any]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_artifacts (
+                    run_id, plan_json, workflow_ir_json, wdl,
+                    planner_prompt, planner_raw_response
+                )
+                VALUES (?, NULL, ?, '', NULL, NULL)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    workflow_ir_json = excluded.workflow_ir_json
+                """,
+                (run_id, _to_json(workflow_ir)),
+            )
+
+    def save_wdl_artifact(self, run_id: str, wdl: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_artifacts (
+                    run_id, plan_json, workflow_ir_json, wdl,
+                    planner_prompt, planner_raw_response
+                )
+                VALUES (?, NULL, '{}', ?, NULL, NULL)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    wdl = excluded.wdl
+                """,
+                (run_id, wdl),
+            )
+
     def save_diagnostics(self, run_id: str, diagnostics: DiagnosticReport) -> None:
         with self._connect() as connection:
             connection.execute(
