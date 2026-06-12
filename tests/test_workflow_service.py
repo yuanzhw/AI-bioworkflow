@@ -237,6 +237,80 @@ class WorkflowServiceTests(unittest.TestCase):
             ["qc", "align"],
         )
 
+    def test_compile_structured_workflow_check_true_event_callback_runs_validation_repair_loop(self):
+        events = []
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "summary": summary,
+                    "payload": payload or {},
+                }
+            )
+
+        def repairer_update(state):
+            return {
+                "workflow_ir": state["workflow_ir"],
+                "analysis_errors": [],
+                "analysis_warnings": [],
+                "current_wdl": "",
+                "is_valid": False,
+                "repair_actions": ["Repaired WDL validation issue."],
+                "repair_count": 1,
+                "messages": [],
+            }
+
+        with (
+            patch(
+                "src.services.workflow_service.checker_node",
+                side_effect=[
+                    {"is_valid": False, "validation_message": "invalid WDL", "error_count": 1},
+                    {"is_valid": True, "validation_message": "valid WDL", "error_count": 1},
+                ],
+            ) as checker,
+            patch(
+                "src.services.workflow_service.repairer_node",
+                side_effect=repairer_update,
+            ) as repairer,
+            patch(
+                "src.services.workflow_service.agent.invoke",
+                side_effect=AssertionError("event callbacks should use the manual compiler path"),
+            ) as graph,
+        ):
+            result = compile_structured_workflow(
+                load_example("rnaseq_workflow_ir.json"),
+                check=True,
+                event_callback=event_callback,
+            )
+
+        self.assertTrue(result.succeeded, result.validation_message)
+        self.assertTrue(result.check_performed)
+        self.assertTrue(result.is_valid)
+        self.assertEqual(result.validation_message, "valid WDL")
+        self.assertEqual(result.repair_actions, ["Repaired WDL validation issue."])
+        self.assertEqual(checker.call_count, 2)
+        repairer.assert_called_once()
+        graph.assert_not_called()
+
+        event_types = [event["type"] for event in events]
+        self.assertEqual(event_types.count("validation.completed"), 2)
+        self.assertIn("repair.applied", event_types)
+        validation_indexes = [
+            index for index, event_type in enumerate(event_types) if event_type == "validation.completed"
+        ]
+        repair_index = event_types.index("repair.applied")
+        self.assertLess(validation_indexes[0], repair_index)
+        self.assertGreater(validation_indexes[1], repair_index)
+        validation_events = [
+            event for event in events if event["type"] == "validation.completed"
+        ]
+        self.assertFalse(validation_events[0]["payload"]["is_valid"])
+        self.assertTrue(validation_events[0]["payload"]["check_performed"])
+        self.assertTrue(validation_events[1]["payload"]["is_valid"])
+        self.assertTrue(validation_events[1]["payload"]["check_performed"])
+
     def test_plan_and_compile_workflow_plans_then_compiles(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")
         fake_llm = FakePlannerLlm(json.dumps(plan))

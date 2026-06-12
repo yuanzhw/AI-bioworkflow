@@ -47,6 +47,39 @@ class RunServiceTests(unittest.TestCase):
             self.assertIn(RunEventType.ARTIFACT_UPDATED, event_types)
             self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
 
+    def test_structured_compile_run_default_check_records_validation_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            request = CompileWorkflowRequest(payload=load_example("rnaseq_deg_recipe_plan.json"))
+
+            with patch(
+                "src.services.workflow_service.checker_node",
+                return_value={"is_valid": True, "validation_message": "valid WDL", "error_count": 0},
+            ):
+                accepted = service.create_structured_compile_run(request)
+                service.execute_structured_compile_run(accepted.run_id, request)
+
+            self.assertTrue(request.check)
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.status, RunStatus.SUCCEEDED)
+            self.assertTrue(snapshot.diagnostics.check_performed)
+            self.assertTrue(snapshot.diagnostics.is_valid)
+            self.assertTrue(snapshot.diagnostics.succeeded)
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            validation_events = [
+                event for event in events if event.type == RunEventType.VALIDATION_COMPLETED
+            ]
+            self.assertEqual(len(validation_events), 1)
+            self.assertEqual(validation_events[0].node, "checker")
+            self.assertEqual(validation_events[0].payload["check_performed"], True)
+            self.assertEqual(validation_events[0].payload["is_valid"], True)
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+
     def test_structured_compile_run_failure_is_persisted_as_failed_run(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
