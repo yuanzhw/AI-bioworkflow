@@ -256,6 +256,7 @@ def _analyze_with_repair(
                 state,
             )
             return
+        _emit_workflow_ir_artifact_updated(event_callback, state)
         _emit_compiler_event(
             event_callback,
             "repair.applied",
@@ -300,6 +301,7 @@ def _validate_with_repair(
                 state,
             )
             return
+        _emit_workflow_ir_artifact_updated(event_callback, state)
         _emit_compiler_event(
             event_callback,
             "repair.applied",
@@ -343,6 +345,20 @@ def _emit_compiler_event(
 ) -> None:
     if event_callback is not None:
         event_callback(event_type, node, summary, state, payload)
+
+
+def _emit_workflow_ir_artifact_updated(
+    event_callback: CompilerEventCallback | None,
+    state: WorkflowState,
+) -> None:
+    _emit_compiler_event(
+        event_callback,
+        "artifact.updated",
+        "repairer",
+        "Workflow IR artifact updated.",
+        state,
+        {"artifact": "workflow_ir"},
+    )
 
 
 def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:

@@ -4,7 +4,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from src.services.workflow_service import compile_structured_workflow, plan_and_compile_workflow
+from src.services.workflow_service import (
+    _validate_with_repair,
+    build_initial_state,
+    compile_structured_workflow,
+    plan_and_compile_workflow,
+)
 
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
@@ -22,6 +27,80 @@ class FakePlannerLlm:
 
 def load_example(name: str) -> dict:
     return json.loads((EXAMPLES_DIR / name).read_text(encoding="utf-8"))
+
+
+def repairable_forward_reference_ir() -> dict:
+    return {
+        "workflow": {
+            "name": "RepairableWorkflow",
+            "inputs": {
+                "raw_r1": "File",
+                "raw_r2": "File",
+                "reference": "File",
+            },
+            "calls": [
+                {
+                    "id": "align",
+                    "task": "bwa_mem",
+                    "inputs": {
+                        "r1": "qc.clean_r1",
+                        "r2": "qc.clean_r2",
+                        "ref": "reference",
+                    },
+                },
+                {
+                    "id": "qc",
+                    "task": "fastp",
+                    "inputs": {
+                        "r1": "raw_r1",
+                        "r2": "raw_r2",
+                    },
+                },
+            ],
+            "outputs": {
+                "bam": "align.bam",
+            },
+        },
+        "tasks": {
+            "fastp": {
+                "inputs": {
+                    "r1": "File",
+                    "r2": "File",
+                },
+                "command": "fastp -i ~{r1} -I ~{r2} -o clean_R1.fq.gz -O clean_R2.fq.gz",
+                "outputs": {
+                    "clean_r1": {
+                        "type": "File",
+                        "value": '"clean_R1.fq.gz"',
+                    },
+                    "clean_r2": {
+                        "type": "File",
+                        "value": '"clean_R2.fq.gz"',
+                    },
+                },
+                "runtime": {
+                    "docker": "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
+                },
+            },
+            "bwa_mem": {
+                "inputs": {
+                    "r1": "File",
+                    "r2": "File",
+                    "ref": "File",
+                },
+                "command": "bwa mem ~{ref} ~{r1} ~{r2} > aligned.sam",
+                "outputs": {
+                    "bam": {
+                        "type": "File",
+                        "value": '"aligned.sam"',
+                    },
+                },
+                "runtime": {
+                    "docker": "quay.io/biocontainers/bwa:0.7.17--hed695b0_7",
+                },
+            },
+        },
+    }
 
 
 class WorkflowServiceTests(unittest.TestCase):
@@ -69,6 +148,94 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertFalse(result.succeeded)
         self.assertEqual(result.wdl, "")
         self.assertIn("missing required workflow input 'sample_groups'", "\n".join(result.analysis_errors))
+
+    def test_analyzer_repair_emits_workflow_ir_artifact_update_before_repair_event(self):
+        events = []
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "summary": summary,
+                    "workflow_ir": state["workflow_ir"],
+                    "payload": payload or {},
+                }
+            )
+
+        result = compile_structured_workflow(
+            repairable_forward_reference_ir(),
+            check=False,
+            event_callback=event_callback,
+        )
+
+        self.assertTrue(result.succeeded, result.analysis_errors)
+        event_types = [event["type"] for event in events]
+        artifact_index = event_types.index("artifact.updated", event_types.index("repair.applied") - 1)
+        repair_index = event_types.index("repair.applied")
+        self.assertLess(artifact_index, repair_index)
+        self.assertEqual(events[artifact_index]["node"], "repairer")
+        self.assertEqual(events[artifact_index]["payload"], {"artifact": "workflow_ir"})
+        self.assertEqual(
+            [call["id"] for call in events[artifact_index]["workflow_ir"]["workflow"]["calls"]],
+            ["qc", "align"],
+        )
+
+    def test_validation_repair_emits_workflow_ir_artifact_update_before_repair_event(self):
+        events = []
+        state = build_initial_state(repairable_forward_reference_ir())
+        state["workflow_ir"] = repairable_forward_reference_ir()
+        state["current_wdl"] = "broken wdl"
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "summary": summary,
+                    "workflow_ir": state["workflow_ir"],
+                    "payload": payload or {},
+                }
+            )
+
+        repaired_ir = repairable_forward_reference_ir()
+        repaired_ir["workflow"]["calls"].reverse()
+        with (
+            patch(
+                "src.services.workflow_service.checker_node",
+                side_effect=[
+                    {"is_valid": False, "validation_message": "invalid WDL", "error_count": 1},
+                    {"is_valid": True, "validation_message": "valid WDL", "error_count": 1},
+                ],
+            ),
+            patch(
+                "src.services.workflow_service.repairer_node",
+                return_value={
+                    "workflow_ir": repaired_ir,
+                    "analysis_errors": [],
+                    "analysis_warnings": [],
+                    "current_wdl": "",
+                    "is_valid": False,
+                    "repair_actions": ["Reordered workflow steps."],
+                    "repair_count": 1,
+                    "messages": [],
+                },
+            ),
+            patch("src.services.workflow_service._analyze_with_repair"),
+            patch("src.services.workflow_service.renderer_node", return_value={"current_wdl": "fixed wdl"}),
+        ):
+            _validate_with_repair(state, event_callback=event_callback)
+
+        event_types = [event["type"] for event in events]
+        artifact_index = event_types.index("artifact.updated", event_types.index("repair.applied") - 1)
+        repair_index = event_types.index("repair.applied")
+        self.assertLess(artifact_index, repair_index)
+        self.assertEqual(events[artifact_index]["node"], "repairer")
+        self.assertEqual(events[artifact_index]["payload"], {"artifact": "workflow_ir"})
+        self.assertEqual(
+            [call["id"] for call in events[artifact_index]["workflow_ir"]["workflow"]["calls"]],
+            ["qc", "align"],
+        )
 
     def test_plan_and_compile_workflow_plans_then_compiles(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")
