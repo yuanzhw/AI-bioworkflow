@@ -202,6 +202,38 @@ class RunServiceTests(unittest.TestCase):
             self.assertIn("event: run.completed", stream)
             self.assertIn("list_events", to_thread_calls)
 
+    def test_sse_stream_drains_completion_event_after_terminal_status_race(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            request = CompileWorkflowRequest(
+                payload=load_example("rnaseq_deg_recipe_plan.json"),
+                check=False,
+            )
+            accepted = service.create_structured_compile_run(request)
+            completed_during_status_read = False
+            to_thread_calls = []
+
+            async def fake_to_thread(func, /, *args, **kwargs):
+                nonlocal completed_during_status_read
+                to_thread_calls.append(func.__name__)
+                if func.__name__ == "get_run" and not completed_during_status_read:
+                    completed_during_status_read = True
+                    service.repository.complete_run(
+                        run_id=accepted.run_id,
+                        status=RunStatus.SUCCEEDED,
+                        summary="Run succeeded.",
+                        payload={"status": RunStatus.SUCCEEDED.value},
+                    )
+                return func(*args, **kwargs)
+
+            with patch("src.services.run_service.asyncio.to_thread", side_effect=fake_to_thread):
+                stream = asyncio.run(_collect_async(service.iter_sse_events(accepted.run_id)))
+
+            self.assertTrue(completed_during_status_read)
+            self.assertGreaterEqual(to_thread_calls.count("list_events"), 2)
+            self.assertIn("event: run.created", stream)
+            self.assertIn("event: run.completed", stream)
+
     def test_compiler_artifact_update_persists_snapshot_before_event(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))

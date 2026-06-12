@@ -200,6 +200,12 @@ class RunService:
                 if run is None:
                     return
                 if run.status in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
+                    final_events = await asyncio.to_thread(self.repository.list_events, run_id, sequence)
+                    for event in final_events:
+                        sequence = event.sequence
+                        yield _format_sse_event(event)
+                        if event.type == RunEventType.RUN_COMPLETED:
+                            return
                     return
                 await asyncio.sleep(poll_interval)
 
