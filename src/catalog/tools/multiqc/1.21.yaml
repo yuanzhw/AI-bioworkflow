@@ -22,6 +22,6 @@ command_template: |
   multiqc_report.html
 
 runtime:
-  docker: ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1
   cpu: 2
   memory: 4G

@@ -33,12 +33,12 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertIn("clean_r1", fastp["outputs"])
 
     def test_get_tool_returns_explicit_version(self):
-        tool = get_tool("salmon", "1.11.4")
+        tool = get_tool("salmon", "1.9.0")
 
         self.assertEqual(tool["id"], "salmon")
-        self.assertEqual(tool["version"], "1.11.4")
+        self.assertEqual(tool["version"], "1.9.0")
         self.assertEqual(tool["inputs"]["r1"]["type"], "File")
-        self.assertIn("1.11.4", tool["versions"])
+        self.assertIn("1.9.0", tool["versions"])
 
     def test_get_tool_defaults_to_highest_catalog_version(self):
         tool = get_tool("multiqc")

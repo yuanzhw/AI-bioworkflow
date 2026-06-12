@@ -26,13 +26,13 @@ outputs:
     value: '"differential_expression.tsv"'
 
 command_template: |
-  Rscript run_deseq2.R
+  run_deseq2.R
   --counts ~{counts}
   --sample-groups ~{sample_groups}
   --contrast ~{contrast}
   --output differential_expression.tsv
 
 runtime:
-  docker: ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
   cpu: 4
   memory: 16G

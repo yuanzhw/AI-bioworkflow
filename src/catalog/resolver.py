@@ -377,7 +377,19 @@ def _render_command(
     context.update(params)
 
     rendered = template.render(**context)
-    return "\n".join(line.rstrip() for line in rendered.strip().splitlines() if line.strip())
+    lines = [line.rstrip() for line in rendered.strip().splitlines() if line.strip()]
+    return _join_shell_command_lines(lines)
+
+
+def _join_shell_command_lines(lines: list[str]) -> str:
+    if len(lines) <= 1:
+        return "\n".join(lines)
+
+    continued_lines = [
+        line if index == len(lines) - 1 or line.endswith("\\") else f"{line} \\"
+        for index, line in enumerate(lines)
+    ]
+    return "\n".join(continued_lines)
 
 
 def _default_workflow_outputs(

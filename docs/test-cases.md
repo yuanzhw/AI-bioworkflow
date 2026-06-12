@@ -28,16 +28,17 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 
 - `tests/test_tools.py`：没有 WOMtool 或 miniwdl 时跳过 WDL validator 测试。
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
+- `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
 当前 W2 Run 事件与展示级持久化阶段改动后的最近一次完整验证结果：
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 80 tests
-OK (skipped=1)
+Ran 111 tests
+OK (skipped=2)
 ```
 
-跳过项为 `tests/test_tiny_run.py` 中依赖 miniwdl 真实执行环境的 tiny run。
+跳过项为依赖真实执行环境的 tiny run，包括 Cromwell e2e 开关和本地 miniwdl 环境。
 
 ## 公共测试输入
 
@@ -58,7 +59,7 @@ OK (skipped=1)
   - `sample_groups: File`
 - tool calls：
   - `qc`: recipe step `qc`, tool `fastp` `1.3.3`, 输入 `raw_r1s/raw_r2s`, 参数 `thread=4`
-  - `quantify`: recipe step `quantify`, tool `salmon` `1.11.4`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`
+  - `quantify`: recipe step `quantify`, tool `salmon` `1.9.0`, 输入来自 `qc.clean_r1/qc.clean_r2` 和 `transcriptome_index`, 参数 `thread=8`、`lib_type="A"`
   - `summarize`: recipe step `summarize_transcripts`, tool `tximport` `1.30.0`
   - `deg`: recipe step `differential_expression`, tool `deseq2` `1.42.1`, 参数 `contrast="condition"`
   - `report`: recipe step `qc_report`, tool `multiqc` `1.21`
@@ -674,9 +675,12 @@ OK (skipped=1)
   - `File deg_table = deg.deg_table`
   - `File multiqc_report = report.multiqc_report`
   - `quant_files = quantify.quant_file`
+  - Salmon 默认 library type 渲染为 `lib_type = "A"` 和 `-l ~{lib_type}`
   - `--contrast ~{contrast}`
   - `contrast = "condition"`
-  - fastp paired-end 参数片段 `-I ~{r2}` 和 `-O clean_R2.fq.gz`
+  - fastp paired-end 参数片段以 shell 续行形式渲染，例如 `-I ~{r2} \`
+    和 `-O clean_R2.fq.gz \`
+  - DESeq2 wrapper 直接以 PATH 命令 `run_deseq2.R` 渲染，不依赖工作目录中存在脚本文件
 
 覆盖点：
 
@@ -714,7 +718,7 @@ OK (skipped=1)
 输入：
 
 - 复制 `sample_rnaseq_tool_plan()`。
-- 将第一个 tool call 的 `qc` 步骤工具从 `fastp` 改为 `salmon`，版本改为 `1.11.4`。
+- 将第一个 tool call 的 `qc` 步骤工具从 `fastp` 改为 `salmon`，版本改为 `1.9.0`。
 
 执行：
 
@@ -959,18 +963,18 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 输入：
 
 - tool id：`salmon`
-- version：`1.11.4`
+- version：`1.9.0`
 
 执行：
 
-- 调用 `get_tool("salmon", "1.11.4")`。
+- 调用 `get_tool("salmon", "1.9.0")`。
 
 期望输出：
 
 - 返回 tool `id == "salmon"`。
-- 返回 tool `version == "1.11.4"`。
+- 返回 tool `version == "1.9.0"`。
 - `inputs["r1"]["type"] == "File"`。
-- `versions` 包含 `1.11.4`。
+- `versions` 包含 `1.9.0`。
 
 覆盖点：
 
@@ -1930,6 +1934,33 @@ qc.html_report + qc.json_report
 
 - verbose 日志不会污染 stdout WDL 输出。
 
+## `tests/test_execution_backend.py`
+
+该文件验证执行后端协议、默认禁用行为和 factory 环境变量路由。
+
+覆盖点：
+
+- `ExecutionResult` 的 outputs 与 metadata 默认 dict 互不共享。
+- 未配置后端时返回 disabled backend。
+- `AI_BIOWORKFLOW_RUN_BACKEND=cromwell` 时 factory 返回 `CromwellBackend`，并读取 Cromwell URL、poll interval 和 timeout 配置。
+- `local-miniwdl` 后端仍保持未实现。
+
+## `tests/test_cromwell_backend.py`
+
+该文件验证 Cromwell server mode REST client 的 contract，不依赖真实 Cromwell、Docker 或生信输入文件。
+
+覆盖点：
+
+- `availability()` 调用 `/engine/v1/status`，并把连接失败、非 2xx 和无效 JSON 转成不可用原因。
+- `run()` 在 Cromwell 不可用时不提交 workflow。
+- workflow submit 使用 `/api/workflows/v1` 和 Cromwell 约定的 multipart 字段。
+- polling 能处理 `Submitted -> Running -> Succeeded`，并解析 outputs 与 metadata。
+- 刚提交后短暂出现 `Unrecognized workflow ID` 时继续轮询。
+- `Succeeded` 但 outputs 收集失败时返回失败结果并保留 metadata。
+- `Succeeded` 且 outputs 正常但 metadata 收集失败时保留成功结果，并在 message 中暴露 metadata 收集问题。
+- `Failed` / `Aborted` 返回失败结果；当 outputs 收集失败时，message 仍保留 metadata 中的 workflow failure 摘要，并追加收集阶段问题。
+- timeout 返回失败结果和清晰 message。
+
 ## `tests/test_tools.py`
 
 该文件验证 WDL validator wrapper。两个用例只有在 `wdl_validator_available()` 返回 true 时运行。
@@ -1992,10 +2023,10 @@ workflow Bad {
 - 本机存在 `docker` 或 `podman`。
 - 下列镜像已经存在于本地：
   - `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`
-  - `quay.io/biocontainers/salmon:1.11.4--h7f96273_0`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1`
-  - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21`
+  - `quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/tximport:1.30.0-r1`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2`
+  - `ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1`
 - `examples/tiny/rnaseq_deg.inputs.json` 存在。
 
 输入：
@@ -2027,6 +2058,90 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - 从 Recipe Tool Plan 到实际 miniwdl 执行的完整路径。
 - 依赖真实本地容器镜像和 tiny 数据，因此默认开发环境中可能跳过。
 
+## `tests/test_container_build.py`
+
+该文件验证项目维护容器的构建脚本 contract，不实际调用 Docker。
+
+### `test_select_spec_uses_image_revision_in_tag`
+
+输入：
+
+- 临时 `containers/deseq2/1.42.1/` 目录。
+- `Dockerfile`
+- `smoke_test.sh`
+- `image_revision.txt` 内容为 `r2`。
+
+执行：
+
+- 调用 `select_specs(...)` 读取单个 container spec。
+- 调用 `spec.image("ghcr.io/example/project")`。
+
+期望输出：
+
+- `spec.image_revision == "r2"`。
+- `spec.image_tag == "1.42.1-r2"`。
+- 镜像名为 `ghcr.io/example/project/deseq2:1.42.1-r2`。
+
+覆盖点：
+
+- 上游软件版本与项目镜像修订版分离。
+- 构建脚本生成 `<software-version>-<image-revision>` tag。
+
+### `test_discover_specs_requires_image_revision_file`
+
+输入：
+
+- 临时 container 目录包含 `Dockerfile` 和 `smoke_test.sh`，但缺少 `image_revision.txt`。
+
+执行：
+
+- 调用 `discover_specs(...)`。
+
+期望输出：
+
+- 抛出 `SystemExit`，错误信息包含 `image_revision.txt`。
+
+覆盖点：
+
+- 每个项目维护容器必须显式声明镜像修订号。
+
+### `test_discover_specs_rejects_invalid_image_revision`
+
+输入：
+
+- 临时 container 目录的 `image_revision.txt` 内容为 `latest`。
+
+执行：
+
+- 调用 `discover_specs(...)`。
+
+期望输出：
+
+- 抛出 `SystemExit`。
+- 错误信息说明修订号必须类似 `r1`。
+
+覆盖点：
+
+- 禁止使用 `latest` 或其他不可审计的修订号格式。
+
+### `test_discover_specs_ignores_directories_without_dockerfile`
+
+输入：
+
+- 临时目录 `containers/notes/draft/`，其中没有 `Dockerfile`。
+
+执行：
+
+- 调用 `discover_specs(...)`。
+
+期望输出：
+
+- 返回空列表。
+
+覆盖点：
+
+- `--all` 只发现实际容器目录，非容器草稿目录不会被强制要求声明镜像修订号。
+
 ## 当前测试覆盖边界
 
 已有测试重点覆盖：
@@ -2044,6 +2159,7 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - FastAPI 开发服务器默认端口 `8010`，避免与 Cromwell server 的 `8000` 冲突。
 - CLI 的自然语言入口、结构化入口、文件输出、stdout/stderr 隔离和失败返回。
 - Planner 的 JSON 解析、prompt 构建、schema 错误和 catalog 错误归类。
+- Cromwell execution backend 的可用性检查、提交、轮询、结果收集错误语义和 factory 路由。
 - WDL validator wrapper 和可选 miniwdl tiny run。
 
 目前相对少覆盖或未覆盖的方向：

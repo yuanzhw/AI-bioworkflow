@@ -1,0 +1,23 @@
+{
+  "RNASeqDEG.sample_ids": [
+    "ctrl_1",
+    "ctrl_2",
+    "treat_1",
+    "treat_2"
+  ],
+  "RNASeqDEG.raw_r1s": [
+    "{{ fixture_root }}/data/reads/ctrl_1_R1.fastq.gz",
+    "{{ fixture_root }}/data/reads/ctrl_2_R1.fastq.gz",
+    "{{ fixture_root }}/data/reads/treat_1_R1.fastq.gz",
+    "{{ fixture_root }}/data/reads/treat_2_R1.fastq.gz"
+  ],
+  "RNASeqDEG.raw_r2s": [
+    "{{ fixture_root }}/data/reads/ctrl_1_R2.fastq.gz",
+    "{{ fixture_root }}/data/reads/ctrl_2_R2.fastq.gz",
+    "{{ fixture_root }}/data/reads/treat_1_R2.fastq.gz",
+    "{{ fixture_root }}/data/reads/treat_2_R2.fastq.gz"
+  ],
+  "RNASeqDEG.transcriptome_index": "{{ fixture_root }}/salmon_index",
+  "RNASeqDEG.tx2gene": "{{ fixture_root }}/data/tx2gene.tsv",
+  "RNASeqDEG.sample_groups": "{{ fixture_root }}/data/sample_groups.tsv"
+}

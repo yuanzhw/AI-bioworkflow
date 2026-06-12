@@ -46,7 +46,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "quantify",
                     "step": "quantify",
                     "tool": "salmon",
-                    "version": "1.11.4",
+                    "version": "1.9.0",
                     "inputs": {
                         "r1": "qc.clean_r1",
                         "r2": "qc.clean_r2",
@@ -153,8 +153,13 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("quant_files = quantify.quant_file", wdl)
         self.assertIn("--contrast ~{contrast}", wdl)
         self.assertIn('contrast = "condition"', wdl)
-        self.assertIn("-I ~{r2}\n    -o clean_R1.fq.gz", wdl)
-        self.assertIn("-O clean_R2.fq.gz\n    --html fastp.html", wdl)
+        self.assertIn('lib_type = "A"', wdl)
+        self.assertIn("fastp -i ~{r1} \\\n    -I ~{r2}", wdl)
+        self.assertIn("-I ~{r2} \\\n    -o clean_R1.fq.gz", wdl)
+        self.assertIn("-O clean_R2.fq.gz \\\n    --html fastp.html", wdl)
+        self.assertIn("salmon quant \\\n    -l ~{lib_type}", wdl)
+        self.assertIn("-l ~{lib_type} \\\n    -i ~{index}", wdl)
+        self.assertIn("run_deseq2.R \\\n    --counts ~{counts}", wdl)
 
     def test_tool_spec_requires_runtime_docker(self):
         with self.assertRaisesRegex(ValueError, "must define runtime.docker"):
@@ -186,7 +191,7 @@ class CatalogResolutionTests(unittest.TestCase):
     def test_resolver_rejects_tool_not_allowed_for_recipe_step(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())
         plan["workflow"]["tool_calls"][0]["tool"] = "salmon"
-        plan["workflow"]["tool_calls"][0]["version"] = "1.11.4"
+        plan["workflow"]["tool_calls"][0]["version"] = "1.9.0"
 
         with self.assertRaisesRegex(ValueError, "not allowed for recipe step 'qc'"):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)

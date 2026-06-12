@@ -1,5 +1,6 @@
 * text=auto
 
+.gitattributes text eol=lf
 *.py text eol=lf
 *.md text eol=lf
 *.toml text eol=lf
@@ -8,6 +9,9 @@
 *.yml text eol=lf
 *.j2 text eol=lf
 *.sh text eol=lf
+*.R text eol=lf
+Dockerfile text eol=lf
+image_revision.txt text eol=lf
 
 *.png binary
 *.jpg binary

@@ -117,7 +117,7 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
                     "id": "quantify",
                     "step": "quantify",
                     "tool": "salmon",
-                    "version": "1.11.4",
+                    "version": "1.9.0",
                     "inputs": {
                         "r1": "qc.clean_r1",
                         "r2": "qc.clean_r2",
@@ -403,7 +403,10 @@ class WorkflowCompilationTests(unittest.TestCase):
 
         self.assertEqual(workflow_ir.workflow.name, "SimpleQC")
         self.assertEqual(workflow_ir.workflow.calls[0].id, "fastp_qc")
-        self.assertEqual(workflow_ir.tasks["fastp_qc"].runtime.docker, "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0")
+        self.assertEqual(
+            workflow_ir.tasks["fastp_qc"].runtime.docker,
+            "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
+        )
 
     def test_agent_repairs_bare_file_output_literals(self):
         raw_ir = sample_multi_task_ir()
