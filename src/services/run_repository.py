@@ -16,6 +16,8 @@ from src.api.models import DiagnosticReport, RunEvent, RunEventType, RunStatus, 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / ".cache" / "ai-bioworkflow.sqlite3"
+SQLITE_CONNECT_TIMEOUT_SECONDS = 30.0
+SQLITE_BUSY_TIMEOUT_MS = 30_000
 
 
 @dataclass(frozen=True)
@@ -117,38 +119,54 @@ class RunRepository:
     ) -> RunEvent:
         timestamp = _utc_now()
         with self._connect() as connection:
-            next_sequence = self._next_sequence(connection, run_id)
-            event = RunEvent(
-                event_id=f"{run_id}_evt_{next_sequence:06d}",
+            event = self._append_event(
+                connection,
                 run_id=run_id,
-                sequence=next_sequence,
-                type=event_type,
+                event_type=event_type,
                 timestamp=timestamp,
                 summary=summary,
                 node=node,
-                payload=payload or {},
-            )
-            connection.execute(
-                """
-                INSERT INTO run_events (
-                    event_id, run_id, sequence, type, node, timestamp, summary, payload_json
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event.event_id,
-                    event.run_id,
-                    event.sequence,
-                    event.type.value,
-                    event.node,
-                    _dt_to_text(event.timestamp),
-                    event.summary,
-                    _to_json(event.payload),
-                ),
+                payload=payload,
             )
             connection.execute(
                 "UPDATE runs SET updated_at = ? WHERE run_id = ?",
                 (_dt_to_text(timestamp), run_id),
+            )
+        return event
+
+    def complete_run(
+        self,
+        *,
+        run_id: str,
+        status: RunStatus,
+        summary: str,
+        payload: dict[str, Any] | None = None,
+    ) -> RunEvent:
+        if status not in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
+            raise ValueError(f"terminal run status required, got {status.value}")
+
+        timestamp = _utc_now()
+        with self._connect() as connection:
+            event = self._append_event(
+                connection,
+                run_id=run_id,
+                event_type=RunEventType.RUN_COMPLETED,
+                timestamp=timestamp,
+                summary=summary,
+                payload=payload,
+            )
+            connection.execute(
+                """
+                UPDATE runs
+                SET status = ?, updated_at = ?, completed_at = ?
+                WHERE run_id = ?
+                """,
+                (
+                    status.value,
+                    _dt_to_text(timestamp),
+                    _dt_to_text(timestamp),
+                    run_id,
+                ),
             )
         return event
 
@@ -305,8 +323,11 @@ class RunRepository:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.db_path)
+        connection = sqlite3.connect(self.db_path, timeout=SQLITE_CONNECT_TIMEOUT_SECONDS)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+        connection.execute("PRAGMA synchronous = NORMAL")
         connection.execute("PRAGMA foreign_keys = ON")
         try:
             yield connection
@@ -324,6 +345,48 @@ class RunRepository:
             (run_id,),
         ).fetchone()
         return int(row["next_sequence"])
+
+    def _append_event(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        event_type: RunEventType,
+        timestamp: datetime,
+        summary: str,
+        node: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> RunEvent:
+        next_sequence = self._next_sequence(connection, run_id)
+        event = RunEvent(
+            event_id=f"{run_id}_evt_{next_sequence:06d}",
+            run_id=run_id,
+            sequence=next_sequence,
+            type=event_type,
+            timestamp=timestamp,
+            summary=summary,
+            node=node,
+            payload=payload or {},
+        )
+        connection.execute(
+            """
+            INSERT INTO run_events (
+                event_id, run_id, sequence, type, node, timestamp, summary, payload_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.event_id,
+                event.run_id,
+                event.sequence,
+                event.type.value,
+                event.node,
+                _dt_to_text(event.timestamp),
+                event.summary,
+                _to_json(event.payload),
+            ),
+        )
+        return event
 
 
 def default_db_path() -> Path:

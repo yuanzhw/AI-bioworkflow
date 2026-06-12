@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from src.api.models import DiagnosticReport, RunEventType, RunStatus, WorkflowArtifacts
-from src.services.run_repository import RunRepository
+from src.services.run_repository import SQLITE_BUSY_TIMEOUT_MS, RunRepository
 
 
 class RunRepositoryTests(unittest.TestCase):
@@ -70,6 +70,51 @@ class RunRepositoryTests(unittest.TestCase):
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
 
             self.assertIsNone(repository.get_snapshot("missing"))
+
+    def test_complete_run_persists_terminal_event_and_status_together(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="structured_compile",
+                request={},
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+            repository.append_event(
+                run_id="run_001",
+                event_type=RunEventType.RUN_CREATED,
+                summary="Run created.",
+            )
+
+            completed = repository.complete_run(
+                run_id="run_001",
+                status=RunStatus.SUCCEEDED,
+                summary="Run succeeded.",
+                payload={"status": "succeeded"},
+            )
+
+            snapshot = repository.get_snapshot("run_001")
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.run.status, RunStatus.SUCCEEDED)
+            self.assertIsNotNone(snapshot.run.completed_at)
+            self.assertEqual(completed.type, RunEventType.RUN_COMPLETED)
+
+            events = repository.list_events("run_001")
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+            self.assertEqual(events[-1].payload["status"], "succeeded")
+
+    def test_sqlite_connection_uses_wal_and_busy_timeout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+
+            with repository._connect() as connection:
+                journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+                busy_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+
+            self.assertEqual(journal_mode.lower(), "wal")
+            self.assertEqual(busy_timeout, SQLITE_BUSY_TIMEOUT_MS)
 
 
 if __name__ == "__main__":

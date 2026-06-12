@@ -231,10 +231,9 @@ class RunService:
             ),
         )
         final_status = RunStatus.SUCCEEDED if result.succeeded else RunStatus.FAILED
-        self.repository.update_status(run_id, final_status)
-        self.repository.append_event(
+        self.repository.complete_run(
             run_id=run_id,
-            event_type=RunEventType.RUN_COMPLETED,
+            status=final_status,
             summary=f"Run {final_status.value}.",
             payload={"status": final_status.value},
         )
@@ -250,10 +249,9 @@ class RunService:
                 check_performed=check_performed,
             ),
         )
-        self.repository.update_status(run_id, RunStatus.FAILED)
-        self.repository.append_event(
+        self.repository.complete_run(
             run_id=run_id,
-            event_type=RunEventType.RUN_COMPLETED,
+            status=RunStatus.FAILED,
             summary="Run failed.",
             payload={"status": RunStatus.FAILED.value, "error": message},
         )
