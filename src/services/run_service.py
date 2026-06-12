@@ -133,6 +133,7 @@ class RunService:
                 event_callback=self._compiler_event_callback(run_id),
             )
         except Exception as exc:
+            self._append_compiler_failed_event(run_id, exc)
             self._fail_run(run_id, str(exc), check_performed=request.check)
             return
 
@@ -152,6 +153,7 @@ class RunService:
                 event_callback=self._compiler_event_callback(run_id),
             )
         except Exception as exc:
+            self._append_compiler_failed_event(run_id, exc)
             self._fail_run(run_id, str(exc), check_performed=request.check)
             return
 
@@ -242,7 +244,6 @@ class RunService:
         )
 
     def _fail_run(self, run_id: str, message: str, *, check_performed: bool) -> None:
-        self.repository.save_artifacts(run_id, WorkflowArtifacts())
         self.repository.save_diagnostics(
             run_id,
             DiagnosticReport(
@@ -257,6 +258,15 @@ class RunService:
             status=RunStatus.FAILED,
             summary="Run failed.",
             payload={"status": RunStatus.FAILED.value, "error": message},
+        )
+
+    def _append_compiler_failed_event(self, run_id: str, exc: Exception) -> None:
+        self.repository.append_event(
+            run_id=run_id,
+            event_type=RunEventType.NODE_FAILED,
+            node="compiler",
+            summary="Workflow compiler failed.",
+            payload={"error": str(exc)},
         )
 
     def _compiler_event_callback(self, run_id: str):

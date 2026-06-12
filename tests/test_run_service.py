@@ -64,6 +64,38 @@ class RunServiceTests(unittest.TestCase):
             self.assertFalse(snapshot.diagnostics.succeeded)
             self.assertIn("sample_groups", "\n".join(snapshot.diagnostics.analysis_errors))
 
+    def test_structured_compile_exception_records_compiler_failure_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            request = CompileWorkflowRequest(
+                payload=load_example("rnaseq_deg_recipe_plan.json"),
+                check=False,
+            )
+
+            with patch(
+                "src.services.run_service.workflow_service.compile_structured_workflow",
+                side_effect=RuntimeError("compiler exploded"),
+            ):
+                accepted = service.create_structured_compile_run(request)
+                service.execute_structured_compile_run(accepted.run_id, request)
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.status, RunStatus.FAILED)
+            self.assertIsNone(snapshot.artifacts.plan)
+            self.assertIn("compiler exploded", snapshot.diagnostics.validation_message)
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            compiler_failures = [
+                event for event in events if event.type == RunEventType.NODE_FAILED and event.node == "compiler"
+            ]
+            self.assertEqual(len(compiler_failures), 1)
+            self.assertEqual(compiler_failures[0].payload["error"], "compiler exploded")
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+
     def test_natural_language_run_succeeds_after_planning(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
@@ -85,6 +117,44 @@ class RunServiceTests(unittest.TestCase):
             self.assertEqual(snapshot.status, RunStatus.SUCCEEDED)
             self.assertEqual(snapshot.artifacts.plan, plan)
             self.assertIn("workflow RNASeqDEG", snapshot.artifacts.wdl)
+
+    def test_natural_language_compile_exception_preserves_planner_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            plan = load_example("rnaseq_deg_recipe_plan.json")
+            request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
+            plan_result = SimpleNamespace(
+                plan=plan,
+                planner_prompt="planner prompt",
+                raw_response=json.dumps(plan),
+            )
+
+            with (
+                patch("src.services.run_service.create_natural_language_plan", return_value=plan_result),
+                patch(
+                    "src.services.run_service.workflow_service.compile_structured_workflow",
+                    side_effect=RuntimeError("compiler exploded"),
+                ),
+            ):
+                accepted = service.create_natural_language_run(request)
+                service.execute_natural_language_run(accepted.run_id, request)
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.status, RunStatus.FAILED)
+            self.assertEqual(snapshot.artifacts.plan, plan)
+            self.assertIn("compiler exploded", snapshot.diagnostics.validation_message)
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            compiler_failures = [
+                event for event in events if event.type == RunEventType.NODE_FAILED and event.node == "compiler"
+            ]
+            self.assertEqual(len(compiler_failures), 1)
+            self.assertEqual(compiler_failures[0].payload["error"], "compiler exploded")
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
 
     def test_natural_language_planner_error_is_persisted_as_failed_run(self):
         with tempfile.TemporaryDirectory() as temp_dir:
