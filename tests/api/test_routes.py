@@ -6,9 +6,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
-from src.nl_planner import DEFAULT_PLANNER_MODEL, NaturalLanguagePlanningError
+from src.api.models import RunAcceptedResponse, RunStatus, WorkflowRunSnapshotResponse
 from src.services.catalog_service import get_recipe, get_tool, list_recipes, list_tools
-from src.services.workflow_service import compile_structured_workflow
 
 
 EXAMPLES_DIR = Path(__file__).parents[2] / "examples"
@@ -99,37 +98,28 @@ class ApiRouteTests(unittest.TestCase):
 
     def test_compile_recipe_plan(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")
-        result = compile_structured_workflow(plan, check=False)
+        accepted = RunAcceptedResponse(
+            run_id="run_123",
+            status=RunStatus.CREATED,
+            events_url="/api/runs/run_123/events",
+        )
 
-        with patch("src.api.routes.workflows.workflow_service.compile_structured_workflow", return_value=result) as service:
+        with (
+            patch("src.api.routes.workflows.run_service.create_structured_compile_run", return_value=accepted) as create_run,
+            patch("src.api.routes.workflows.run_service.execute_structured_compile_run") as execute_run,
+        ):
             response = self.client.post(
                 "/api/compile",
                 json={"payload": plan, "check": False},
             )
 
-        self.assertEqual(response.status_code, 200)
-        service.assert_called_once_with(plan, check=False)
+        self.assertEqual(response.status_code, 202)
+        create_run.assert_called_once()
+        execute_run.assert_called_once()
         body = response.json()
-        self.assertEqual(body["status"], "succeeded")
-        self.assertFalse(body["diagnostics"]["check_performed"])
-        self.assertEqual(body["artifacts"]["workflow_ir"]["workflow"]["name"], "RNASeqDEG")
-        self.assertIn("workflow RNASeqDEG", body["artifacts"]["wdl"])
-
-    def test_compile_invalid_plan_returns_diagnostics(self):
-        plan = load_example("rnaseq_deg_recipe_plan.json")
-        plan["workflow"]["inputs"].pop("sample_groups")
-
-        response = self.client.post(
-            "/api/compile",
-            json={"payload": plan, "check": False},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["status"], "failed")
-        self.assertFalse(body["diagnostics"]["succeeded"])
-        self.assertEqual(body["artifacts"]["wdl"], "")
-        self.assertIn("sample_groups", "\n".join(body["diagnostics"]["analysis_errors"]))
+        self.assertEqual(body["run_id"], "run_123")
+        self.assertEqual(body["status"], "created")
+        self.assertEqual(body["events_url"], "/api/runs/run_123/events")
 
     def test_compile_rejects_empty_payload(self):
         response = self.client.post(
@@ -140,31 +130,37 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
 
     def test_create_run_uses_natural_language_service(self):
-        plan = load_example("rnaseq_deg_recipe_plan.json")
-        result = compile_structured_workflow(plan, check=False)
+        accepted = RunAcceptedResponse(
+            run_id="run_456",
+            status=RunStatus.CREATED,
+            events_url="/api/runs/run_456/events",
+        )
 
-        with patch(
-            "src.api.routes.workflows.workflow_service.plan_and_compile_workflow",
-            return_value=result,
-        ) as service:
+        with (
+            patch("src.api.routes.workflows.run_service.create_natural_language_run", return_value=accepted) as create_run,
+            patch("src.api.routes.workflows.run_service.execute_natural_language_run") as execute_run,
+        ):
             response = self.client.post(
                 "/api/runs",
                 json={"request": "Run RNA-seq DEG.", "check": False},
             )
 
-        self.assertEqual(response.status_code, 200)
-        service.assert_called_once_with(
-            "Run RNA-seq DEG.",
-            model=DEFAULT_PLANNER_MODEL,
-            check=False,
-        )
-        self.assertEqual(response.json()["status"], "succeeded")
+        self.assertEqual(response.status_code, 202)
+        create_run.assert_called_once()
+        execute_run.assert_called_once()
+        self.assertEqual(response.json()["run_id"], "run_456")
 
     def test_create_run_passes_requested_planner_model(self):
-        plan = load_example("rnaseq_deg_recipe_plan.json")
-        result = compile_structured_workflow(plan, check=False)
+        accepted = RunAcceptedResponse(
+            run_id="run_789",
+            status=RunStatus.CREATED,
+            events_url="/api/runs/run_789/events",
+        )
 
-        with patch("src.api.routes.workflows.workflow_service.plan_and_compile_workflow", return_value=result) as service:
+        with (
+            patch("src.api.routes.workflows.run_service.create_natural_language_run", return_value=accepted) as create_run,
+            patch("src.api.routes.workflows.run_service.execute_natural_language_run"),
+        ):
             response = self.client.post(
                 "/api/runs",
                 json={
@@ -174,25 +170,55 @@ class ApiRouteTests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200)
-        service.assert_called_once_with(
-            "Run RNA-seq DEG.",
-            model="custom-planner",
-            check=False,
+        self.assertEqual(response.status_code, 202)
+        created_request = create_run.call_args.args[0]
+        self.assertEqual(created_request.planner_model, "custom-planner")
+
+    def test_get_run_returns_snapshot(self):
+        snapshot = WorkflowRunSnapshotResponse(
+            run_id="run_123",
+            status=RunStatus.SUCCEEDED,
+            request="Run RNA-seq DEG.",
+            events_url="/api/runs/run_123/events",
         )
 
-    def test_create_run_reports_planning_errors(self):
-        with patch(
-            "src.api.routes.workflows.workflow_service.plan_and_compile_workflow",
-            side_effect=NaturalLanguagePlanningError("LLM planner JSON parsing failed"),
-        ):
-            response = self.client.post(
-                "/api/runs",
-                json={"request": "Run RNA-seq DEG.", "check": False},
-            )
+        with patch("src.api.routes.workflows.run_service.get_snapshot", return_value=snapshot) as get_snapshot:
+            response = self.client.get("/api/runs/run_123")
 
-        self.assertEqual(response.status_code, 422)
-        self.assertIn("LLM planner JSON parsing failed", response.json()["detail"])
+        self.assertEqual(response.status_code, 200)
+        get_snapshot.assert_called_once_with("run_123")
+        self.assertEqual(response.json()["run_id"], "run_123")
+
+    def test_get_run_not_found(self):
+        with patch("src.api.routes.workflows.run_service.get_snapshot", return_value=None):
+            response = self.client.get("/api/runs/missing")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("unknown run", response.json()["detail"])
+
+    def test_stream_run_events(self):
+        event_stream = iter(
+            [
+                'id: 1\nevent: run.created\ndata: {"run_id":"run_123"}\n\n',
+                'id: 2\nevent: run.completed\ndata: {"run_id":"run_123"}\n\n',
+            ]
+        )
+
+        with patch("src.api.routes.workflows.run_service.iter_sse_events", return_value=event_stream) as stream:
+            response = self.client.get("/api/runs/run_123/events")
+
+        self.assertEqual(response.status_code, 200)
+        stream.assert_called_once_with("run_123", after_sequence=0)
+        self.assertIn("event: run.created", response.text)
+
+    def test_stream_run_events_not_found(self):
+        with patch(
+            "src.api.routes.workflows.run_service.iter_sse_events",
+            side_effect=KeyError("unknown run: missing"),
+        ):
+            response = self.client.get("/api/runs/missing/events")
+
+        self.assertEqual(response.status_code, 404)
 
 
 if __name__ == "__main__":
