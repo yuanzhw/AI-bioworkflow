@@ -88,6 +88,10 @@ function Resolve-OutputDirectory {
 }
 
 try {
+    if ($SkipUnitTests -and $SkipCompile -and -not $RunE2E) {
+        throw "No P0 checks selected. Remove -SkipUnitTests or -SkipCompile, or add -RunE2E to run the real Cromwell e2e."
+    }
+
     Set-PythonCommand
     Push-Location $repoRoot
     $locationPushed = $true
