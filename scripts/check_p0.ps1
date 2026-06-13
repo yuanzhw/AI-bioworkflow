@@ -123,6 +123,9 @@ try {
             if (-not (Test-Path -LiteralPath $e2eScript)) {
                 throw "Cromwell tiny e2e helper not found: $e2eScript"
             }
+            if (-not $pythonExeForScripts) {
+                throw "Cromwell tiny e2e requires a concrete Python executable. Create .venv\Scripts\python.exe or pass -PythonExe <path>; the uv fallback only supports local unit/compile checks."
+            }
 
             $e2eArgs = @(
                 "-ExecutionPolicy", "Bypass",
