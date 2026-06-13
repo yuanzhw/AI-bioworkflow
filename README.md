@@ -137,6 +137,33 @@ $env:AI_BIOWORKFLOW_API_PORT = "8020"
 .\.venv\Scripts\python.exe -m src.api.server
 ```
 
+### 6. 启动 W3 前端展示页
+
+前端位于 `web/`，作为独立的 Next.js 应用运行。默认读取本地 FastAPI：
+
+```text
+http://127.0.0.1:8010
+```
+
+首次运行前安装前端依赖：
+
+```powershell
+cd web
+npm install
+```
+
+启动开发服务：
+
+```powershell
+npm run dev
+```
+
+如果后端 API 地址不同，复制 `web/.env.example` 为 `web/.env.local` 并调整：
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8010
+```
+
 ## 📥 支持的输入格式
 
 面向用户的主要入口是自然语言。系统会先用 LLM Planner 将需求转成结构化 Recipe Tool Plan，然后交给确定性编译链路处理。
