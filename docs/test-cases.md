@@ -24,21 +24,43 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 .\.venv\Scripts\python.exe -m unittest discover -v
 ```
 
+P0 快速检查脚本会运行完整单测、代表性 RNA-seq WDL 编译和 WOMtool 校验：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
+```
+
+真实 Cromwell tiny e2e 需要显式 opt-in：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
+  -RunE2E `
+  -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny `
+  -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny
+```
+
+该 opt-in 路径会委托 `scripts/run_cromwell_tiny_e2e.ps1` 执行真实 e2e，
+因此 fixture 生成和同步逻辑只有一个维护入口。
+
 部分测试会按本地环境自动跳过：
 
 - `tests/test_tools.py`：没有 WOMtool 或 miniwdl 时跳过 WDL validator 测试。
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 W1 API 基础阶段改动后的最近一次完整验证结果：
+当前 P0 文档同步阶段的最近一次完整验证结果：
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 111 tests
+Ran 114 tests
 OK (skipped=2)
 ```
 
-跳过项为依赖真实执行环境的 tiny run，包括 Cromwell e2e 开关和本地 miniwdl 环境。
+跳过项为显式 opt-in 的真实 Cromwell tiny e2e，以及本地未安装 miniwdl
+时跳过的可选 miniwdl tiny run。
+
+真实 Cromwell tiny e2e 已在独立 runner 环境中手动运行过；默认单测仍保留
+显式 opt-in 机制，避免普通 Windows/Codex 开发环境误触发真实 workflow 执行。
 
 ## 公共测试输入
 
