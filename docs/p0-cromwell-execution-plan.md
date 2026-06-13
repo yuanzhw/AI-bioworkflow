@@ -17,7 +17,7 @@
 - 真实 WDL workflow 执行
 - tiny RNA-seq fixture e2e 测试
 
-Windows 开发环境继续负责确定性编译、静态分析、WDL 渲染、WOMtool 校验和快速单元测试。真实 WDL 执行应交给独立 Cromwell 环境。
+Windows 开发环境继续负责确定性编译、静态分析、WDL 渲染、WDL 语法校验和快速单元测试。真实 WDL 执行应交给独立 Cromwell 环境。
 
 ## 架构决策
 
@@ -47,7 +47,7 @@ Windows/Codex 开发环境负责：
 - 运行 unit 和 compiler tests。
 - 从 Recipe Tool Plan 或 Workflow IR 生成 WDL。
 - 执行 Analyzer / Renderer / Checker 边界。
-- 运行 WOMtool validate。
+- 运行项目 WDL validator 做语法校验。
 - 通过 mock 或 fake HTTP 层运行 Cromwell backend contract tests。
 - 不要求 Docker、miniwdl、真实 Cromwell 或真实 tiny input 文件。
 
@@ -60,9 +60,16 @@ Cromwell runner 环境负责：
 - 生成与 runner 环境绑定的 inputs JSON。
 - 运行真实 RNA-seq DEG tiny workflow e2e 测试。
 
-## 当前阶段：Cromwell Compose Runner
+## 当前状态：P0 执行闭环已手动验证
 
-当前阶段先交付独立 Cromwell server/runner 的 Docker Compose 部署包，不做项目后端 client 联调。
+当前 Windows/Codex 侧已经落地 Execution Backend 抽象、默认 disabled 后端、
+Cromwell REST client、mock contract tests、真实 e2e 测试入口、tiny fixture
+生成脚本，以及独立 Cromwell server/runner 的 Docker Compose 部署包。
+
+独立 Cromwell runner 环境也已完成手动验证：Cromwell server 已运行，
+Docker 与相关 backend 已可用，RNA-seq DEG e2e 所需镜像已拉取到本地，
+并已手动运行真实 e2e 测试。P0 后续重点是把这套验证沉淀成更便捷的
+快速检查脚本和可复现的验证记录。
 
 部署包位置：
 
@@ -87,16 +94,23 @@ deploy/cromwell/
 - Cromwell 容器内路径和宿主机路径必须保持一致，避免 task 容器挂载执行目录失败。
 - inputs JSON 中的 `File` 路径必须是 Cromwell runner 可见的 Linux 路径，不能使用 Windows 绝对路径。
 
-本阶段明确不包含：
+当前已人工确认的 runner 状态：
 
-- 实现或修改 `src/execution/cromwell.py`。
-- 修改 `get_execution_backend()` 中 `cromwell` 未实现的状态。
-- 运行真实 RNA-seq tiny e2e。
-- 通过 AI-bioworkflow 后端 client 提交 WDL 到 Cromwell。
+- Cromwell server 已启动并可用于真实 workflow 提交。
+- Docker 与 Cromwell 配套执行 backend 已可用。
+- RNA-seq DEG e2e 所需 workflow task 镜像已拉取到本地。
+- 已使用显式 e2e 环境变量手动运行真实 RNA-seq tiny e2e。
 
-上述联调内容应等 Cromwell runner 环境经人工确认可用后再继续。
+当前验证记录：
 
-## 计划目录结构
+- 真实 e2e 的 Cromwell workflow id、最终 status、output keys 和输出文件大小已记录在
+  `docs/p0-e2e-verification.md`。
+- Runner 快速检查步骤已收敛到 `scripts/check_p0.ps1`，真实 e2e 逻辑由
+  `scripts/run_cromwell_tiny_e2e.ps1` 统一负责。
+
+Windows/Codex 普通验证仍不要求 Docker、miniwdl、真实 Cromwell 或真实 tiny input 文件。
+
+## 当前目录结构
 
 ```text
 src/execution/
@@ -123,7 +137,9 @@ examples/tiny/
     reads/
 ```
 
-在执行后端抽象落地后，当前 `tests/test_tiny_run.py` 应迁移到 `tests/e2e/test_tiny_run.py`。
+真实 Cromwell e2e 已位于 `tests/e2e/test_tiny_run.py`，默认跳过，只有显式设置
+`AI_BIOWORKFLOW_RUN_E2E=1` 时运行。`tests/test_tiny_run.py` 保留为可选
+miniwdl tiny run 检查，不作为 P0 必需路径。
 
 ## ExecutionBackend 接口
 
@@ -374,85 +390,91 @@ Windows client 不应默认假设自己可以读取 Cromwell 返回的 output �
 
 ## P0 验证命令
 
-Windows/Codex 快速开发检查：
+P0 验证入口分为本地快速检查和真实 Cromwell e2e。默认入口不触发真实
+workflow 执行，真实 e2e 必须显式 opt-in。
+
+| 场景 | 命令 | 说明 |
+| --- | --- | --- |
+| 本地 P0 快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和语法校验。 |
+| 真实 Cromwell tiny e2e | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 -RunE2E -CromwellUrl http://localhost:8000 -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny` | 委托 `scripts/run_cromwell_tiny_e2e.ps1` 准备 fixture、同步 runner 并运行 e2e。 |
+
+本地快速检查的多行写法：
 
 ```powershell
-uv run python -m unittest discover -v
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 ```
 
-代表性编译和 WDL 校验：
+真实 Cromwell e2e 的多行写法：
 
 ```powershell
-uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output .cache/rnaseq_deg.wdl
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
+  -RunE2E `
+  -CromwellUrl http://localhost:8000 `
+  -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny `
+  -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny
 ```
 
-Cromwell runner 上的真实 e2e：
-
-```bash
-AI_BIOWORKFLOW_RUN_E2E=1 \
-AI_BIOWORKFLOW_RUN_BACKEND=cromwell \
-CROMWELL_URL=http://localhost:8000 \
-AI_BIOWORKFLOW_TINY_INPUTS=/data/ai-bioworkflow-tiny/rnaseq_deg.inputs.json \
-uv run python -m unittest tests.e2e.test_tiny_run -v
-```
+`check_p0.ps1` 是 P0 总检查入口；真实 Cromwell e2e 的 fixture 准备、
+runner 同步和测试执行仍由 `scripts/run_cromwell_tiny_e2e.ps1` 统一负责，
+避免两份脚本维护重复的 e2e 逻辑。
 
 ## 实施计划
 
 ### 阶段 1：文档与测试边界
 
-- 更新 P0 文档，明确 miniwdl 是可选项。
-- 明确 Cromwell API execution 是 P0 runtime baseline。
-- 固定 Windows/Codex 与 Cromwell runner 的职责边界。
-- 将本文档作为独立计划文档。
+- [x] 更新 P0 文档，明确 miniwdl 是可选项。
+- [x] 明确 Cromwell API execution 是 P0 runtime baseline。
+- [x] 固定 Windows/Codex 与 Cromwell runner 的职责边界。
+- [x] 将本文档作为独立计划文档。
 
 ### 阶段 2：Execution Backend 核心
 
-- 新增 `src/execution/protocol.py`。
-- 新增 `BackendAvailability`。
-- 新增 `ExecutionResult`。
-- 新增 `ExecutionBackend` protocol。
-- 新增 `src/execution/disabled.py`。
-- 新增 `src/execution/factory.py`。
-- 添加 backend selection 单元测试。
+- [x] 新增 `src/execution/protocol.py`。
+- [x] 新增 `BackendAvailability`。
+- [x] 新增 `ExecutionResult`。
+- [x] 新增 `ExecutionBackend` protocol。
+- [x] 新增 `src/execution/disabled.py`。
+- [x] 新增 `src/execution/factory.py`。
+- [x] 添加 backend selection 单元测试。
 
 ### 阶段 3：Cromwell Backend
 
-- 新增 `src/execution/cromwell.py`。
-- 通过 `/engine/v1/status` 实现 health check。
-- 通过 `/api/workflows/v1` 实现 submit。
-- 使用 `workflowSource`、`workflowInputs`、`workflowOptions`、`workflowDependencies` 和 `labels`。
-- 通过 `/api/workflows/v1/{id}/status` 实现 polling。
-- 实现 outputs 和 metadata 获取。
-- 实现 timeout 和 failed status 处理。
-- 添加 mock contract tests。
+- [x] 新增 `src/execution/cromwell.py`。
+- [x] 通过 `/engine/v1/status` 实现 health check。
+- [x] 通过 `/api/workflows/v1` 实现 submit。
+- [x] 使用 `workflowSource`、`workflowInputs`、`workflowOptions`、`workflowDependencies` 和 `labels`。
+- [x] 通过 `/api/workflows/v1/{id}/status` 实现 polling。
+- [x] 实现 outputs 和 metadata 获取。
+- [x] 实现 timeout 和 failed status 处理。
+- [x] 添加 mock contract tests。
 
 ### 阶段 4：E2E 测试迁移
 
-- 创建 `tests/e2e/`。
-- 移动或替换当前 optional tiny-run 测试。
-- 保证默认 e2e 行为是 skip。
-- 保证显式开启 e2e 但 backend 不可用时 fail。
-- 断言 Cromwell status 和 output keys。
-- 不默认假设 Windows 能访问 Cromwell output 文件路径。
+- [x] 创建 `tests/e2e/`。
+- [x] 新增真实 Cromwell e2e 入口，并保留 miniwdl tiny run 为可选检查。
+- [x] 保证默认 e2e 行为是 skip。
+- [x] 保证显式开启 e2e 但 backend 不可用时 fail。
+- [x] 断言 Cromwell status 和 output keys。
+- [x] 不默认假设 Windows 能访问 Cromwell output 文件路径。
 
 ### 阶段 5：Tiny Fixture
 
-- 新增 `examples/tiny/prepare_tiny_data.py`。
-- 新增 `examples/tiny/rnaseq_deg.inputs.template.json`。
-- 如果合适，提交小型、可再分发的源 fixture 数据。
-- 在 runner 环境生成 Salmon index。
-- 在 runner 环境生成最终 `rnaseq_deg.inputs.json`。
-- 写出成功前验证所有路径存在。
+- [x] 新增 `examples/tiny/prepare_tiny_data.py`。
+- [x] 新增 `examples/tiny/rnaseq_deg.inputs.template.json`。
+- [x] 由脚本生成小型 fixture 源数据。
+- [x] 在 runner 环境生成 Salmon index。
+- [x] 在 runner 环境生成最终 `rnaseq_deg.inputs.json`。
+- [x] 写出成功前验证所有路径存在。
 
 ### 阶段 6：Cromwell Runner
 
-- 准备 Linux、WSL、devcontainer 或服务器侧 Cromwell 环境。
-- 使用 `deploy/cromwell/` 中的 Docker Compose 部署 Cromwell server mode。
-- 固定 Cromwell server 版本为 `92`。
-- 使用 PostgreSQL 16 作为 Cromwell metadata database。
-- 使用 Docker-outside-of-Docker 挂载宿主机 Docker socket，不使用 Docker-in-Docker。
-- 确保 Docker 或其他已配置 backend 可用。
-- 拉取或构建所需镜像：
+- [x] 准备 Linux、WSL、devcontainer 或服务器侧 Cromwell 环境。
+- [x] 使用 `deploy/cromwell/` 中的 Docker Compose 部署 Cromwell server mode。
+- [x] 固定 Cromwell server 版本为 `92`。
+- [x] 使用 PostgreSQL 16 作为 Cromwell metadata database。
+- [x] 使用 Docker-outside-of-Docker 挂载宿主机 Docker socket，不使用 Docker-in-Docker。
+- [x] 确保 Docker 或其他已配置 backend 可用。
+- [x] 拉取或构建所需镜像：
 
 ```text
 quay.io/biocontainers/fastp:1.3.3--h43da1c4_0
@@ -462,28 +484,28 @@ ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
 ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1
 ```
 
-- 手动确认 `GET /engine/v1/status` 可用。
-- 后续阶段再运行 tiny fixture 准备脚本。
-- 后续阶段再设置 Cromwell 相关环境变量并运行 e2e 测试。
+- [x] 手动确认 `GET /engine/v1/status` 可用。
+- [x] 运行 tiny fixture 准备脚本。
+- [x] 设置 Cromwell 相关环境变量并运行 e2e 测试。
 
 ### 阶段 7：P0 便捷检查
 
-- 新增 `scripts/check_p0.ps1` 或 `scripts/check_p0.py`。
-- 默认只跑快速检查。
-- 真实 e2e 必须显式 opt-in。
-- 文档化所需环境变量。
+- [x] 新增 `scripts/check_p0.ps1`。
+- [x] 默认只跑快速检查。
+- [x] 真实 e2e 必须显式 opt-in。
+- [x] 文档化所需环境变量。
 
 ## P0 Definition of Done
 
 P0 完成需要满足：
 
-- Windows/Codex 普通 unit 和 compiler tests 通过。
-- 代表性生成 WDL 可以通过 WOMtool validate。
-- `CromwellBackend` 有 submit、poll、outputs、metadata 和错误处理的 contract tests。
-- 真实 RNA-seq DEG tiny workflow 可以在 Cromwell runner 中运行到 `Succeeded`。
-- e2e 测试检查 Cromwell outputs 中包含 `RNASeqDEG.deg_table` 和 `RNASeqDEG.multiqc_report`。
-- 最终环境绑定的 inputs JSON 由 runner 侧 fixture 脚本生成，不作为固定绝对路径文件提交。
-- README 或开发文档说明如何运行快速检查和真实 e2e 检查。
+- [x] Windows/Codex 普通 unit 和 compiler tests 通过。
+- [x] 代表性生成 WDL 可以通过项目 WDL validator（WOMtool 或 miniwdl）校验。
+- [x] `CromwellBackend` 有 submit、poll、outputs、metadata 和错误处理的 contract tests。
+- [x] 真实 RNA-seq DEG tiny workflow 可以在 Cromwell runner 中运行到 `Succeeded`。
+- [x] e2e 测试检查 Cromwell outputs 中包含 `RNASeqDEG.deg_table` 和 `RNASeqDEG.multiqc_report`。
+- [x] 最终环境绑定的 inputs JSON 由 runner 侧 fixture 脚本生成，不作为固定绝对路径文件提交。
+- [x] README 或开发文档说明如何运行快速检查和真实 e2e 检查。
 
 ## P0 非目标
 
@@ -497,7 +519,5 @@ P0 完成需要满足：
 
 ## 待确认问题
 
-- Cromwell runner 使用 Docker local backend、WSL、devcontainer，还是一台小型持久 Linux 服务器？
-- tiny fixture 源文件是提交进仓库、从零生成，还是从固定 URL 下载？
 - output 文件存在且非空检查是否等到共享输出目录标准化后再加入？
 - 项目维护镜像是否要在 P0 前从 mutable tag 升级到 digest-pinned reference？

@@ -35,7 +35,7 @@ the inputs JSON on a Windows-readable path and render its contents with WSL
 paths:
 
 ```powershell
-.\scripts\run_cromwell_tiny_e2e.ps1 `
+powershell -ExecutionPolicy Bypass -File scripts\run_cromwell_tiny_e2e.ps1 `
   -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny `
   -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny
 ```
@@ -47,7 +47,7 @@ and runs `tests.e2e.test_tiny_run`.
 By default the helper syncs through Docker:
 
 ```powershell
-.\scripts\run_cromwell_tiny_e2e.ps1 `
+powershell -ExecutionPolicy Bypass -File scripts\run_cromwell_tiny_e2e.ps1 `
   -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny `
   -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny `
   -SyncMode docker `
@@ -75,4 +75,16 @@ AI_BIOWORKFLOW_RUN_BACKEND=cromwell \
 CROMWELL_URL=http://localhost:8000 \
 AI_BIOWORKFLOW_TINY_INPUTS=/data/ai-bioworkflow-tiny/rnaseq_deg.inputs.json \
 uv run python -m unittest tests.e2e.test_tiny_run -v
+```
+
+On Windows, the P0 check wrapper can run the same opt-in e2e. It delegates
+fixture preparation, sync, and the real e2e execution to
+`scripts\run_cromwell_tiny_e2e.ps1`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
+  -RunE2E `
+  -CromwellUrl http://localhost:8000 `
+  -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny `
+  -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny
 ```

@@ -2,7 +2,10 @@
 
 本目录提供 AI-bioworkflow P0 阶段使用的 Cromwell server runner 部署包。它用于 Linux、WSL、devcontainer 或小型服务器环境，是一个独立的部署辅助目录。
 
-它不包含项目后端 client 联调，也不会修改 `AI_BIOWORKFLOW_RUN_BACKEND` 的行为。
+Python 侧 Cromwell client 位于 `src/execution/cromwell.py`，并通过
+`AI_BIOWORKFLOW_RUN_BACKEND=cromwell` 选择。本部署包只负责启动 Cromwell
+server 和它的本地执行环境，不会启动 AI-bioworkflow API/CLI，也不会自动修改
+调用方的环境变量。
 
 该 runner 使用：
 
@@ -10,6 +13,10 @@
 - PostgreSQL `16` 保存 workflow metadata
 - 通过 `/var/run/docker.sock` 使用 Docker-outside-of-Docker
 - 默认共享 Linux 路径 `/data/ai-bioworkflow-runner`
+
+当前 P0 runner 已完成手动验证：Cromwell server 已启动，Docker 与相关
+backend 可用，RNA-seq DEG e2e 所需镜像已拉取到本地，并已手动运行真实
+e2e 测试。
 
 ## 文件
 
@@ -112,6 +119,8 @@ docker pull ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
 docker pull ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1
 ```
 
+已验证的 P0 runner 中，这些 e2e 镜像已存在于本地 Docker 环境。
+
 ## 输入路径规则
 
 Cromwell inputs JSON 中每个 `File` 值都必须是 Cromwell runner 可见的 Linux 路径。不要在 inputs JSON 中写入 `C:\Users\...` 这类 Windows 路径。
@@ -161,9 +170,10 @@ curl http://localhost:8000/api/workflows/v1/<workflow-id>/metadata
 - Cromwell 启动后不健康：查看 `docker compose logs cromwell` 和 `docker compose logs postgres`；Cromwell 会等待 Postgres 可用后再启动。
 - workflow 输出没有复制：使用 `options.example.json`，或提供等价的 workflow options 文件并设置 `final_workflow_outputs_dir`。
 
-## 本部署包不包含的内容
+## 边界
 
-- 实现 `src/execution/cromwell.py`
-- 修改 `get_execution_backend()` 行为
-- 运行真实 RNA-seq tiny e2e 测试
-- 通过 AI-bioworkflow 后端 client 提交 workflow
+- 不启动 AI-bioworkflow FastAPI 或 CLI 进程。
+- 不自动设置 `AI_BIOWORKFLOW_RUN_BACKEND`、`CROMWELL_URL` 或 e2e 测试变量。
+- 不自动拉取、构建或发布 workflow task 镜像；镜像仍由 Tool Catalog 与容器发布流程显式管理。
+- 不提交带有环境绑定绝对路径的最终 tiny inputs JSON；请使用 `examples/tiny/prepare_tiny_data.py` 在 runner 可见路径生成。
+- 不默认运行真实 RNA-seq tiny e2e；真实执行必须由调用方显式设置环境变量后运行 `tests.e2e.test_tiny_run`。

@@ -39,7 +39,7 @@ AI-bioworkflow/
 │   │
 │   ├── tools/            # 10. 工具箱：存放外部工具封装
 │   │   ├── __init__.py
-│   │   └── validator.py  # 生信特定工具（如 WOMtool 语法校验）
+│   │   └── validator.py  # WDL validator wrapper
 │   │
 │   ├── nodes/            # 11. 工作节点：LangGraph 的具体执行工位
 │   │   ├── __init__.py
@@ -71,7 +71,7 @@ AI-bioworkflow/
 9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `java -jar womtool.jar validate`）都必须封装为独立 Tool，确保生成代码闭环验证。
 10. **Catalog 镜像权威来源 (`catalog/`)**：每个 Tool Catalog 条目必须显式声明 `runtime.docker`。编译链路不搜索、不猜测、不联网补全镜像；新增或升级工具时由维护者明确选择镜像并写入 catalog。
 11. **辅助脚本镜像化 (`containers/`)**：tximport、DESeq2、MultiQC 等辅助脚本随项目镜像构建进入容器，不作为 WDL 输入，也不内联到 command 中。
-12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> WOMtool validate 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
+12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> WDL syntax validation 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
 
 ## Workflow IR 规范
 
@@ -126,7 +126,7 @@ analyzer_node    # IR 静态分析
   ↓
 renderer_node    # Workflow IR steps/scatter -> WDL
   ↓
-checker_node     # WOMtool validate
+checker_node     # WDL syntax validation
   ↓
 END
 
@@ -143,6 +143,27 @@ analyzer_node    # 修复后重新分析、渲染、校验
 - [x] **自建工具镜像管理规范初版**：对于需要项目维护脚本的工具，在 `containers/<tool>/<version>/` 管理 Dockerfile、脚本和 smoke test；构建完成后将最终镜像引用写入 Tool Catalog。
 - [x] **镜像修订版 tag**：项目维护镜像使用 `<software-version>-rN` tag，例如 `deseq2:1.42.1-r2`。目录版本和 Tool Catalog `version` 字段表示上游软件版本；`image_revision.txt` 表示项目镜像修订号。
 - [x] **当前辅助工具镜像**：tximport、DESeq2 与 MultiQC 已具备项目内构建定义，作为 RNA-seq DEG 可执行流程的依赖。
+
+## 已完成的 P0 执行验证边界
+
+- [x] **Execution Backend 抽象**：默认 disabled 后端和 Cromwell REST backend 已落地，测试覆盖 availability、submit、polling、outputs、metadata 与失败语义。
+- [x] **Cromwell runner 基线**：独立 Cromwell server 已运行，Docker 与相关执行 backend 已可用。
+- [x] **e2e 镜像就绪**：RNA-seq DEG tiny e2e 所需镜像已拉取到 runner 本地。
+- [x] **真实 tiny e2e 手动验证**：已通过显式 opt-in 的 Cromwell e2e 入口手动运行真实 RNA-seq tiny workflow。
+
+P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流程沉淀为便捷检查脚本、可复现验证摘要和更清晰的作品集展示材料。
+
+## 当前开发操作入口
+
+日常开发优先使用以下入口，避免绕过 service、Compiler Graph 或执行后端边界。
+
+| 场景 | 命令 | 说明 |
+| --- | --- | --- |
+| P0 本地快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和语法校验；不触发真实 e2e。 |
+| 结构化编译 | `uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl` | 直接走确定性 Recipe Tool Plan / IR 编译路径，不需要 API key。 |
+| 自然语言规划编译 | `uv run main.py --prompt-file examples/rnaseq_deg_request.txt --output outputs/rnaseq_deg.wdl` | 先生成 Recipe Tool Plan，再进入确定性编译链路；需要 `DEEPSEEK_API_KEY`。 |
+| FastAPI 开发服务 | `.\.venv\Scripts\python.exe -m src.api.server` | 默认监听 `127.0.0.1:8010`，避开 Cromwell 的 `8000`。 |
+| 真实 Cromwell tiny e2e | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 -RunE2E -CromwellUrl http://localhost:8000 -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny` | 显式 opt-in；`check_p0.ps1` 委托 `run_cromwell_tiny_e2e.ps1` 准备 fixture、同步 runner 并运行真实 e2e。 |
 
 ## 未来架构原则（规划中）
 

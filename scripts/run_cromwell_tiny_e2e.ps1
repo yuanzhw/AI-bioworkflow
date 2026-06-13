@@ -2,7 +2,8 @@ param(
     [string]$WindowsFixtureRoot = "C:\data\ai-bioworkflow-tiny",
     [string]$CromwellFixtureRoot = "/data/ai-bioworkflow-runner/tiny",
     [string]$CromwellUrl = "http://localhost:8000",
-    [string]$ContainerRuntime = "docker",
+    [ValidateSet("auto", "docker", "podman")]
+    [string]$ContainerRuntime = "auto",
     [ValidateSet("docker", "wsl")]
     [string]$SyncMode = "docker",
     [string]$CromwellContainerName = "cromwell-cromwell-1",

@@ -9,7 +9,7 @@
 
 
 AI-bioworkflow 是一个面向生物信息学工作流生成的 Agent / 编译器原型。
-项目利用 **LangGraph** 构建状态流转架构，将用户提供的结构化 JSON 标准化为内部 **Workflow IR**，再通过确定性的 Renderer 编译为标准、合规的 **WDL (Workflow Description Language) 1.0** 代码，并使用 `WOMtool` 做本地语法校验。
+项目利用 **LangGraph** 构建状态流转架构，将用户提供的结构化 JSON 标准化为内部 **Workflow IR**，再通过确定性的 Renderer 编译为标准、合规的 **WDL (Workflow Description Language) 1.0** 代码，并使用可配置 WDL validator 做本地语法校验。
 
 LLM 在这个架构中更适合承担规划、补全、修复与解释任务；从标准 IR 到 WDL 的最终生成由普通代码完成，保证输出稳定、可测试、可维护。
 
@@ -20,6 +20,8 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 - **静态分析**：在渲染前检查 task/call 引用、输入完整性、上游输出引用和基础类型匹配。
 - **Recipe / Tool Catalog**：支持用预定义生信工具目录和分析配方生成 Workflow IR。
 - **Agentic 架构**：基于 LangGraph 串联 IR Normalizer、Analyzer、Repairer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
+- **可复用服务与 API**：CLI 与 FastAPI 复用同一套 workflow/catalog service，避免界面层复制编译逻辑。
+- **执行后端边界**：提供可配置的 Execution Backend 抽象和 Cromwell REST client，用 contract tests 覆盖提交、轮询、outputs/metadata 与失败语义。
 - **模块化设计**：高度解耦的 State、Prompts、Nodes 与 Tools 设计，极佳的代码可维护性。
 
 ## 🛠️ 快速开始
@@ -60,7 +62,36 @@ WOMTOOL_JAR="D:/path/to/womtool.jar"
 JAVA_HOME="D:/path/to/jdk-17"
 ```
 
-### 4. 编译工作流
+### 4. 常用操作入口
+
+本地开发最常用的入口如下。默认 P0 检查不会触发真实 Cromwell e2e。
+
+```powershell
+# 本地 P0 快速检查：单测 + 代表性 WDL 编译/语法校验
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
+
+# 结构化 Recipe Tool Plan 编译
+uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl
+
+# 自然语言规划并编译
+uv run main.py --prompt-file examples/rnaseq_deg_request.txt --output outputs/rnaseq_deg.wdl
+
+# 启动 FastAPI 开发服务
+.\.venv\Scripts\python.exe -m src.api.server
+```
+
+真实 Cromwell tiny e2e 需要显式 opt-in，并会委托
+`scripts\run_cromwell_tiny_e2e.ps1` 完成 fixture 准备、runner 同步和测试执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
+  -RunE2E `
+  -CromwellUrl http://localhost:8000 `
+  -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny `
+  -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny
+```
+
+### 5. 编译工作流
 
 无参数运行时会使用内置自然语言 demo，先规划成 Recipe Tool Plan，再编译并打印生成的 WDL：
 
@@ -96,7 +127,7 @@ uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rna
 - `--save-plan`：将自然语言 Planner 生成的 Recipe Tool Plan 保存为 JSON 文件。
 - `--save-planner-prompt`：保存完整 Planner prompt，方便调试模型输出。
 - `--print-ir`：打印 Planner 标准化后的 Workflow IR。
-- `--no-check`：跳过 WOMtool 语法校验，仅执行 IR 分析与 WDL 渲染。
+- `--no-check`：跳过 WDL 语法校验，仅执行 IR 分析与 WDL 渲染。
 - `--planner-model`：指定自然语言 Planner 使用的模型。
 - `--verbose`：将节点进度日志输出到 stderr。
 
@@ -116,7 +147,7 @@ uv run main.py \
   --output outputs/rnaseq_deg.wdl
 ```
 
-### 5. 启动 W1 FastAPI 开发服务
+### 6. 启动 W1 FastAPI 开发服务
 
 如果本地同时运行 Cromwell server，建议保留 Cromwell 使用 `8000` 端口，本项目 FastAPI 开发服务使用 `8010` 端口，避免两个服务的 `/api/...` 路径互相混淆。
 
@@ -202,6 +233,15 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 - [x] 闭环修复机制初版：当分析器或校验器发现可确定修复的问题时，优先修复 IR 并重新编译 WDL。
 - [x] Tool Catalog 强制显式声明 `runtime.docker`，作为镜像来源的唯一权威。
 - [x] 支持 `workflow.steps` 与 WDL scatter，RNA-seq DEG recipe 升级为多样本 Salmon -> tximport -> DESeq2 -> MultiQC。
+- [x] 抽取 workflow/catalog application service，供 CLI 与 API 复用。
+- [x] 完成 W1 FastAPI 基础接口：自然语言 run、结构化 compile、recipe/tool catalog 查询。
+- [x] 增加 Execution Backend 抽象、Cromwell REST backend contract tests 和 disabled 默认后端。
+- [x] 增加 Cromwell Compose runner 文档、tiny RNA-seq fixture 生成脚本和显式 opt-in 的真实 e2e 入口。
+- [x] 在独立 Cromwell runner 上手动跑通真实 RNA-seq tiny e2e。
+- [x] 增加 P0 快速检查脚本，默认覆盖单测和代表性 WDL 编译/校验。
+- [x] 记录一份可复现的 [Cromwell e2e 验证摘要](./docs/p0-e2e-verification.md)，包括 workflow id、最终状态和 output keys。
+- [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
+- [ ] 建设 Next.js 工作台、DAG 可视化和历史详情页。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证
