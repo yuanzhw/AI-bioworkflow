@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 180 20% 98%;
+  --foreground: 210 24% 16%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 24% 16%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 24% 16%;
+  --primary: 173 67% 24%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 166 36% 90%;
+  --secondary-foreground: 214 30% 18%;
+  --muted: 195 19% 93%;
+  --muted-foreground: 213 13% 40%;
+  --accent: 347 68% 49%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 70% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 190 14% 84%;
+  --input: 190 14% 84%;
+  --ring: 173 67% 24%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.workflow-backdrop {
+  background-image:
+    linear-gradient(90deg, rgba(248, 251, 250, 0.99) 0%, rgba(248, 251, 250, 0.96) 36%, rgba(248, 251, 250, 0.62) 68%, rgba(248, 251, 250, 0.26) 100%),
+    url("/workflow-system-preview.png");
+  background-color: hsl(var(--background));
+  background-position: right 3vw center;
+  background-repeat: no-repeat;
+  background-size: auto min(760px, 78vh);
+}
+
+@media (max-width: 1180px) {
+  .workflow-backdrop {
+    background-image:
+      linear-gradient(90deg, rgba(248, 251, 250, 0.99) 0%, rgba(248, 251, 250, 0.98) 52%, rgba(248, 251, 250, 0.82) 78%, rgba(248, 251, 250, 0.54) 100%),
+      url("/workflow-system-preview.png");
+    background-position: right -21rem center;
+    background-size: auto min(690px, 74vh);
+  }
+}
+
+@media (max-width: 767px) {
+  .workflow-backdrop {
+    background-image:
+      linear-gradient(180deg, rgba(248, 251, 250, 0.99) 0%, rgba(248, 251, 250, 0.97) 100%);
+  }
+}
