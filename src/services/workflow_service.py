@@ -1,10 +1,11 @@
 """Workflow planning and compilation service entry points."""
 
 from dataclasses import dataclass
-from typing import Any, Mapping, cast
+from typing import Any, Callable, Mapping, cast
 
 from src.catalog.loader import ToolCatalog
-from src.graph import agent
+from src.graph import MAX_REPAIR_ATTEMPTS, agent
+from src.nodes.checker import checker_node
 from src.nl_planner import DEFAULT_PLANNER_MODEL, PlannerLlm, create_natural_language_plan
 from src.nodes.analyzer import analyzer_node
 from src.nodes.ir_normalizer import ir_normalizer_node
@@ -12,6 +13,13 @@ from src.nodes.renderer import renderer_node
 from src.nodes.repairer import repairer_node
 from src.recipes.loader import RecipeCatalog
 from src.state import WorkflowState
+from src.tools.validator import VALIDATOR_MISSING_MARKER
+
+
+CompilerEventCallback = Callable[
+    [str, str | None, str, WorkflowState, dict[str, Any] | None],
+    None,
+]
 
 
 @dataclass(frozen=True)
@@ -52,9 +60,10 @@ class WorkflowCompilationResult:
 def compile_structured_workflow(
     parsed_json: dict[str, Any],
     check: bool = True,
+    event_callback: CompilerEventCallback | None = None,
 ) -> WorkflowCompilationResult:
     """Compile a Recipe Tool Plan or Workflow IR without natural-language planning."""
-    state = _run_compiler(parsed_json, check=check)
+    state = _run_compiler(parsed_json, check=check, event_callback=event_callback)
     plan = parsed_json if _is_recipe_tool_plan(parsed_json) else None
     return _result_from_state(state, plan=plan, check=check)
 
@@ -114,21 +123,63 @@ def compile_workflow(
 def _run_compiler(
     parsed_json: dict[str, Any],
     check: bool = True,
+    event_callback: CompilerEventCallback | None = None,
 ) -> WorkflowState:
     state = build_initial_state(parsed_json)
-    if check:
+    if check and event_callback is None:
         return cast(WorkflowState, agent.invoke(state))
 
+    _emit_compiler_event(event_callback, "node.started", "ir_normalizer", "IR normalizer started.", state)
     _merge_state(state, ir_normalizer_node(state))
     if state["analysis_errors"]:
+        _emit_compiler_event(
+            event_callback,
+            "node.failed",
+            "ir_normalizer",
+            "IR normalizer failed.",
+            state,
+            {"analysis_errors": state["analysis_errors"]},
+        )
         return state
+    _emit_compiler_event(event_callback, "node.completed", "ir_normalizer", "IR normalizer completed.", state)
+    _emit_compiler_event(
+        event_callback,
+        "artifact.updated",
+        "ir_normalizer",
+        "Workflow IR artifact updated.",
+        state,
+        {"artifact": "workflow_ir"},
+    )
 
-    _analyze_with_repair(state)
+    _analyze_with_repair(state, event_callback=event_callback)
     if state["analysis_errors"]:
         return state
 
+    _emit_compiler_event(event_callback, "node.started", "renderer", "Renderer started.", state)
     _merge_state(state, renderer_node(state))
+    _emit_compiler_event(event_callback, "node.completed", "renderer", "Renderer completed.", state)
+    _emit_compiler_event(
+        event_callback,
+        "artifact.updated",
+        "renderer",
+        "WDL artifact updated.",
+        state,
+        {"artifact": "wdl"},
+    )
+
+    if check:
+        _validate_with_repair(state, event_callback=event_callback)
+        return state
+
     state["validation_message"] = "WDL syntax validation skipped (--no-check)."
+    _emit_compiler_event(
+        event_callback,
+        "validation.completed",
+        "checker",
+        state["validation_message"],
+        state,
+        {"is_valid": state["is_valid"], "check_performed": False},
+    )
     return state
 
 
@@ -172,15 +223,142 @@ def _is_recipe_tool_plan(parsed_json: dict[str, Any]) -> bool:
     return "recipe" in workflow and "tool_calls" in workflow
 
 
-def _analyze_with_repair(state: WorkflowState) -> None:
+def _analyze_with_repair(
+    state: WorkflowState,
+    event_callback: CompilerEventCallback | None = None,
+) -> None:
     while True:
+        _emit_compiler_event(event_callback, "node.started", "analyzer", "Analyzer started.", state)
         _merge_state(state, analyzer_node(state))
         if not state["analysis_errors"]:
+            _emit_compiler_event(event_callback, "node.completed", "analyzer", "Analyzer completed.", state)
             return
 
+        _emit_compiler_event(
+            event_callback,
+            "node.failed",
+            "analyzer",
+            "Analyzer found Workflow IR errors.",
+            state,
+            {"analysis_errors": state["analysis_errors"]},
+        )
+        if not _can_attempt_repair(state):
+            return
+
+        _emit_compiler_event(event_callback, "node.started", "repairer", "Repairer started.", state)
         _merge_state(state, repairer_node(state))
         if not state["repair_actions"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.completed",
+                "repairer",
+                "Repairer found no safe deterministic fix.",
+                state,
+            )
             return
+        _emit_workflow_ir_artifact_updated(event_callback, state)
+        _emit_compiler_event(
+            event_callback,
+            "repair.applied",
+            "repairer",
+            "Workflow IR repair applied.",
+            state,
+            {"repair_actions": state["repair_actions"]},
+        )
+        _emit_compiler_event(event_callback, "node.completed", "repairer", "Repairer completed.", state)
+
+
+def _validate_with_repair(
+    state: WorkflowState,
+    event_callback: CompilerEventCallback | None = None,
+) -> None:
+    while True:
+        _emit_compiler_event(event_callback, "node.started", "checker", "Checker started.", state)
+        _merge_state(state, checker_node(state))
+        _emit_compiler_event(
+            event_callback,
+            "validation.completed",
+            "checker",
+            "WDL validation completed.",
+            state,
+            {
+                "is_valid": state["is_valid"],
+                "validation_message": state["validation_message"],
+                "check_performed": True,
+            },
+        )
+        if state["is_valid"] or _missing_local_validator(state) or not _can_attempt_repair(state):
+            return
+
+        _emit_compiler_event(event_callback, "node.started", "repairer", "Repairer started.", state)
+        _merge_state(state, repairer_node(state))
+        if not state["repair_actions"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.completed",
+                "repairer",
+                "Repairer found no safe deterministic fix.",
+                state,
+            )
+            return
+        _emit_workflow_ir_artifact_updated(event_callback, state)
+        _emit_compiler_event(
+            event_callback,
+            "repair.applied",
+            "repairer",
+            "Workflow IR repair applied.",
+            state,
+            {"repair_actions": state["repair_actions"]},
+        )
+        _emit_compiler_event(event_callback, "node.completed", "repairer", "Repairer completed.", state)
+        _analyze_with_repair(state, event_callback=event_callback)
+        if state["analysis_errors"]:
+            return
+        _emit_compiler_event(event_callback, "node.started", "renderer", "Renderer started.", state)
+        _merge_state(state, renderer_node(state))
+        _emit_compiler_event(event_callback, "node.completed", "renderer", "Renderer completed.", state)
+        _emit_compiler_event(
+            event_callback,
+            "artifact.updated",
+            "renderer",
+            "WDL artifact updated.",
+            state,
+            {"artifact": "wdl"},
+        )
+
+
+def _can_attempt_repair(state: WorkflowState) -> bool:
+    return bool(state.get("workflow_ir")) and state.get("repair_count", 0) < MAX_REPAIR_ATTEMPTS
+
+
+def _missing_local_validator(state: WorkflowState) -> bool:
+    return VALIDATOR_MISSING_MARKER in state.get("validation_message", "")
+
+
+def _emit_compiler_event(
+    event_callback: CompilerEventCallback | None,
+    event_type: str,
+    node: str | None,
+    summary: str,
+    state: WorkflowState,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    if event_callback is not None:
+        event_callback(event_type, node, summary, state, payload)
+
+
+def _emit_workflow_ir_artifact_updated(
+    event_callback: CompilerEventCallback | None,
+    state: WorkflowState,
+) -> None:
+    _emit_compiler_event(
+        event_callback,
+        "artifact.updated",
+        "repairer",
+        "Workflow IR artifact updated.",
+        state,
+        {"artifact": "workflow_ir"},
+    )
 
 
 def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:

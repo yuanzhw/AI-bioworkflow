@@ -240,7 +240,7 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 - [x] 在独立 Cromwell runner 上手动跑通真实 RNA-seq tiny e2e。
 - [x] 增加 P0 快速检查脚本，默认覆盖单测和代表性 WDL 编译/校验。
 - [x] 记录一份可复现的 [Cromwell e2e 验证摘要](./docs/p0-e2e-verification.md)，包括 workflow id、最终状态和 output keys。
-- [ ] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
+- [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
 - [ ] 建设 Next.js 工作台、DAG 可视化和历史详情页。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 

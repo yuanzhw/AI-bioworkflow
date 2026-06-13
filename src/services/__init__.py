@@ -8,8 +8,10 @@ from src.services.workflow_service import (
     plan_and_compile_workflow,
     workflow_succeeded,
 )
+from src.services.run_service import RunService
 
 __all__ = [
+    "RunService",
     "WorkflowCompilationResult",
     "compile_structured_workflow",
     "compile_workflow",

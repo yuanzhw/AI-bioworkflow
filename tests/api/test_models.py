@@ -10,10 +10,12 @@ from src.api.models import (
     CompilationResultResponse,
     NaturalLanguageRunRequest,
     RecipeListResponse,
+    RunAcceptedResponse,
     RunEvent,
     RunEventType,
     RunStatus,
     ToolListResponse,
+    WorkflowRunSnapshotResponse,
 )
 from src.services.catalog_service import list_recipes, list_tools
 from src.services.workflow_service import compile_structured_workflow
@@ -74,6 +76,29 @@ class WorkflowDtoTests(unittest.TestCase):
         self.assertFalse(response.diagnostics.succeeded)
         self.assertEqual(response.artifacts.wdl, "")
         self.assertIn("sample_groups", "\n".join(response.diagnostics.analysis_errors))
+
+    def test_run_accepted_response_exposes_event_stream_url(self):
+        response = RunAcceptedResponse(
+            run_id="run_001",
+            status=RunStatus.CREATED,
+            events_url="/api/runs/run_001/events",
+        )
+
+        self.assertEqual(response.run_id, "run_001")
+        self.assertEqual(response.status, RunStatus.CREATED)
+        self.assertEqual(response.events_url, "/api/runs/run_001/events")
+
+    def test_run_snapshot_response_defaults_to_empty_artifacts_and_diagnostics(self):
+        response = WorkflowRunSnapshotResponse(
+            run_id="run_001",
+            status=RunStatus.RUNNING,
+            request="Run RNA-seq DEG.",
+            events_url="/api/runs/run_001/events",
+        )
+
+        self.assertEqual(response.artifacts.workflow_ir, {})
+        self.assertEqual(response.artifacts.wdl, "")
+        self.assertFalse(response.diagnostics.succeeded)
 
 
 class CatalogDtoTests(unittest.TestCase):

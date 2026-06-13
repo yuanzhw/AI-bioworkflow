@@ -48,11 +48,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 P0 文档同步阶段的最近一次完整验证结果：
+当前 W2 Run 事件与 P0 文档同步收口后的最近一次完整验证结果：
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 114 tests
+Ran 139 tests
 OK (skipped=2)
 ```
 
@@ -120,7 +120,7 @@ OK (skipped=2)
 
 ## `tests/api/test_models.py`
 
-该文件验证 W1 FastAPI DTO。DTO 只定义 API 输入输出形状，不实现业务逻辑；业务逻辑仍由 W0 services 和编译链路承担。
+该文件验证 FastAPI DTO。DTO 只定义 API 输入输出形状，不实现业务逻辑；业务逻辑仍由 service 层和编译链路承担。
 
 ### `test_compile_workflow_request_accepts_structured_payload`
 
@@ -314,9 +314,11 @@ OK (skipped=2)
 
 ## `tests/api/test_routes.py`
 
-该文件验证 W1 FastAPI endpoint contract。测试通过 `TestClient(create_app())` 打 HTTP 层，并通过 patch 断言 API routes 复用 W0 services，而不是复制 catalog resolver、planner 或 compiler 逻辑。
+该文件验证 W2 FastAPI endpoint contract。测试通过 `TestClient(create_app())` 打 HTTP 层，并通过 patch 断言 API routes 复用 service 层，而不是复制 catalog resolver、planner、compiler 或 run lifecycle 逻辑。
 
-`POST /api/runs` 当前契约为 W1 同步 RPC：请求体包含自然语言 `request`、可选 `planner_model` 和 `check`；响应直接返回 `CompilationResultResponse`，包括 `status`、Plan、Workflow IR、WDL、diagnostics 和 planner observability。W1 不返回 `run_id` 或 `events_url`，这些属于 W2 持久化与 SSE 能力。
+`POST /api/runs` 当前契约为 W2 异步 run 创建入口：请求体包含自然语言 `request`、可选 `planner_model` 和 `check`；响应返回 HTTP 202 与 `RunAcceptedResponse`，包括 `run_id`、初始 `created` 状态和 `events_url`。`POST /api/compile` 同样创建 run，但输入是 Recipe Tool Plan / Workflow IR JSON，跳过自然语言 planner。
+
+`GET /api/runs/{run_id}` 返回持久化 run 快照；`GET /api/runs/{run_id}/events` 返回 SSE 事件流，用于实时展示和历史回放。
 
 ### `test_list_recipes`
 
@@ -452,7 +454,8 @@ OK (skipped=2)
 输入：
 
 - `examples/rnaseq_deg_recipe_plan.json`
-- mock `workflow_service.compile_structured_workflow(plan, check=False)` 返回成功 service result。
+- mock `run_service.create_structured_compile_run(...)` 返回 `RunAcceptedResponse`。
+- mock `run_service.execute_structured_compile_run(...)` 作为后台任务。
 - HTTP 请求：`POST /api/compile`
 
 执行：
@@ -461,41 +464,14 @@ OK (skipped=2)
 
 期望输出：
 
-- HTTP status 为 `200`。
-- service 调用参数为 `(plan, check=False)`。
-- response `status == "succeeded"`。
-- diagnostics 中 `check_performed == False`。
-- artifacts 中 workflow 名称为 `RNASeqDEG`。
-- artifacts 中 WDL 包含 `workflow RNASeqDEG`。
+- HTTP status 为 `202`。
+- response 包含 `run_id`、`status == "created"` 和 `events_url`。
+- route 调用 run 创建 service，并安排结构化编译后台执行。
 
 覆盖点：
 
-- 结构化编译 endpoint 复用 W0 workflow service。
-- API 层不绕过 Analyzer / Renderer / Checker 边界。
-
-### `test_compile_invalid_plan_returns_diagnostics`
-
-输入：
-
-- 复制 `examples/rnaseq_deg_recipe_plan.json`。
-- 删除 workflow input `sample_groups`。
-- HTTP 请求：`POST /api/compile`
-
-执行：
-
-- 调用 FastAPI TestClient，请求体包含 `payload` 和 `check=False`。
-
-期望输出：
-
-- HTTP status 为 `200`。
-- response `status == "failed"`。
-- diagnostics 中 `succeeded == False`。
-- artifacts 中 `wdl == ""`。
-- analysis errors 包含 `sample_groups`。
-
-覆盖点：
-
-- 无效结构化输入返回诊断响应，而不是抛出未处理异常或生成 WDL。
+- 结构化编译 endpoint 复用 run service。
+- API 层不直接调用 Analyzer / Renderer / Checker。
 
 ### `test_compile_rejects_empty_payload`
 
@@ -520,7 +496,8 @@ OK (skipped=2)
 
 输入：
 
-- mock `workflow_service.plan_and_compile_workflow(...)` 返回成功 service result。
+- mock `run_service.create_natural_language_run(...)` 返回 `RunAcceptedResponse`。
+- mock `run_service.execute_natural_language_run(...)` 作为后台任务。
 - HTTP 请求：`POST /api/runs`
 - 请求体：`{"request": "Run RNA-seq DEG.", "check": false}`
 
@@ -530,26 +507,21 @@ OK (skipped=2)
 
 期望输出：
 
-- HTTP status 为 `200`。
-- service 调用参数为：
-
-```python
-("Run RNA-seq DEG.", model=DEFAULT_PLANNER_MODEL, check=False)
-```
-
-- response `status == "succeeded"`。
+- HTTP status 为 `202`。
+- response 包含 `run_id`、`status == "created"` 和 `events_url`。
+- route 调用 run 创建 service，并安排自然语言 run 后台执行。
 
 覆盖点：
 
-- 自然语言 run endpoint 复用 W0 workflow service。
-- 默认 planner model 由 API 层传递给 service。
-- W1 `/api/runs` 是同步接口，成功时直接返回编译结果响应。
+- 自然语言 run endpoint 复用 run service。
+- FastAPI route 只负责 HTTP 输入输出和后台任务调度。
+- W2 `/api/runs` 是异步 run 创建接口，不直接返回编译结果。
 
 ### `test_create_run_passes_requested_planner_model`
 
 输入：
 
-- mock `workflow_service.plan_and_compile_workflow(...)` 返回成功 service result。
+- mock `run_service.create_natural_language_run(...)` 返回 `RunAcceptedResponse`。
 - HTTP 请求：`POST /api/runs`
 - 请求体包含 `planner_model: "custom-planner"`。
 
@@ -559,20 +531,20 @@ OK (skipped=2)
 
 期望输出：
 
-- HTTP status 为 `200`。
-- service 调用参数中 `model == "custom-planner"`。
+- HTTP status 为 `202`。
+- 传给 run service 的 request DTO 中 `planner_model == "custom-planner"`。
 
 覆盖点：
 
 - API 支持调用方显式指定 planner model。
-- `planner_model` 不在 API 层解释，原样传递给 W0 workflow service。
+- `planner_model` 不在 API 层解释，原样传递给 run service。
 
-### `test_create_run_reports_planning_errors`
+### `test_get_run_returns_snapshot`
 
 输入：
 
-- mock `workflow_service.plan_and_compile_workflow(...)` 抛出 `NaturalLanguagePlanningError("LLM planner JSON parsing failed")`。
-- HTTP 请求：`POST /api/runs`
+- mock `run_service.get_snapshot(...)` 返回 `WorkflowRunSnapshotResponse`。
+- HTTP 请求：`GET /api/runs/run_123`
 
 执行：
 
@@ -580,17 +552,36 @@ OK (skipped=2)
 
 期望输出：
 
-- HTTP status 为 `422`。
-- response detail 包含 `LLM planner JSON parsing failed`。
+- HTTP status 为 `200`。
+- response `run_id == "run_123"`。
 
 覆盖点：
 
-- 自然语言 planner 失败被 API 层稳定映射为 422。
-- planner/parsing/schema/catalog 这类请求语义错误不会伪装成成功的 `CompilationResultResponse`。
+- run snapshot endpoint 从 run service 读取持久化快照。
+
+### `test_stream_run_events`
+
+输入：
+
+- mock `run_service.iter_sse_events(...)` 返回 SSE 字符串迭代器。
+- HTTP 请求：`GET /api/runs/run_123/events`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- response text 包含 `event: run.created`。
+
+覆盖点：
+
+- SSE endpoint 复用 run service 的事件流，不在 API 层查询 SQLite。
 
 ## `tests/api/test_server.py`
 
-该文件验证 W1 FastAPI 开发服务器的本地端口约定。Cromwell server 保留 `8000` 端口，本项目 API 默认使用 `8010`。
+该文件验证 FastAPI 开发服务器的本地端口约定。Cromwell server 保留 `8000` 端口，本项目 API 默认使用 `8010`。
 
 ### `test_default_api_port_avoids_cromwell_default_port`
 
@@ -918,7 +909,7 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 
 ## `tests/test_catalog_service.py`
 
-该文件验证 W0 catalog 查询服务。服务层返回 JSON-ready 的 recipe/tool 记录，供 W1 FastAPI 的 catalog 查询端点复用。
+该文件验证 W0 catalog 查询服务。服务层返回 JSON-ready 的 recipe/tool 记录，供 FastAPI 的 catalog 查询端点复用。
 
 ### `test_list_recipes_returns_json_ready_recipe_records`
 
@@ -2201,4 +2192,4 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - Reviewer LLM / Resource Agent / Bioinfo Reviewer 等规划中 Agent。
 - Nextflow 或其他 backend。
 - 真实自然语言模型调用的在线集成测试。
-- W2 run 持久化、SSE 事件流和 run history 回放。
+- Next.js 工作台、DAG 可视化和 run history 前端回放。
