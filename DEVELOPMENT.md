@@ -39,7 +39,7 @@ AI-bioworkflow/
 │   │
 │   ├── tools/            # 10. 工具箱：存放外部工具封装
 │   │   ├── __init__.py
-│   │   └── validator.py  # 生信特定工具（如 WOMtool 语法校验）
+│   │   └── validator.py  # WDL validator wrapper
 │   │
 │   ├── nodes/            # 11. 工作节点：LangGraph 的具体执行工位
 │   │   ├── __init__.py
@@ -71,7 +71,7 @@ AI-bioworkflow/
 9. **工具封装 (`tools/`)**：所有与底层操作系统或第三方生信软件的交互（如调用 `java -jar womtool.jar validate`）都必须封装为独立 Tool，确保生成代码闭环验证。
 10. **Catalog 镜像权威来源 (`catalog/`)**：每个 Tool Catalog 条目必须显式声明 `runtime.docker`。编译链路不搜索、不猜测、不联网补全镜像；新增或升级工具时由维护者明确选择镜像并写入 catalog。
 11. **辅助脚本镜像化 (`containers/`)**：tximport、DESeq2、MultiQC 等辅助脚本随项目镜像构建进入容器，不作为 WDL 输入，也不内联到 command 中。
-12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> WOMtool validate 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
+12. **渐进式重构**：先保证 Natural Language -> Recipe Tool Plan -> IR -> WDL -> WDL syntax validation 的主链路稳定，再逐步扩展 recipe/tool catalog、可解释错误报告与 LLM repairer。
 
 ## Workflow IR 规范
 
@@ -126,7 +126,7 @@ analyzer_node    # IR 静态分析
   ↓
 renderer_node    # Workflow IR steps/scatter -> WDL
   ↓
-checker_node     # WOMtool validate
+checker_node     # WDL syntax validation
   ↓
 END
 

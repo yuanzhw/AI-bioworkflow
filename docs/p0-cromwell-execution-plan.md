@@ -47,7 +47,7 @@ Windows/Codex 开发环境负责：
 - 运行 unit 和 compiler tests。
 - 从 Recipe Tool Plan 或 Workflow IR 生成 WDL。
 - 执行 Analyzer / Renderer / Checker 边界。
-- 运行 WOMtool validate。
+- 运行项目 WDL validator 做语法校验。
 - 通过 mock 或 fake HTTP 层运行 Cromwell backend contract tests。
 - 不要求 Docker、miniwdl、真实 Cromwell 或真实 tiny input 文件。
 
@@ -500,7 +500,7 @@ ghcr.io/yuanzhw/ai-bioworkflow/multiqc:1.21-r1
 P0 完成需要满足：
 
 - [x] Windows/Codex 普通 unit 和 compiler tests 通过。
-- [x] 代表性生成 WDL 可以通过 WOMtool validate。
+- [x] 代表性生成 WDL 可以通过项目 WDL validator（WOMtool 或 miniwdl）校验。
 - [x] `CromwellBackend` 有 submit、poll、outputs、metadata 和错误处理的 contract tests。
 - [x] 真实 RNA-seq DEG tiny workflow 可以在 Cromwell runner 中运行到 `Succeeded`。
 - [x] e2e 测试检查 Cromwell outputs 中包含 `RNASeqDEG.deg_table` 和 `RNASeqDEG.multiqc_report`。

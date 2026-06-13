@@ -9,7 +9,7 @@
 
 
 AI-bioworkflow 是一个面向生物信息学工作流生成的 Agent / 编译器原型。
-项目利用 **LangGraph** 构建状态流转架构，将用户提供的结构化 JSON 标准化为内部 **Workflow IR**，再通过确定性的 Renderer 编译为标准、合规的 **WDL (Workflow Description Language) 1.0** 代码，并使用 `WOMtool` 做本地语法校验。
+项目利用 **LangGraph** 构建状态流转架构，将用户提供的结构化 JSON 标准化为内部 **Workflow IR**，再通过确定性的 Renderer 编译为标准、合规的 **WDL (Workflow Description Language) 1.0** 代码，并使用可配置 WDL validator 做本地语法校验。
 
 LLM 在这个架构中更适合承担规划、补全、修复与解释任务；从标准 IR 到 WDL 的最终生成由普通代码完成，保证输出稳定、可测试、可维护。
 
@@ -127,7 +127,7 @@ uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rna
 - `--save-plan`：将自然语言 Planner 生成的 Recipe Tool Plan 保存为 JSON 文件。
 - `--save-planner-prompt`：保存完整 Planner prompt，方便调试模型输出。
 - `--print-ir`：打印 Planner 标准化后的 Workflow IR。
-- `--no-check`：跳过 WOMtool 语法校验，仅执行 IR 分析与 WDL 渲染。
+- `--no-check`：跳过 WDL 语法校验，仅执行 IR 分析与 WDL 渲染。
 - `--planner-model`：指定自然语言 Planner 使用的模型。
 - `--verbose`：将节点进度日志输出到 stderr。
 
