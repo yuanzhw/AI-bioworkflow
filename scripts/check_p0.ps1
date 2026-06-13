@@ -101,7 +101,7 @@ try {
     }
 
     if (-not $SkipCompile) {
-        Invoke-Step "Representative RNA-seq WDL compile and WOMtool validation" {
+        Invoke-Step "Representative RNA-seq WDL compile and syntax validation" {
             $resolvedOutputDir = Resolve-OutputDirectory
             New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
             $wdlPath = Join-Path $resolvedOutputDir "rnaseq_deg.wdl"

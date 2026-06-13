@@ -67,7 +67,7 @@ JAVA_HOME="D:/path/to/jdk-17"
 本地开发最常用的入口如下。默认 P0 检查不会触发真实 Cromwell e2e。
 
 ```powershell
-# 本地 P0 快速检查：单测 + 代表性 WDL 编译 + WOMtool 校验
+# 本地 P0 快速检查：单测 + 代表性 WDL 编译/语法校验
 powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 
 # 结构化 Recipe Tool Plan 编译

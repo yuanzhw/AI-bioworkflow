@@ -159,7 +159,7 @@ P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流
 
 | 场景 | 命令 | 说明 |
 | --- | --- | --- |
-| P0 本地快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和 WOMtool 校验；不触发真实 e2e。 |
+| P0 本地快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和语法校验；不触发真实 e2e。 |
 | 结构化编译 | `uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl` | 直接走确定性 Recipe Tool Plan / IR 编译路径，不需要 API key。 |
 | 自然语言规划编译 | `uv run main.py --prompt-file examples/rnaseq_deg_request.txt --output outputs/rnaseq_deg.wdl` | 先生成 Recipe Tool Plan，再进入确定性编译链路；需要 `DEEPSEEK_API_KEY`。 |
 | FastAPI 开发服务 | `.\.venv\Scripts\python.exe -m src.api.server` | 默认监听 `127.0.0.1:8010`，避开 Cromwell 的 `8000`。 |

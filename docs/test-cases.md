@@ -24,7 +24,7 @@ Recipe Tool Plan / Workflow IR / Legacy JSON
 .\.venv\Scripts\python.exe -m unittest discover -v
 ```
 
-P0 快速检查脚本会运行完整单测、代表性 RNA-seq WDL 编译和 WOMtool 校验：
+P0 快速检查脚本会运行完整单测、代表性 RNA-seq WDL 编译和语法校验：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1

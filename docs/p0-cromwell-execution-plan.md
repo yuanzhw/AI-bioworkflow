@@ -17,7 +17,7 @@
 - 真实 WDL workflow 执行
 - tiny RNA-seq fixture e2e 测试
 
-Windows 开发环境继续负责确定性编译、静态分析、WDL 渲染、WOMtool 校验和快速单元测试。真实 WDL 执行应交给独立 Cromwell 环境。
+Windows 开发环境继续负责确定性编译、静态分析、WDL 渲染、WDL 语法校验和快速单元测试。真实 WDL 执行应交给独立 Cromwell 环境。
 
 ## 架构决策
 
@@ -395,7 +395,7 @@ workflow 执行，真实 e2e 必须显式 opt-in。
 
 | 场景 | 命令 | 说明 |
 | --- | --- | --- |
-| 本地 P0 快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和 WOMtool 校验。 |
+| 本地 P0 快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和语法校验。 |
 | 真实 Cromwell tiny e2e | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 -RunE2E -CromwellUrl http://localhost:8000 -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny` | 委托 `scripts/run_cromwell_tiny_e2e.ps1` 准备 fixture、同步 runner 并运行 e2e。 |
 
 本地快速检查的多行写法：
