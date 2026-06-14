@@ -14,7 +14,7 @@ scripts/install_womtool.ps1
 .cache/womtool/womtool.jar
 ```
 
-validator 会自动从该 cache 路径发现 JAR。也可以通过环境变量覆盖：
+项目的 `WDL validator` 会自动从该 cache 路径发现 JAR。也可以通过环境变量覆盖：
 
 ```env
 WOMTOOL_JAR="D:/path/to/womtool.jar"
