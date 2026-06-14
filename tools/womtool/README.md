@@ -1,30 +1,26 @@
 # WOMtool
 
-This directory documents the local WOMtool setup. Do not commit the WOMtool
-JAR into the repository.
+本目录记录项目本地 WOMtool 的安装约定。不要把 WOMtool JAR 提交到仓库中。
 
-Use the installer script from the repository root:
+从仓库根目录运行安装脚本：
 
 ```powershell
 scripts/install_womtool.ps1
 ```
 
-By default it downloads `womtool-91.jar` from the Broad Institute Cromwell
-GitHub releases and stores it under:
+默认情况下，脚本会从 Broad Institute Cromwell GitHub releases 下载 `womtool-91.jar`，并保存到：
 
 ```text
 .cache/womtool/womtool.jar
 ```
 
-The validator discovers the JAR automatically from that cache path. You can
-override it with:
+validator 会自动从该 cache 路径发现 JAR。也可以通过环境变量覆盖：
 
 ```env
 WOMTOOL_JAR="D:/path/to/womtool.jar"
 ```
 
-The default WOMtool 91 release needs Java 17 or newer. For a project-local
-Temurin JDK:
+默认 WOMtool 91 release 需要 Java 17 或更新版本。如需安装项目本地的 Temurin JDK：
 
 ```powershell
 scripts/install_java.ps1
