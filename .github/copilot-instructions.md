@@ -1,4 +1,4 @@
-# Copilot instructions for AI-bioworkflow
+# Cloud agent instructions for AI-bioworkflow
 
 ## What this repository is
 
