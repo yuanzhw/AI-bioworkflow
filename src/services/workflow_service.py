@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, cast
 
 from src.catalog.loader import ToolCatalog
-from src.graph import MAX_REPAIR_ATTEMPTS, agent
+from src.graph import MAX_REPAIR_ATTEMPTS, compiler_graph
 from src.nodes.checker import checker_node
 from src.nl_planner import DEFAULT_PLANNER_MODEL, PlannerLlm, create_natural_language_plan
 from src.nodes.analyzer import analyzer_node
@@ -127,7 +127,7 @@ def _run_compiler(
 ) -> WorkflowState:
     state = build_initial_state(parsed_json)
     if check and event_callback is None:
-        return cast(WorkflowState, agent.invoke(state))
+        return cast(WorkflowState, compiler_graph.invoke(state))
 
     _emit_compiler_event(event_callback, "node.started", "ir_normalizer", "IR normalizer started.", state)
     _merge_state(state, ir_normalizer_node(state))

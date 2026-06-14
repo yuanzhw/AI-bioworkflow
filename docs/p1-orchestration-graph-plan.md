@@ -13,7 +13,7 @@
   -> main.py / workflow_service
   -> src.nl_planner.create_natural_language_plan
   -> Recipe Tool Plan
-  -> src.graph.agent
+  -> src.graph.compiler_graph
   -> Workflow IR / WDL / Diagnostics
 ```
 
@@ -22,13 +22,13 @@
 ```text
 Recipe Tool Plan / Workflow IR / Legacy JSON
   -> workflow_service.compile_structured_workflow
-  -> src.graph.agent 或 service 内手动 compiler loop
+  -> src.graph.compiler_graph 或 service 内手动 compiler loop
   -> Workflow IR / WDL / Diagnostics
 ```
 
 主要现状：
 
-- `src/graph.py` 实际承载的是结构化 Compiler Graph，但当前导出名仍是 `agent`。
+- `src/graph.py` 承载结构化 Compiler Graph，并显式导出 `compiler_graph`；旧的 `agent` 导出保留为兼容别名。
 - `src.nl_planner.py` 已能把自然语言请求转换为 Recipe Tool Plan，并通过 Recipe/Catalog/Analyzer 校验。
 - `src.services.workflow_service` 已有 `compile_structured_workflow` 和 `plan_and_compile_workflow` 两类服务入口。
 - `main.py` 已经区分自然语言入口和 `--input` 结构化入口，但自然语言编排仍是服务函数内的线性调用。
@@ -105,7 +105,7 @@ CLI --input / API POST /api/compile / tests
 
 目标：让当前编译图在代码命名上反映真实职责。
 
-建议工作：
+已完成工作：
 
 - 在 `src/graph.py` 中显式导出 `compiler_graph = builder.compile()`。
 - 保留 `agent = compiler_graph` 作为临时兼容别名，避免一次性破坏现有测试和调用方。
@@ -382,8 +382,8 @@ run.completed
 
 ## 验收清单
 
-- [ ] `compiler_graph` 成为结构化编译图的明确导出名。
-- [ ] `agent` 兼容别名仍可用于旧调用，或有明确迁移说明。
+- [x] `compiler_graph` 成为结构化编译图的明确导出名。
+- [x] `agent` 兼容别名仍可用于旧调用，或有明确迁移说明。
 - [ ] Orchestration State 不污染 `WorkflowState`。
 - [ ] Planner node 只产出 Recipe Tool Plan 和 trace，不产出最终 WDL。
 - [ ] Orchestration Graph 实现 `natural_language_planner -> compiler_graph`。

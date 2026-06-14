@@ -2,7 +2,7 @@ import unittest
 from typing import Any
 
 from src.analyzer import analyze_workflow_ir
-from src.graph import agent
+from src.graph import agent, compiler_graph
 from src.renderers import render_wdl
 from src.schema import coerce_workflow_ir
 from src.state import WorkflowState
@@ -193,6 +193,9 @@ def initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
 
 
 class WorkflowCompilationTests(unittest.TestCase):
+    def test_agent_alias_points_to_compiler_graph(self):
+        self.assertIs(agent, compiler_graph)
+
     def test_multi_task_ir_analyzes_and_renders(self):
         workflow_ir = coerce_workflow_ir(sample_multi_task_ir())
         report = analyze_workflow_ir(workflow_ir)
@@ -218,11 +221,11 @@ class WorkflowCompilationTests(unittest.TestCase):
         self.assertFalse(report.is_valid)
         self.assertIn("references unavailable output 'qc.clean_r1'", "\n".join(report.errors))
 
-    def test_agent_repairs_forward_output_reference_order(self):
+    def test_compiler_graph_repairs_forward_output_reference_order(self):
         raw_ir = sample_multi_task_ir()
         raw_ir["workflow"]["calls"].reverse()
 
-        final_state = agent.invoke(initial_state(raw_ir))
+        final_state = compiler_graph.invoke(initial_state(raw_ir))
 
         self.assertTrue(final_state["is_valid"], final_state["validation_message"])
         self.assertEqual(
@@ -408,30 +411,30 @@ class WorkflowCompilationTests(unittest.TestCase):
             "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
         )
 
-    def test_agent_repairs_bare_file_output_literals(self):
+    def test_compiler_graph_repairs_bare_file_output_literals(self):
         raw_ir = sample_multi_task_ir()
         raw_ir["tasks"]["fastp"]["outputs"]["clean_r1"]["value"] = "clean_R1.fq.gz"
         raw_ir["tasks"]["fastp"]["outputs"]["clean_r2"]["value"] = "clean_R2.fq.gz"
 
-        final_state = agent.invoke(initial_state(raw_ir))
+        final_state = compiler_graph.invoke(initial_state(raw_ir))
 
         self.assertTrue(final_state["is_valid"], final_state["validation_message"])
         self.assertIn('File clean_r1 = "clean_R1.fq.gz"', final_state["current_wdl"])
         self.assertIn('File clean_r2 = "clean_R2.fq.gz"', final_state["current_wdl"])
         self.assertTrue(final_state["repair_actions"])
 
-    def test_agent_stops_when_repairer_has_no_safe_action(self):
+    def test_compiler_graph_stops_when_repairer_has_no_safe_action(self):
         raw_ir = sample_multi_task_ir()
         raw_ir["workflow"]["calls"][0]["inputs"]["r1"] = "missing_input"
 
-        final_state = agent.invoke(initial_state(raw_ir))
+        final_state = compiler_graph.invoke(initial_state(raw_ir))
 
         self.assertFalse(final_state["is_valid"])
         self.assertIn("references unknown value 'missing_input'", "\n".join(final_state["analysis_errors"]))
         self.assertEqual(final_state["repair_actions"], [])
 
-    def test_agent_compiles_recipe_tool_plan(self):
-        final_state = agent.invoke(initial_state(sample_rnaseq_tool_plan()))
+    def test_compiler_graph_compiles_recipe_tool_plan(self):
+        final_state = compiler_graph.invoke(initial_state(sample_rnaseq_tool_plan()))
 
         self.assertTrue(final_state["is_valid"], final_state["validation_message"])
         self.assertEqual(final_state["analysis_errors"], [])
