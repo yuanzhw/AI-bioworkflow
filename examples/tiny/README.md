@@ -1,10 +1,8 @@
-# Tiny RNA-seq DEG fixture
+# Tiny RNA-seq DEG fixture（测试数据集）
 
-This directory contains the reproducible source for the tiny RNA-seq DEG e2e
-fixture. The final `rnaseq_deg.inputs.json` is environment-bound and should be
-generated on the Cromwell runner side, not committed with absolute paths.
+本目录保存 tiny RNA-seq DEG 端到端（e2e）fixture（测试数据集）的可复现源文件。最终的 `rnaseq_deg.inputs.json` 与运行环境绑定，应该在 Cromwell runner 侧生成，不应把包含绝对路径的版本提交到仓库。
 
-Generate fixture data and a Cromwell-visible inputs JSON with:
+生成测试数据和 Cromwell 可见的 inputs JSON：
 
 ```bash
 python examples/tiny/prepare_tiny_data.py \
@@ -12,11 +10,9 @@ python examples/tiny/prepare_tiny_data.py \
   --write-inputs /data/ai-bioworkflow-tiny/rnaseq_deg.inputs.json
 ```
 
-The script uses Docker or Podman to build `salmon_index/` from the Salmon image
-declared in the Tool Catalog (`src/catalog/tools/salmon/1.9.0.yaml`). The
-runner environment does not need a host-level Salmon installation.
+脚本会使用 Docker 或 Podman，从 Tool Catalog 中声明的 Salmon 镜像（`src/catalog/tools/salmon/1.9.0.yaml`）构建 `salmon_index/`。runner 环境不需要在宿主机层面安装 Salmon。
 
-The script writes:
+脚本会写出：
 
 - `data/transcripts.fa`
 - `data/tx2gene.tsv`
@@ -24,15 +20,11 @@ The script writes:
 - `data/reads/*_R1.fastq.gz`
 - `data/reads/*_R2.fastq.gz`
 - `salmon_index/`
-- `rnaseq_deg.inputs.json` when `--write-inputs` is provided
+- 提供 `--write-inputs` 时写出 `rnaseq_deg.inputs.json`
 
-The inputs JSON uses paths under `--cromwell-root` if supplied; otherwise it
-uses `--fixture-root`. Those paths must be visible to Cromwell, even if they are
-not the same paths seen by a Windows client.
+如果提供了 `--cromwell-root`，inputs JSON 会使用该路径下的文件；否则使用 `--fixture-root`。这些路径必须对 Cromwell 可见，即使它们与 Windows client 看到的路径不同。
 
-When Cromwell is running inside WSL but the test is launched from Windows, keep
-the inputs JSON on a Windows-readable path and render its contents with WSL
-paths:
+当 Cromwell 运行在 WSL 内，而测试从 Windows 启动时，inputs JSON 应保存在 Windows 可读路径中，同时把内容渲染为 WSL 路径：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\run_cromwell_tiny_e2e.ps1 `
@@ -40,11 +32,9 @@ powershell -ExecutionPolicy Bypass -File scripts\run_cromwell_tiny_e2e.ps1 `
   -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny
 ```
 
-The helper prepares the fixture on Windows, copies it into the running
-Cromwell container's runner mount, sets the Cromwell e2e environment variables,
-and runs `tests.e2e.test_tiny_run`.
+该 helper 会在 Windows 侧准备测试数据，将其同步到正在运行的 Cromwell 容器 runner mount 中，设置 Cromwell e2e 所需环境变量，并运行 `tests.e2e.test_tiny_run`。
 
-By default the helper syncs through Docker:
+默认情况下，helper 通过 Docker 同步：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\run_cromwell_tiny_e2e.ps1 `
@@ -54,11 +44,9 @@ powershell -ExecutionPolicy Bypass -File scripts\run_cromwell_tiny_e2e.ps1 `
   -CromwellContainerName cromwell-cromwell-1
 ```
 
-Use `-SyncMode wsl` if the Cromwell runner path should be populated through
-`wsl.exe` instead.
+如果希望通过 `wsl.exe` 填充 Cromwell runner 路径，可以使用 `-SyncMode wsl`。
 
-If both Docker and Podman are installed, Docker is used by default. Override the
-runtime with:
+如果 Docker 和 Podman 都已安装，默认使用 Docker。可以通过以下方式指定 runtime：
 
 ```bash
 python examples/tiny/prepare_tiny_data.py \
@@ -67,7 +55,7 @@ python examples/tiny/prepare_tiny_data.py \
   --container-runtime podman
 ```
 
-After preparing the fixture, run the real e2e only with explicit opt-in:
+测试数据准备完成后，只有显式 opt-in 时才运行真实 e2e：
 
 ```bash
 AI_BIOWORKFLOW_RUN_E2E=1 \
@@ -77,9 +65,7 @@ AI_BIOWORKFLOW_TINY_INPUTS=/data/ai-bioworkflow-tiny/rnaseq_deg.inputs.json \
 uv run python -m unittest tests.e2e.test_tiny_run -v
 ```
 
-On Windows, the P0 check wrapper can run the same opt-in e2e. It delegates
-fixture preparation, sync, and the real e2e execution to
-`scripts\run_cromwell_tiny_e2e.ps1`:
+在 Windows 上，P0 check wrapper 可以运行同一个 opt-in e2e。它会把测试数据准备、同步和真实 e2e 执行委托给 `scripts\run_cromwell_tiny_e2e.ps1`：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `

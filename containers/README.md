@@ -1,57 +1,47 @@
-# Workflow helper containers
+# 工作流辅助容器
 
-Catalog entries may reference helper images when a workflow task depends on
-project-maintained scripts. Build and publish images explicitly, then copy the
-final tag or digest into the Tool Catalog YAML. The compiler never searches for
-or fills in container images automatically.
+当 workflow task 依赖项目维护的辅助脚本时，Tool Catalog 条目可以引用对应的辅助镜像。镜像必须由维护者显式构建、验证和发布，然后把最终 tag 或 digest 写入 Tool Catalog YAML。编译器不会自动搜索、推断或补全容器镜像。
 
-Default tag pattern:
+默认 tag 模式：
 
 ```bash
 ghcr.io/yuanzhw/ai-bioworkflow/<tool>:<software-version>-<image-revision>
 ```
 
-For example, DESeq2 `1.42.1` with the second project-maintained image
-revision is published as:
+例如，DESeq2 `1.42.1` 的第二个项目维护镜像 revision 发布为：
 
 ```bash
 ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
 ```
 
-The directory name and `TOOL_VERSION` build arg represent the upstream software
-or package version. The image revision is stored in `image_revision.txt` under
-the same container directory. Increment the revision whenever Dockerfile,
-helper scripts, pinned dependencies, or runtime behavior changes while the
-upstream tool version stays the same.
+目录名和 `TOOL_VERSION` 构建参数表示上游软件或包版本。镜像 revision 存放在同一容器目录下的 `image_revision.txt` 中。当 Dockerfile、辅助脚本、固定依赖或 runtime 行为发生变化，而上游工具版本保持不变时，需要递增该 revision。
 
-Build one image and run its smoke test:
+构建单个镜像并运行 smoke test：
 
 ```bash
 python scripts/build_container.py tximport 1.30.0
 ```
 
-Build every project-maintained image:
+构建所有项目维护镜像：
 
 ```bash
 python scripts/build_container.py --all
 ```
 
-Push after successful build and smoke test:
+构建和 smoke test 成功后推送镜像：
 
 ```bash
 docker login ghcr.io
 python scripts/build_container.py --all --push
 ```
 
-GitHub Actions can also build these images. Pull requests run only a dry-run
-validation job, so they never publish images. After the workflow file is merged
-to the default branch, run it manually from:
+GitHub Actions 也可以构建这些镜像。Pull request 只运行 dry-run 校验 job，因此不会发布镜像。workflow 文件合并到默认分支后，可以从以下入口手动运行：
 
 ```text
 Actions -> Build containers -> Run workflow
 ```
 
-Recommended first run:
+推荐首次运行：
 
 ```text
 tool=all
@@ -59,9 +49,7 @@ publish=false
 platform=linux/amd64
 ```
 
-This builds all project-maintained images and runs their smoke tests without
-pushing anything. To publish after the smoke tests pass, run the workflow again
-from the `main` branch with:
+这会构建所有项目维护镜像并运行 smoke tests，但不会推送任何镜像。smoke tests 通过后，可以再次从 `main` 分支运行 workflow，并设置：
 
 ```text
 tool=all
@@ -69,7 +57,7 @@ publish=true
 platform=linux/amd64
 ```
 
-For a single image, choose the tool and provide its version, for example:
+构建单个镜像时，选择 tool 并提供版本，例如：
 
 ```text
 tool=deseq2
@@ -78,15 +66,15 @@ publish=true
 platform=linux/amd64
 ```
 
-With `containers/deseq2/1.42.1/image_revision.txt` set to `r2`, this publishes
-`ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2`.
+当 `containers/deseq2/1.42.1/image_revision.txt` 设置为 `r2` 时，上述配置会发布：
 
-The workflow uses `GITHUB_TOKEN` to log in to GHCR and can only publish when
-manually triggered from `main`. After the first publish, confirm in GHCR that
-the package is associated with this repository and that its visibility is what
-you expect.
+```text
+ghcr.io/yuanzhw/ai-bioworkflow/deseq2:1.42.1-r2
+```
 
-Useful options:
+该 workflow 使用 `GITHUB_TOKEN` 登录 GHCR，并且只有从 `main` 手动触发时才会发布镜像。首次发布后，需要在 GHCR 中确认 package 已关联到本仓库，并检查可见性是否符合预期。
+
+常用选项：
 
 ```bash
 python scripts/build_container.py multiqc 1.21 --dry-run
@@ -94,32 +82,22 @@ python scripts/build_container.py deseq2 1.42.1 --platform linux/amd64
 python scripts/build_container.py tximport 1.30.0 --skip-smoke
 ```
 
-The build script does not update Tool Catalog YAML files. After publishing,
-copy the chosen tag or validated digest into the matching catalog entry
-explicitly.
+构建脚本不会更新 Tool Catalog YAML 文件。镜像发布后，需要把选定的 tag 或已验证 digest 显式复制到对应 Catalog 条目中。
 
-The build script publishes revision tags, not bare software-version tags. A
-bare tag such as `deseq2:1.42.1` may be maintained as a convenience alias
-outside the formal Catalog, but Catalog entries should use revision tags first
-and eventually promote to validated digests.
+构建脚本发布 revision tags，而不是裸的软件版本 tags。类似 `deseq2:1.42.1` 的裸 tag 可以在正式 Catalog 之外作为便捷 alias 维护，但 Catalog 条目应优先使用 revision tag，并在后续迁移到已验证 digest。
 
-Each container directory should include:
+每个容器目录应包含：
 
 - `Dockerfile`
-- helper scripts copied into the image
-- `smoke_test.sh` for a fast post-build check
-- `image_revision.txt` containing a revision like `r1` or `r2`
+- 复制进镜像的辅助脚本
+- 用于快速构建后检查的 `smoke_test.sh`
+- 包含 `r1` 或 `r2` 这类 revision 的 `image_revision.txt`
 
-Version rules:
+版本规则：
 
-- Directory names and `TOOL_VERSION` build args should match the upstream
-  software version.
-- Image tags should append the project-maintained image revision, for example
-  `1.42.1-r2`.
-- Dockerfiles must install the declared top-level tool version explicitly.
-- Dockerfiles should fail during build if the installed top-level tool version
-  does not match `TOOL_VERSION`.
-- `smoke_test.sh` should verify the helper entrypoint and installed top-level
-  tool version as a second check.
-- Final reusable catalog entries should prefer a validated image digest over a
-  mutable tag once the image has been published and inspected.
+- 目录名和 `TOOL_VERSION` 构建参数应匹配上游软件版本。
+- 镜像 tag 应追加项目维护的镜像 revision，例如 `1.42.1-r2`。
+- Dockerfile 必须显式安装声明的顶层工具版本。
+- 如果安装后的顶层工具版本与 `TOOL_VERSION` 不一致，Dockerfile 应在 build 阶段失败。
+- `smoke_test.sh` 应再次验证辅助入口命令和已安装的顶层工具版本。
+- 最终可复用的 Catalog 条目应优先使用已验证 image digest，而不是可变 tag。
