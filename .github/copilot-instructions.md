@@ -17,7 +17,7 @@
 
 - Treat `workflow.steps` as the canonical workflow DAG. `workflow.calls` exists for compatibility with older flat-call inputs.
 - Natural language only goes to `src/nl_planner.py` and should stop at Recipe Tool Plan.
-- Structured compilation flows through the compiler graph in `src/graph.py`: normalizer -> analyzer -> renderer -> checker, with bounded repair.
+- Structured compilation follows the compiler pipeline defined in `src/graph.py`: normalizer -> analyzer -> renderer -> checker, with bounded repair. Service/API/evented paths in `src/services/workflow_service.py` orchestrate the same nodes directly when needed.
 - Do not bypass Analyzer, Renderer, Checker, or execution backend interfaces.
 - Tool/runtime definitions belong in the catalog; do not guess or auto-discover container images.
 - Catalog tools must explicitly declare `runtime.docker`.
@@ -53,22 +53,23 @@
   - `.venv/bin/python -m src.api.server`
 - Local Windows-oriented P0 wrapper:
   - `powershell -ExecutionPolicy Bypass -File scripts/check_p0.ps1`
-- Real Cromwell tiny e2e is opt-in only through `scripts/check_p0.ps1 -RunE2E`.
+- Real Cromwell tiny e2e is opt-in. Prefer the local wrapper `scripts/check_p0.ps1 -RunE2E`; a direct env-var unittest entry also exists for runner/debug workflows.
 - If a change affects generated WDL, recipes, renderers, or validation paths, also run `miniwdl check` on a representative generated WDL when `miniwdl` is available.
 
 ## Environment/setup notes for cloud agents
 
 - The project targets Python 3.13+ and prefers `uv` / the repo `.venv`.
 - In this repository, a fresh cloud workspace may not have `uv` installed and may not have a pre-created `.venv`.
-- If `uv` is missing or `.venv` does not exist, create a venv and install the repo in editable mode:
+- If `uv` is missing or `.venv` does not exist, first try to create a Python 3.13+ venv and install the repo in editable mode:
   - `python3 -m venv .venv`
   - `.venv/bin/pip install --upgrade pip`
-  - `.venv/bin/pip install -e . --ignore-requires-python`
-  - use `--ignore-requires-python` only as a cloud-workspace fallback when the agent image provides Python 3.12 but not Python 3.13 yet
-- If you need the FastAPI server tests or local WDL validation in that fallback setup, also install:
-  - `.venv/bin/pip install uvicorn miniwdl`
-- This fallback is useful when the cloud image only has Python 3.12.
-- Without those installs, imports such as `dotenv`, `pydantic`, `fastapi`, and `uvicorn` will fail and tests/CLI will not start.
+  - `.venv/bin/pip install -e .`
+- Use `--ignore-requires-python` only as an explicitly documented cloud-workspace exception when the agent image cannot provide Python 3.13+ and the task is limited to inspection or low-risk edits.
+- If you need the FastAPI dev server in a minimal fallback setup, also install the dev server dependency:
+  - `.venv/bin/pip install uvicorn`
+- If you need local `miniwdl` validation or optional tiny-run paths, install:
+  - `.venv/bin/pip install miniwdl`
+- Without the base project install, imports such as `dotenv`, `pydantic`, and `fastapi` will fail and tests/CLI will not start. Without `uvicorn`, the FastAPI dev server will not start.
 - Without `miniwdl` or WOMtool/Java, WDL validation will report that no validator is available.
 
 ## Natural-language planning notes
