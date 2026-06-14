@@ -64,7 +64,9 @@
   - `python3 -m venv .venv`
   - `.venv/bin/pip install --upgrade pip`
   - `.venv/bin/pip install -e . --ignore-requires-python`
-- This workaround is useful when the cloud image only has Python 3.12; without dependencies, imports such as `dotenv`, `pydantic`, and `fastapi` will fail and tests/CLI will not start.
+- If you need the FastAPI server tests or local WDL validation in that fallback setup, also install:
+  - `.venv/bin/pip install uvicorn miniwdl`
+- This workaround is useful when the cloud image only has Python 3.12; without dependencies, imports such as `dotenv`, `pydantic`, `fastapi`, and `uvicorn` will fail and tests/CLI will not start, and WDL validation will report that no validator is available.
 
 ## Natural-language planning notes
 
