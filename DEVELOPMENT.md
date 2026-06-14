@@ -487,6 +487,9 @@ Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经
 | W5 | DAG 与历史详情 | React Flow 工作流图、run 历史详情和失败/修复回放 | W4 |
 | W6 | 部署与作品集打磨 | 在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航 | W5 |
 
+`W4` 的具体实施范围、任务拆分和验收口径记录在
+[W4 Workflow 生成工作台工作拆解](./docs/w4-workbench-plan.md)。
+
 求职展示的最小可发布范围为 `W0` 至 `W5`：访问者能够使用一个预置 RNA-seq 示例触发 run，看到 Agent/Compiler 的阶段过程、Workflow IR、DAG、校验后的 WDL 与历史回放。`W6` 负责将能力包装成可在简历和项目主页直接访问、快速理解的作品。
 
 ## Agent 修复闭环与职责边界（规划中）
