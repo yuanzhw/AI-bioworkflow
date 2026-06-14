@@ -671,6 +671,14 @@ Candidate ToolSpec
 | P9 | 文献驱动 Workflow Blueprint | 从文献方法提取候选流程 |
 | P10 | 完整 Multi-Agent 编排与评测 | 在边界成熟后扩大协作自治程度 |
 
+### P1 实施计划
+
+P1 的目标是明确 Compiler Graph，并建立第一版 Orchestration Graph 外壳，使自然语言入口和结构化入口在代码、服务层、CLI/API 路由和测试中完成分层。P1 不引入完整 Multi-Agent 能力，也不改变 IR 到 WDL 的确定性编译边界。
+
+详细工作拆解、关键契约、验收清单和建议 PR 切分维护在：
+
+👉 **[P1 Orchestration Graph 实施计划](./docs/p1-orchestration-graph-plan.md)**
+
 ## 评测重点（规划中）
 
 | 能力 | 首要指标 |
