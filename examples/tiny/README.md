@@ -1,4 +1,4 @@
-# Tiny RNA-seq DEG 测试数据集
+# Tiny RNA-seq DEG fixture（测试数据集）
 
 本目录保存 tiny RNA-seq DEG 端到端（e2e）测试数据集的可复现源文件。最终的 `rnaseq_deg.inputs.json` 与运行环境绑定，应该在 Cromwell runner 侧生成，不应把包含绝对路径的版本提交到仓库。
 

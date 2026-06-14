@@ -8,7 +8,7 @@
 scripts/install_womtool.ps1
 ```
 
-默认情况下，脚本会从 Broad Institute Cromwell GitHub releases 下载 `womtool-91.jar`，并保存到：
+默认情况下，脚本会从 Broad Institute Cromwell GitHub Releases 下载 `womtool-91.jar`，并保存到：
 
 ```text
 .cache/womtool/womtool.jar
