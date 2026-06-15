@@ -58,12 +58,11 @@ export default async function WorkspacePage({
           </Button>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-normal">Workflow 工作台</h1>
-            <Badge variant="secondary">W4 接入中</Badge>
+            <Badge variant="secondary">W4 初版</Badge>
           </div>
           <p className="mt-3 max-w-2xl text-muted-foreground">
-            这个页面正在从静态 review surface 演进为真实生成工作台。当前已接入
-            RNA-seq 结构化示例 run 创建；SSE 时间线、snapshot 产物刷新和 diagnostics
-            展示会在后续 W4 切片继续接入。
+            当前已可提交 RNA-seq 结构化示例 run，轮询 snapshot，并显示 run 状态、WDL
+            摘要和校验结果。SSE 时间线与完整 Plan / IR / WDL / Diagnostics tabs 会在后续切片接入。
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -107,12 +106,12 @@ export default async function WorkspacePage({
             <div>
               <h2 className="font-semibold">Run 时间线</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                当前保留事件结构预览；下一切片会从持久化 SSE event envelope 实时更新。
+                当前展示目标事件结构；下一切片会从持久化 SSE event envelope 实时更新。
               </p>
             </div>
             <Badge variant="outline">
               <Clock3 className="mr-1 h-3.5 w-3.5" />
-              等待 SSE 接入
+              SSE 待接入
             </Badge>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -139,7 +138,8 @@ export default async function WorkspacePage({
           <div>
             <h2 className="font-semibold">结构化产物</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              当前先固定产物区的信息架构；W4 接入后会展示同一次 run 产生的 Plan、IR、WDL 和 diagnostics。
+              当前先固定产物区的信息架构，并在运行卡片中读取同一次 run 的 WDL 与 diagnostics 摘要。
+              完整 Plan、IR、WDL 和 Diagnostics tabs 会在后续切片接入。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -175,7 +175,7 @@ export default async function WorkspacePage({
               ].map((item) => (
                 <div key={item} className="rounded-md border bg-white p-3 text-sm">
                   <div className="font-medium">{item}</div>
-                  <div className="mt-2 text-muted-foreground">W4 接入真实 run 数据</div>
+                  <div className="mt-2 text-muted-foreground">等待完整 tabs 接入</div>
                 </div>
               ))}
             </div>
