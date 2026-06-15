@@ -660,6 +660,109 @@ OK (skipped=2)
 
 - 本地或容器开发场景可以临时覆盖 API host。
 
+### `test_default_cors_origins_cover_next_development_server`
+
+输入：
+
+- `DEFAULT_CORS_ORIGINS`
+
+执行：
+
+- 读取 `src.api.app` 中的默认 CORS origins。
+
+期望输出：
+
+- 默认允许 `http://127.0.0.1:3000`。
+- 默认允许 `http://localhost:3000`。
+
+覆盖点：
+
+- 本地 Next.js 默认开发服务可以直接访问 FastAPI。
+
+### `test_cors_origins_can_be_overridden_by_environment`
+
+输入：
+
+- 环境变量 `AI_BIOWORKFLOW_CORS_ORIGINS=http://127.0.0.1:3001/, http://localhost:3001`。
+
+执行：
+
+- 调用 `get_cors_origins()`。
+
+期望输出：
+
+- 返回 `["http://127.0.0.1:3001", "http://localhost:3001"]`。
+- 末尾 `/` 会被规范化移除。
+
+覆盖点：
+
+- 前端开发服务使用非默认端口时，可以显式配置 allowed origins。
+- 常见的 trailing slash 写法不会导致 CORS origin 匹配失败。
+
+### `test_next_development_origin_can_preflight_api_requests`
+
+输入：
+
+- `TestClient(create_app())`
+- `OPTIONS /api/compile`
+- 请求头：
+  - `Origin: http://127.0.0.1:3000`
+  - `Access-Control-Request-Method: POST`
+  - `Access-Control-Request-Headers: content-type`
+
+执行：
+
+- 调用 FastAPI TestClient 发起浏览器预检请求。
+
+期望输出：
+
+- HTTP 状态码为 `200`。
+- `access-control-allow-origin` 响应头为 `http://127.0.0.1:3000`。
+
+覆盖点：
+
+- W4 工作台从 Next.js 开发服务点击“运行示例”时，浏览器可以通过 CORS preflight 调用 `POST /api/compile`。
+
+### `test_root_and_health_endpoints_are_available`
+
+输入：
+
+- `TestClient(create_app())`
+- `GET /`
+- `GET /health`
+
+执行：
+
+- 调用 FastAPI TestClient 请求根路径和健康检查路径。
+
+期望输出：
+
+- 根路径 HTTP 状态码为 `200`，响应 JSON 中 `status == "ok"`。
+- `/health` HTTP 状态码为 `200`，响应 JSON 为 `{"status": "ok"}`。
+
+覆盖点：
+
+- 本地开发服务和部署探针都有轻量健康检查入口。
+
+### `test_favicon_request_does_not_log_404`
+
+输入：
+
+- `TestClient(create_app())`
+- `GET /favicon.ico`
+
+执行：
+
+- 调用 FastAPI TestClient 请求浏览器常见 favicon 路径。
+
+期望输出：
+
+- HTTP 状态码为 `204`。
+
+覆盖点：
+
+- 浏览器访问 API docs 或 health 页面时不会因为 favicon 请求产生无意义的 404 噪声。
+
 ## `tests/test_catalog.py`
 
 该文件验证 Recipe / Tool Catalog resolver 的结构化校验、IR 生成和 WDL 渲染。
