@@ -72,7 +72,11 @@ builder.add_conditional_edges("analyzer", route_after_analyzer)
 builder.add_edge("renderer", "checker")
 builder.add_conditional_edges("checker", route_after_checker)
 builder.add_conditional_edges("repairer", route_after_repairer)
-# 4. 编译打包成最终的 Agent
-agent = builder.compile()
+# 4. 编译打包成结构化 Workflow IR -> WDL 编译子图
+compiler_graph = builder.compile()
 
-logger.info("Agent graph compiled.")
+# Backward-compatible alias for older imports. New code should use
+# compiler_graph to make the graph boundary explicit.
+agent = compiler_graph
+
+logger.info("Compiler graph compiled.")

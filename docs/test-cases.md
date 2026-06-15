@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 139 tests
+Ran 140 tests
 OK (skipped=2)
 ```
 
@@ -1095,7 +1095,26 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 
 - Analyzer 拒绝前向引用。
 
-### `test_agent_repairs_forward_output_reference_order`
+### `test_agent_alias_points_to_compiler_graph`
+
+输入：
+
+- 从 `src.graph` 导入 `agent` 和 `compiler_graph`。
+
+执行：
+
+- 比较两个导出对象是否为同一个 compiled graph。
+
+期望输出：
+
+- `agent is compiler_graph`。
+
+覆盖点：
+
+- `compiler_graph` 是结构化编译图的明确导出名。
+- 旧的 `agent` 导出仍作为兼容别名可用。
+
+### `test_compiler_graph_repairs_forward_output_reference_order`
 
 输入：
 
@@ -1105,7 +1124,7 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 
 执行：
 
-- 调用 `agent.invoke(...)`。
+- 调用 `compiler_graph.invoke(...)`。
 
 期望输出：
 
@@ -1222,7 +1241,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - 旧格式 JSON 可以兼容转换为 Workflow IR。
 
-### `test_agent_repairs_bare_file_output_literals`
+### `test_compiler_graph_repairs_bare_file_output_literals`
 
 输入：
 
@@ -1233,7 +1252,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 执行：
 
-- 调用 `agent.invoke(...)`。
+- 调用 `compiler_graph.invoke(...)`。
 
 期望输出：
 
@@ -1247,7 +1266,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - Deterministic repairer 能修复 File/String output 字面量缺少引号的问题。
 
-### `test_agent_stops_when_repairer_has_no_safe_action`
+### `test_compiler_graph_stops_when_repairer_has_no_safe_action`
 
 输入：
 
@@ -1256,7 +1275,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 执行：
 
-- 调用 `agent.invoke(...)`。
+- 调用 `compiler_graph.invoke(...)`。
 
 期望输出：
 
@@ -1268,7 +1287,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - Repairer 对无法安全推断的问题不做自由修复。
 
-### `test_agent_compiles_recipe_tool_plan`
+### `test_compiler_graph_compiles_recipe_tool_plan`
 
 输入：
 
@@ -1276,7 +1295,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 执行：
 
-- 调用 `agent.invoke(...)`。
+- 调用 `compiler_graph.invoke(...)`。
 
 期望输出：
 
@@ -1357,7 +1376,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - `examples/rnaseq_deg_recipe_plan.json`
 - `check=False`
-- mock `src.services.workflow_service.agent.invoke`，如果被调用则抛出错误。
+- mock `src.services.workflow_service.compiler_graph.invoke`，如果被调用则抛出错误。
 
 执行：
 
@@ -1367,7 +1386,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - `result.succeeded == True`。
 - `result.check_performed == False`。
-- compiled graph 的 `agent.invoke` 未被调用。
+- compiled graph 的 `compiler_graph.invoke` 未被调用。
 
 覆盖点：
 

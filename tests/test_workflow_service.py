@@ -130,7 +130,7 @@ class WorkflowServiceTests(unittest.TestCase):
         plan = load_example("rnaseq_deg_recipe_plan.json")
 
         with patch(
-            "src.services.workflow_service.agent.invoke",
+            "src.services.workflow_service.compiler_graph.invoke",
             side_effect=AssertionError("compiled graph should not run when check=False"),
         ) as graph:
             result = compile_structured_workflow(plan, check=False)
@@ -275,7 +275,7 @@ class WorkflowServiceTests(unittest.TestCase):
                 side_effect=repairer_update,
             ) as repairer,
             patch(
-                "src.services.workflow_service.agent.invoke",
+                "src.services.workflow_service.compiler_graph.invoke",
                 side_effect=AssertionError("event callbacks should use the manual compiler path"),
             ) as graph,
         ):
