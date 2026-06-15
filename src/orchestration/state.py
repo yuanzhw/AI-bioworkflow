@@ -65,6 +65,8 @@ def orchestration_failure_stage(state: OrchestrationState) -> FailureStage | Non
         return "orchestration"
 
     compiler_result = state["compiler_result"]
-    if compiler_result is not None and not compiler_result.succeeded:
+    if compiler_result is None:
+        return "orchestration"
+    if not compiler_result.succeeded:
         return "compiler"
     return None

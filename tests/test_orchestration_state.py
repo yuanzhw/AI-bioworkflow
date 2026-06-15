@@ -64,10 +64,20 @@ class OrchestrationStateTests(unittest.TestCase):
         self.assertFalse(orchestration_succeeded(state))
         self.assertEqual(orchestration_failure_stage(state), "orchestration")
 
+    def test_orchestration_failure_stage_treats_missing_compiler_result_as_orchestration(self):
+        state = build_initial_orchestration_state(
+            "Run bulk RNA-seq differential expression.",
+            planner_model=DEFAULT_PLANNER_MODEL,
+        )
+
+        self.assertFalse(orchestration_succeeded(state))
+        self.assertEqual(orchestration_failure_stage(state), "orchestration")
+
     def test_orchestration_failure_stage_distinguishes_compiler_failure(self):
         state = build_initial_orchestration_state(
             "Run bulk RNA-seq differential expression.",
             planner_model=DEFAULT_PLANNER_MODEL,
+            check=False,
         )
         state["compiler_result"] = WorkflowCompilationResult(
             plan=None,
@@ -90,6 +100,7 @@ class OrchestrationStateTests(unittest.TestCase):
         state = build_initial_orchestration_state(
             "Run bulk RNA-seq differential expression.",
             planner_model=DEFAULT_PLANNER_MODEL,
+            check=False,
         )
         state["compiler_result"] = WorkflowCompilationResult(
             plan={"workflow": {"recipe": "rnaseq_differential_expression"}},

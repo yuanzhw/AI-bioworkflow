@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 146 tests
+Ran 147 tests
 OK (skipped=2)
 ```
 
@@ -1401,6 +1401,28 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 覆盖点：
 
 - 上层 Planner / orchestration 错误可与下层 compiler 错误区分。
+
+### `test_orchestration_failure_stage_treats_missing_compiler_result_as_orchestration`
+
+输入：
+
+- 初始 Orchestration State。
+- 不设置 `compiler_result`。
+
+执行：
+
+- 调用 `orchestration_succeeded(...)`。
+- 调用 `orchestration_failure_stage(...)`。
+
+期望输出：
+
+- `orchestration_succeeded(...) == False`。
+- `orchestration_failure_stage(...) == "orchestration"`。
+
+覆盖点：
+
+- 未委派到 Compiler Graph 或缺失 compiler result 的终态不会被误判为成功。
+- `orchestration_failure_stage(...)` 只在成功时返回 `None`。
 
 ### `test_orchestration_failure_stage_distinguishes_compiler_failure`
 
