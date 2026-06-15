@@ -6,7 +6,6 @@ import {
   Clock3,
   FileJson,
   Layers3,
-  Play,
   SquareTerminal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -16,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiDocsUrl } from "@/lib/api";
 import { rnaseqExamplePrompt, rnaseqRecipeSteps } from "@/lib/examples";
+import { WorkspaceRunLauncher } from "./workspace-run-launcher";
 
 const timeline = [
   ["需求输入", "request", "展示自然语言请求和预期 recipe steps"],
@@ -57,20 +57,17 @@ export default async function WorkspacePage({
             </Link>
           </Button>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-normal">Workflow 工作台预览</h1>
-            <Badge variant="secondary">W3 产品外壳</Badge>
+            <h1 className="text-3xl font-semibold tracking-normal">Workflow 工作台</h1>
+            <Badge variant="secondary">W4 接入中</Badge>
           </div>
           <p className="mt-3 max-w-2xl text-muted-foreground">
-            这个页面定义后续生成工作台的 review surface：需求输入、阶段时间线、
-            Plan / IR / WDL 产物和 diagnostics 会在这里形成同一次 run 的可解释视图。
-            当前以 RNA-seq 示例做静态预览，真实 run 创建与 SSE 事件将在 W4 接入。
+            这个页面正在从静态 review surface 演进为真实生成工作台。当前已接入
+            RNA-seq 结构化示例 run 创建；SSE 时间线、snapshot 产物刷新和 diagnostics
+            展示会在后续 W4 切片继续接入。
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button disabled>
-            <Play className="h-4 w-4" />
-            运行待接入
-          </Button>
+          <WorkspaceRunLauncher />
           <Button asChild variant="outline">
             <Link href={apiDocsUrl}>API 文档</Link>
           </Button>
@@ -83,7 +80,7 @@ export default async function WorkspacePage({
             <div>
               <h2 className="font-semibold">请求输入</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                自然语言需求会先进入 Recipe Tool Plan 边界，而不是直接生成 WDL。
+                运行按钮会提交结构化 Recipe Tool Plan 示例；前端不生成 IR 或 WDL。
               </p>
             </div>
             <Badge variant={isExample ? "default" : "outline"}>
@@ -110,12 +107,12 @@ export default async function WorkspacePage({
             <div>
               <h2 className="font-semibold">Run 时间线</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                使用静态示例展示事件结构；真实数据会从持久化 SSE event envelope 实时更新或回放。
+                当前保留事件结构预览；下一切片会从持久化 SSE event envelope 实时更新。
               </p>
             </div>
             <Badge variant="outline">
               <Clock3 className="mr-1 h-3.5 w-3.5" />
-              静态预览
+              等待 SSE 接入
             </Badge>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">

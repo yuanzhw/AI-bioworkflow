@@ -1,12 +1,37 @@
 """FastAPI application factory."""
 
+from __future__ import annotations
+
+import os
+
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import api_router
 
 
+DEFAULT_CORS_ORIGINS = (
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+)
+
+
+def get_cors_origins() -> list[str]:
+    configured = os.environ.get("AI_BIOWORKFLOW_CORS_ORIGINS")
+    if configured is None:
+        return list(DEFAULT_CORS_ORIGINS)
+
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="AI-bioworkflow API")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=get_cors_origins(),
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 
     @app.get("/", tags=["health"])
     def read_root() -> dict[str, str]:
