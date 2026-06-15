@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import DEFAULT_CORS_ORIGINS, create_app, get_cors_origins
 from src.api.server import DEFAULT_API_HOST, DEFAULT_API_PORT, get_api_host, get_api_port
 
 
@@ -29,6 +29,35 @@ class ApiServerConfigTests(unittest.TestCase):
     def test_api_host_can_be_overridden_by_environment(self):
         with patch.dict("os.environ", {"AI_BIOWORKFLOW_API_HOST": "0.0.0.0"}):
             self.assertEqual(get_api_host(), "0.0.0.0")
+
+    def test_default_cors_origins_cover_next_development_server(self):
+        self.assertIn("http://127.0.0.1:3000", DEFAULT_CORS_ORIGINS)
+        self.assertIn("http://localhost:3000", DEFAULT_CORS_ORIGINS)
+
+    def test_cors_origins_can_be_overridden_by_environment(self):
+        with patch.dict(
+            "os.environ",
+            {"AI_BIOWORKFLOW_CORS_ORIGINS": "http://127.0.0.1:3001/, http://localhost:3001"},
+        ):
+            self.assertEqual(
+                get_cors_origins(),
+                ["http://127.0.0.1:3001", "http://localhost:3001"],
+            )
+
+    def test_next_development_origin_can_preflight_api_requests(self):
+        client = TestClient(create_app())
+
+        response = client.options(
+            "/api/compile",
+            headers={
+                "Origin": "http://127.0.0.1:3000",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "http://127.0.0.1:3000")
 
     def test_root_and_health_endpoints_are_available(self):
         client = TestClient(create_app())
