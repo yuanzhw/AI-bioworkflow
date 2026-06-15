@@ -95,7 +95,9 @@ export function createStructuredCompileRun(
 }
 
 export function getRunSnapshot(runId: string): Promise<WorkflowRunSnapshotResponse> {
-  return getJson<WorkflowRunSnapshotResponse>(`/api/runs/${encodeURIComponent(runId)}`);
+  return requestJson<WorkflowRunSnapshotResponse>(`/api/runs/${encodeURIComponent(runId)}`, {
+    cache: "no-store",
+  });
 }
 
 export function buildRunEventsUrl(eventsUrl: string, afterSequence?: number): string {
