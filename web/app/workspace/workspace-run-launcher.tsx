@@ -37,7 +37,7 @@ function formatRunError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return "无法创建结构化示例 run。";
+  return "请求处理失败，请稍后重试。";
 }
 
 function getStatusIcon(status: RunStatus, isPolling: boolean) {
