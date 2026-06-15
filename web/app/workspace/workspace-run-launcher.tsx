@@ -129,6 +129,7 @@ export function WorkspaceRunLauncher() {
 
   async function handleRunExample() {
     setIsSubmitting(true);
+    setAcceptedRun(null);
     setErrorMessage(null);
     setPollErrorMessage(null);
     setSnapshot(null);

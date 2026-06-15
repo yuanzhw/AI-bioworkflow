@@ -37,7 +37,7 @@ class ApiServerConfigTests(unittest.TestCase):
     def test_cors_origins_can_be_overridden_by_environment(self):
         with patch.dict(
             "os.environ",
-            {"AI_BIOWORKFLOW_CORS_ORIGINS": "http://127.0.0.1:3001, http://localhost:3001"},
+            {"AI_BIOWORKFLOW_CORS_ORIGINS": "http://127.0.0.1:3001/, http://localhost:3001"},
         ):
             self.assertEqual(
                 get_cors_origins(),

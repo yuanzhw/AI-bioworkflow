@@ -21,7 +21,7 @@ def get_cors_origins() -> list[str]:
     if configured is None:
         return list(DEFAULT_CORS_ORIGINS)
 
-    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
 
 
 def create_app() -> FastAPI:
