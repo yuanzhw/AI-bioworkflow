@@ -57,10 +57,75 @@ export type ToolListResponse = {
   tools: Tool[];
 };
 
+export type JsonPrimitive = string | number | boolean | null;
+
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+
+export type JsonObject = {
+  [key: string]: JsonValue;
+};
+
 export type RunStatus = "created" | "running" | "succeeded" | "failed";
+
+export type CompileWorkflowRequest = {
+  payload: JsonObject;
+  check?: boolean;
+};
+
+export type NaturalLanguageRunRequest = {
+  request: string;
+  planner_model?: string | null;
+  check?: boolean;
+};
 
 export type RunAcceptedResponse = {
   run_id: string;
   status: RunStatus;
   events_url: string;
+};
+
+export type WorkflowArtifacts = {
+  plan: JsonObject | null;
+  workflow_ir: JsonObject;
+  wdl: string;
+};
+
+export type DiagnosticReport = {
+  analysis_errors: string[];
+  analysis_warnings: string[];
+  repair_actions: string[];
+  validation_message: string;
+  is_valid: boolean;
+  succeeded: boolean;
+  check_performed: boolean;
+};
+
+export type WorkflowRunSnapshotResponse = {
+  run_id: string;
+  status: RunStatus;
+  request: string | JsonObject | null;
+  events_url: string | null;
+  artifacts: WorkflowArtifacts;
+  diagnostics: DiagnosticReport;
+};
+
+export type RunEventType =
+  | "run.created"
+  | "node.started"
+  | "node.completed"
+  | "node.failed"
+  | "artifact.updated"
+  | "repair.applied"
+  | "validation.completed"
+  | "run.completed";
+
+export type RunEvent = {
+  event_id: string;
+  run_id: string;
+  sequence: number;
+  type: RunEventType;
+  timestamp: string;
+  summary: string;
+  node: string | null;
+  payload: JsonObject;
 };
