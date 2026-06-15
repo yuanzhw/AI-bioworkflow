@@ -27,7 +27,11 @@
   - `repair.applied`
   - `validation.completed`
   - `run.completed`
-- 前端已有 `/workspace` 页面，但当前仍是静态预览：运行按钮禁用，timeline、artifact tabs 和 diagnostics 文案均为占位内容。
+- 前端已有 `/workspace` 页面和初版 run launcher：
+  - “运行示例”会使用内置 RNA-seq Recipe Tool Plan 调用 `POST /api/compile`。
+  - 前端会轮询 `GET /api/runs/{run_id}`，展示 run 状态、WDL 摘要、校验信息和诊断计数。
+  - 默认本地 API base URL 为 `http://127.0.0.1:8010`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
+- Timeline、完整 artifact tabs、SSE 连接状态和自然语言输入仍是后续 W4 切片。
 
 ## 产品行为
 
@@ -133,7 +137,7 @@ SSE 断开但 run 未终态时，页面应显示连接状态，并允许自动�
 
 ### 7. 文案与导航更新
 
-W4 完成后，需要把 Web 页面中 “W3 静态预览”、“运行待接入”、“W4 接入真实 run 数据” 等占位文案更新为真实工作台表述。
+W4 初版已把工作台顶部、运行按钮和产物区说明更新为真实 run 接入表述。后续切片继续替换时间线、artifact tabs 和失败态中的静态占位文案。
 
 项目介绍页可以继续强调：
 
@@ -142,7 +146,7 @@ W4 完成后，需要把 Web 页面中 “W3 静态预览”、“运行待接�
 - WDL 由确定性 renderer 生成。
 - Analyzer / Repairer / Checker 过程可追踪。
 
-公共文案保持项目维护者视角，不加入工具签名、自动生成说明或 AI-assistant 品牌化措辞。
+公共文案保持项目维护者视角，不加入工具签名、自动生成说明或外部助手品牌化措辞。
 
 ## W4 不做
 
@@ -155,22 +159,26 @@ W4 完成后，需要把 Web 页面中 “W3 静态预览”、“运行待接�
 
 ## 建议 PR 顺序
 
-1. **W4 API client and types**：补齐前端 run DTO、API client、SSE URL helper。
-2. **W4 workbench run lifecycle**：实现提交、run 状态、EventSource 订阅和 snapshot 拉取。
-3. **W4 timeline and artifacts**：实现时间线状态映射、Plan / IR / WDL / Diagnostics tabs。
-4. **W4 failure states and polish**：补齐错误状态、空状态、占位文案替换和响应式细节。
-5. **W4 docs and verification**：更新 README / DEVELOPMENT 中的阶段状态说明，并记录验证结果。
+1. **W4 API client and types**：补齐前端 run DTO、API client、SSE URL helper。已完成。
+2. **W4 workbench structured run launcher**：实现结构化示例提交、run 状态和 snapshot 轮询。已完成。
+3. **W4 SSE timeline**：实现 EventSource 订阅、断线恢复和时间线状态映射。
+4. **W4 artifacts tabs**：实现 Plan / IR / WDL / Diagnostics tabs 和空状态。
+5. **W4 failure states and polish**：补齐错误状态、占位文案替换、响应式细节和自然语言运行入口。
+6. **W4 docs and verification**：持续更新 README / DEVELOPMENT 中的阶段状态说明，并记录验证结果。
 
 ## 验收标准
 
 功能验收：
 
-- 启动 FastAPI 与 Next.js 后，访问 `/workspace?example=rnaseq-deg` 可以提交一次结构化 RNA-seq 示例 run。
-- 页面能从 `created` / `running` 推进到 `succeeded` 或 `failed`。
-- Timeline 能实时显示 Compiler Graph 节点进度。
-- Plan、Workflow IR、WDL 和 Diagnostics 来自真实 run snapshot。
-- 自然语言模式在 planner 环境可用时能走 `POST /api/runs`；环境不可用时显示明确失败诊断。
-- 失败 run 仍保留已产生事件、artifact 和 diagnostics。
+- 已落地初版：
+  - 启动 FastAPI 与 Next.js 后，访问 `/workspace?example=rnaseq-deg` 可以提交一次结构化 RNA-seq 示例 run。
+  - 页面能从 accepted run 轮询到 `created` / `running` / `succeeded` / `failed` snapshot。
+  - 运行卡片展示 run id、状态、WDL 摘要、校验信息、analysis error 计数和 repair action 计数。
+- 后续完整 W4：
+  - Timeline 能实时显示 Compiler Graph 节点进度。
+  - Plan、Workflow IR、WDL 和 Diagnostics 来自真实 run snapshot tabs。
+  - 自然语言模式在 planner 环境可用时能走 `POST /api/runs`；环境不可用时显示明确失败诊断。
+  - 失败 run 仍保留已产生事件、artifact 和 diagnostics。
 
 验证建议：
 

@@ -147,7 +147,7 @@ uv run main.py \
   --output outputs/rnaseq_deg.wdl
 ```
 
-### 6. 启动 W1 FastAPI 开发服务
+### 6. 启动 FastAPI 开发服务
 
 如果本地同时运行 Cromwell server，建议保留 Cromwell 使用 `8000` 端口，本项目 FastAPI 开发服务使用 `8010` 端口，避免两个服务的 `/api/...` 路径互相混淆。
 
@@ -168,9 +168,11 @@ $env:AI_BIOWORKFLOW_API_PORT = "8020"
 .\.venv\Scripts\python.exe -m src.api.server
 ```
 
-### 6. 启动 W3 前端展示页
+### 7. 启动 Web 工作台
 
-前端位于 `web/`，作为独立的 Next.js 应用运行。默认读取本地 FastAPI：
+前端位于 `web/`，作为独立的 Next.js 应用运行。`/workspace?example=rnaseq-deg`
+的“运行示例”会调用 FastAPI `POST /api/compile`，并轮询 run snapshot 显示状态摘要。
+本地演示时需要分别启动 FastAPI 和 Next.js。前端默认读取本地 FastAPI：
 
 ```text
 http://127.0.0.1:8010
@@ -193,6 +195,13 @@ npm run dev
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8010
+```
+
+如果 Next.js 开发服务不在默认 `3000` 端口运行，也需要让 FastAPI 允许对应来源：
+
+```powershell
+$env:AI_BIOWORKFLOW_CORS_ORIGINS = "http://127.0.0.1:3001,http://localhost:3001"
+.\.venv\Scripts\python.exe -m src.api.server
 ```
 
 ## 📥 支持的输入格式
@@ -268,7 +277,9 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 - [x] 增加 P0 快速检查脚本，默认覆盖单测和代表性 WDL 编译/校验。
 - [x] 记录一份可复现的 [Cromwell e2e 验证摘要](./docs/p0-e2e-verification.md)，包括 workflow id、最终状态和 output keys。
 - [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
-- [ ] 建设 Next.js 工作台、DAG 可视化和历史详情页。
+- [x] 接入 W4 工作台初版：RNA-seq 结构化示例 run 创建、snapshot 轮询和状态摘要。
+- [ ] 完成 W4 SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态打磨。
+- [ ] 建设 W5 DAG 可视化和历史详情页。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证
