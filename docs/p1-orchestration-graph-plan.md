@@ -123,7 +123,7 @@ CLI --input / API POST /api/compile / tests
 
 目标：建立上层图状态，避免自然语言编排字段污染 `WorkflowState`。
 
-建议字段：
+已落地字段（`src/orchestration/state.py`）：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -136,6 +136,12 @@ CLI --input / API POST /api/compile / tests
 | `compiler_result` | `WorkflowCompilationResult \| None` | 下层编译结果 |
 | `errors` | `list[str]` | 上层编排错误 |
 | `events` | `list[dict[str, Any]]` | 可选的图内事件记录，具体持久化仍由 service/run layer 管理 |
+
+已落地辅助函数：
+
+- `build_initial_orchestration_state(...)`：为自然语言编排 run 创建初始状态。
+- `orchestration_succeeded(...)`：只有上层没有错误且下层 compiler result 成功时返回 `True`。
+- `orchestration_failure_stage(...)`：区分失败发生在上层 orchestration 还是下层 compiler。
 
 验收：
 
@@ -384,7 +390,7 @@ run.completed
 
 - [x] `compiler_graph` 成为结构化编译图的明确导出名。
 - [x] `agent` 兼容别名仍可用于旧调用，或有明确迁移说明。
-- [ ] Orchestration State 不污染 `WorkflowState`。
+- [x] Orchestration State 不污染 `WorkflowState`。
 - [ ] Planner node 只产出 Recipe Tool Plan 和 trace，不产出最终 WDL。
 - [ ] Orchestration Graph 实现 `natural_language_planner -> compiler_graph`。
 - [ ] 自然语言入口调用 Orchestration Graph。

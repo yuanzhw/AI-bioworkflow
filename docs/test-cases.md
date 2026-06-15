@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 140 tests
+Ran 146 tests
 OK (skipped=2)
 ```
 
@@ -1317,6 +1317,132 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 覆盖点：
 
 - Compiler Graph 可以直接接收 Recipe Tool Plan 并完成 normalizer -> analyzer -> renderer -> checker 流程。
+
+## `tests/test_orchestration_state.py`
+
+该文件验证 P1 Orchestration State 初版。该状态用于后续自然语言上层图，
+与下层 Compiler Graph 的 `WorkflowState` 分离。
+
+### `test_initial_orchestration_state_records_request_and_planner_options`
+
+输入：
+
+- 自然语言请求：`Run bulk RNA-seq differential expression.`
+- `planner_model = DEFAULT_PLANNER_MODEL`
+- `check=False`
+
+执行：
+
+- 调用 `build_initial_orchestration_state(...)`。
+
+期望输出：
+
+- state 保存原始 `request`、`planner_model` 和 `check`。
+- `plan`、`planner_prompt`、`planner_raw_response`、`compiler_result` 初始为 `None`。
+- `errors` 和 `events` 初始为空列表。
+
+覆盖点：
+
+- 自然语言 Planner trace 和下层 compiler result 有独立承载字段。
+
+### `test_initial_orchestration_state_uses_independent_mutable_lists`
+
+输入：
+
+- 分别构造两个 Orchestration State。
+
+执行：
+
+- 向第一个 state 的 `errors` 和 `events` 追加内容。
+
+期望输出：
+
+- 第二个 state 的 `errors` 和 `events` 仍为空。
+
+覆盖点：
+
+- 初始状态不会共享可变列表。
+
+### `test_orchestration_state_does_not_pollute_compiler_workflow_state`
+
+输入：
+
+- 调用 `build_initial_state({})` 构造 Compiler Graph 的 `WorkflowState`。
+
+执行：
+
+- 检查 orchestration-only 字段是否存在于 `WorkflowState`。
+
+期望输出：
+
+- `request`、`planner_model`、`plan`、`planner_prompt`、`compiler_result` 等上层字段均不在 `WorkflowState` 中。
+
+覆盖点：
+
+- Orchestration State 与 Compiler Graph `WorkflowState` 保持分层。
+
+### `test_orchestration_failure_stage_distinguishes_top_level_errors`
+
+输入：
+
+- 初始 Orchestration State。
+- 向 `errors` 添加 Planner JSON 解析失败信息。
+
+执行：
+
+- 调用 `orchestration_succeeded(...)`。
+- 调用 `orchestration_failure_stage(...)`。
+
+期望输出：
+
+- `orchestration_succeeded(...) == False`。
+- `orchestration_failure_stage(...) == "orchestration"`。
+
+覆盖点：
+
+- 上层 Planner / orchestration 错误可与下层 compiler 错误区分。
+
+### `test_orchestration_failure_stage_distinguishes_compiler_failure`
+
+输入：
+
+- 初始 Orchestration State。
+- 设置 `compiler_result` 为 `succeeded=False` 的 `WorkflowCompilationResult`。
+
+执行：
+
+- 调用 `orchestration_succeeded(...)`。
+- 调用 `orchestration_failure_stage(...)`。
+
+期望输出：
+
+- `orchestration_succeeded(...) == False`。
+- `orchestration_failure_stage(...) == "compiler"`。
+
+覆盖点：
+
+- 下层 Compiler Graph 失败保留为 compiler failure，而不是混入上层错误。
+
+### `test_orchestration_succeeded_requires_successful_compiler_result`
+
+输入：
+
+- 初始 Orchestration State。
+- 设置 `compiler_result` 为 `succeeded=True` 的 `WorkflowCompilationResult`。
+
+执行：
+
+- 调用 `orchestration_succeeded(...)`。
+- 调用 `orchestration_failure_stage(...)`。
+
+期望输出：
+
+- `orchestration_succeeded(...) == True`。
+- `orchestration_failure_stage(...) is None`。
+
+覆盖点：
+
+- P1 上层 run 的成功语义要求 orchestration 和 delegated compiler 都成功。
 
 ## `tests/test_workflow_service.py`
 
