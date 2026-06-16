@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
@@ -13,6 +14,9 @@ from src.api.models import (
     RunAcceptedResponse,
     RunEvent,
     RunEventType,
+    RunDiagnosticSummary,
+    RunListResponse,
+    RunSummary,
     RunStatus,
     WorkflowArtifacts,
     WorkflowRunSnapshotResponse,
@@ -26,6 +30,7 @@ from src.services.workflow_service import WorkflowCompilationResult
 NATURAL_LANGUAGE_RUN_KIND = "natural_language"
 STRUCTURED_COMPILE_RUN_KIND = "structured_compile"
 DEFAULT_SSE_POLL_INTERVAL_SECONDS = 0.25
+REQUEST_SUMMARY_MAX_LENGTH = 160
 
 
 class RunService:
@@ -170,6 +175,40 @@ class RunService:
             events_url=snapshot.run.events_url,
             artifacts=snapshot.artifacts,
             diagnostics=snapshot.diagnostics,
+        )
+
+    def list_runs(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        status: RunStatus | None = None,
+    ) -> RunListResponse:
+        records, total = self.repository.list_runs(limit=limit, offset=offset, status=status)
+        return RunListResponse(
+            runs=[
+                RunSummary(
+                    run_id=record.run.run_id,
+                    status=record.run.status,
+                    kind=record.run.kind,
+                    request_summary=_summarize_request(record.run.request),
+                    events_url=record.run.events_url,
+                    created_at=record.run.created_at,
+                    updated_at=record.run.updated_at,
+                    completed_at=record.run.completed_at,
+                    diagnostic_summary=RunDiagnosticSummary(
+                        analysis_error_count=record.diagnostic_summary.analysis_error_count,
+                        analysis_warning_count=record.diagnostic_summary.analysis_warning_count,
+                        repair_action_count=record.diagnostic_summary.repair_action_count,
+                        check_performed=record.diagnostic_summary.check_performed,
+                        is_valid=record.diagnostic_summary.is_valid,
+                    ),
+                )
+                for record in records
+            ],
+            limit=limit,
+            offset=offset,
+            total=total,
         )
 
     def get_events(self, run_id: str, after_sequence: int = 0) -> list[RunEvent] | None:
@@ -336,6 +375,15 @@ def get_snapshot(run_id: str) -> WorkflowRunSnapshotResponse | None:
     return get_default_run_service().get_snapshot(run_id)
 
 
+def list_runs(
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    status: RunStatus | None = None,
+) -> RunListResponse:
+    return get_default_run_service().list_runs(limit=limit, offset=offset, status=status)
+
+
 def get_events(run_id: str, after_sequence: int = 0) -> list[RunEvent] | None:
     return get_default_run_service().get_events(run_id, after_sequence=after_sequence)
 
@@ -350,6 +398,30 @@ def _new_run_id() -> str:
 
 def _events_url(run_id: str) -> str:
     return f"/api/runs/{run_id}/events"
+
+
+def _summarize_request(request: str | dict | None) -> str | None:
+    if request is None:
+        return None
+    if isinstance(request, str):
+        return _truncate_summary(" ".join(request.split()))
+    if isinstance(request, dict):
+        workflow = request.get("workflow")
+        if isinstance(workflow, dict):
+            recipe = workflow.get("recipe")
+            if isinstance(recipe, str) and recipe:
+                return _truncate_summary(recipe)
+            name = workflow.get("name")
+            if isinstance(name, str) and name:
+                return _truncate_summary(name)
+        return _truncate_summary(json.dumps(request, ensure_ascii=False, sort_keys=True))
+    return _truncate_summary(str(request))
+
+
+def _truncate_summary(value: str) -> str:
+    if len(value) <= REQUEST_SUMMARY_MAX_LENGTH:
+        return value
+    return f"{value[: REQUEST_SUMMARY_MAX_LENGTH - 3]}..."
 
 
 def _format_sse_event(event: RunEvent) -> str:

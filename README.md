@@ -279,7 +279,7 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 - [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
 - [x] 接入 W4 工作台初版：RNA-seq 结构化示例 run 创建、snapshot 轮询和状态摘要。
 - [ ] 完成 W4 SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态打磨。
-- [ ] 建设 W5 DAG 可视化和历史详情页。
+- [ ] 建设 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证

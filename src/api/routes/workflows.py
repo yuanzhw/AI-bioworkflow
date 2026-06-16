@@ -7,6 +7,8 @@ from src.api.models import (
     CompileWorkflowRequest,
     NaturalLanguageRunRequest,
     RunAcceptedResponse,
+    RunListResponse,
+    RunStatus,
     WorkflowRunSnapshotResponse,
 )
 from src.services import run_service
@@ -33,6 +35,15 @@ def create_workflow_run(
     accepted = run_service.create_natural_language_run(request)
     background_tasks.add_task(run_service.execute_natural_language_run, accepted.run_id, request)
     return accepted
+
+
+@router.get("/runs", response_model=RunListResponse)
+def list_workflow_runs(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status: RunStatus | None = Query(default=None),
+) -> RunListResponse:
+    return run_service.list_runs(limit=limit, offset=offset, status=status)
 
 
 @router.get("/runs/{run_id}", response_model=WorkflowRunSnapshotResponse)

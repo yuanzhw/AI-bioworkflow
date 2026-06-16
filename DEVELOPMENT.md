@@ -381,6 +381,7 @@ W2 当前接口：
 | --- | --- | --- |
 | `POST /api/runs` | 从自然语言需求创建一次 Agent run | `run_id`、初始状态、事件流 URL |
 | `POST /api/compile` | 从 Recipe Tool Plan 或 Workflow IR 创建一次确定性编译 run | `run_id`、初始状态、事件流 URL |
+| `GET /api/runs` | 分页查询历史 run 摘要 | run 状态、请求摘要、时间戳、诊断计数 |
 | `GET /api/runs/{run_id}` | 查询详情页所需的 run 快照 | 请求、状态、Plan、IR、WDL、诊断、修复记录 |
 | `GET /api/runs/{run_id}/events` | 订阅或回放当前 run 的 SSE 事件 | 节点开始/完成/失败、产物更新、最终结果 |
 | `GET /api/recipes` | 查询支持的分析配方列表 | recipe 元数据、required inputs 与步骤 |
@@ -496,6 +497,9 @@ Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经
 
 `W4` 的具体实施范围、任务拆分和验收口径记录在
 [W4 Workflow 生成工作台工作拆解](./docs/w4-workbench-plan.md)。
+
+`W5` 的具体实施范围、任务拆分和验收口径记录在
+[W5 DAG 与历史详情工作拆解](./docs/w5-dag-history-plan.md)。
 
 求职展示的最小可发布范围为 `W0` 至 `W5`：访问者能够使用一个预置 RNA-seq 示例触发 run，看到 Agent/Compiler 的阶段过程、Workflow IR、DAG、校验后的 WDL 与历史回放。`W6` 负责将能力包装成可在简历和项目主页直接访问、快速理解的作品。
 

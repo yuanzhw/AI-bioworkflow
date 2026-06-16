@@ -41,6 +41,21 @@ class RunSnapshotRecord:
     diagnostics: DiagnosticReport
 
 
+@dataclass(frozen=True)
+class RunDiagnosticSummaryRecord:
+    analysis_error_count: int
+    analysis_warning_count: int
+    repair_action_count: int
+    check_performed: bool
+    is_valid: bool
+
+
+@dataclass(frozen=True)
+class RunSummaryRecord:
+    run: RunRecord
+    diagnostic_summary: RunDiagnosticSummaryRecord
+
+
 class RunRepository:
     """Store run snapshots and append-only run events in SQLite."""
 
@@ -90,6 +105,52 @@ class RunRepository:
                 (run_id,),
             ).fetchone()
         return _row_to_run(row) if row is not None else None
+
+    def list_runs(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        status: RunStatus | None = None,
+    ) -> tuple[list[RunSummaryRecord], int]:
+        if limit < 1:
+            raise ValueError("limit must be greater than or equal to 1")
+        if offset < 0:
+            raise ValueError("offset must be greater than or equal to 0")
+
+        filters = []
+        params: list[Any] = []
+        if status is not None:
+            filters.append("runs.status = ?")
+            params.append(status.value)
+
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+        with self._connect() as connection:
+            total_row = connection.execute(
+                f"SELECT COUNT(*) AS total FROM runs {where_clause}",
+                tuple(params),
+            ).fetchone()
+            rows = connection.execute(
+                f"""
+                SELECT
+                    runs.*,
+                    run_diagnostics.analysis_errors_json,
+                    run_diagnostics.analysis_warnings_json,
+                    run_diagnostics.repair_actions_json,
+                    run_diagnostics.check_performed AS diagnostic_check_performed,
+                    run_diagnostics.is_valid
+                FROM runs
+                LEFT JOIN run_diagnostics ON run_diagnostics.run_id = runs.run_id
+                {where_clause}
+                ORDER BY runs.created_at DESC, runs.run_id DESC
+                LIMIT ? OFFSET ?
+                """,
+                tuple([*params, limit, offset]),
+            ).fetchall()
+
+        total = int(total_row["total"]) if total_row is not None else 0
+        return [_row_to_run_summary(row) for row in rows], total
 
     def update_status(self, run_id: str, status: RunStatus) -> None:
         completed_at = _utc_now() if status in {RunStatus.SUCCEEDED, RunStatus.FAILED} else None
@@ -439,6 +500,23 @@ def _row_to_run(row: sqlite3.Row) -> RunRecord:
     )
 
 
+def _row_to_run_summary(row: sqlite3.Row) -> RunSummaryRecord:
+    return RunSummaryRecord(
+        run=_row_to_run(row),
+        diagnostic_summary=RunDiagnosticSummaryRecord(
+            analysis_error_count=_json_list_length(row["analysis_errors_json"]),
+            analysis_warning_count=_json_list_length(row["analysis_warnings_json"]),
+            repair_action_count=_json_list_length(row["repair_actions_json"]),
+            check_performed=bool(
+                row["diagnostic_check_performed"]
+                if row["diagnostic_check_performed"] is not None
+                else row["check_performed"]
+            ),
+            is_valid=bool(row["is_valid"]) if row["is_valid"] is not None else False,
+        ),
+    )
+
+
 def _row_to_event(row: sqlite3.Row) -> RunEvent:
     return RunEvent(
         event_id=row["event_id"],
@@ -486,6 +564,11 @@ def _from_json(value: str | None) -> Any:
     if value is None:
         return None
     return json.loads(value)
+
+
+def _json_list_length(value: str | None) -> int:
+    parsed = _from_json(value)
+    return len(parsed) if isinstance(parsed, list) else 0
 
 
 def _utc_now() -> datetime:
