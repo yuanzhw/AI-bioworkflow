@@ -1,0 +1,180 @@
+name: Build app images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/build-app-images.yml"
+      - "deploy/app/**"
+      - "main.py"
+      - "pyproject.toml"
+      - "src/**"
+      - "uv.lock"
+      - "web/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/build-app-images.yml"
+      - "deploy/app/**"
+      - "main.py"
+      - "pyproject.toml"
+      - "src/**"
+      - "uv.lock"
+      - "web/**"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Push images to ACR after the build"
+        required: true
+        default: false
+        type: boolean
+      image_tag:
+        description: "Optional image tag override. Defaults to the short commit SHA."
+        required: false
+        default: ""
+        type: string
+      next_public_api_base_url:
+        description: "Browser-visible API base URL compiled into the web image."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  API_IMAGE_NAME: ai-bioworkflow-api
+  WEB_IMAGE_NAME: ai-bioworkflow-web
+  FALLBACK_NEXT_PUBLIC_API_BASE_URL: http://localhost:8010
+
+jobs:
+  build:
+    name: Build app images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Prepare image metadata
+        id: meta
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+          DISPATCH_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          DISPATCH_PUBLISH: ${{ github.event.inputs.publish }}
+          DISPATCH_NEXT_PUBLIC_API_BASE_URL: ${{ github.event.inputs.next_public_api_base_url }}
+          REPO_NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          short_sha="${GITHUB_SHA::12}"
+          image_tag="${DISPATCH_IMAGE_TAG:-$short_sha}"
+          next_public_api_base_url="${DISPATCH_NEXT_PUBLIC_API_BASE_URL:-${REPO_NEXT_PUBLIC_API_BASE_URL:-$FALLBACK_NEXT_PUBLIC_API_BASE_URL}}"
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DISPATCH_PUBLISH" == "true" && "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::publish=true is only allowed from refs/heads/main"
+            exit 1
+          fi
+
+          publish="false"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            publish="true"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DISPATCH_PUBLISH" == "true" ]]; then
+            publish="true"
+          fi
+
+          if [[ -n "$ACR_REGISTRY" && -n "$ACR_NAMESPACE" ]]; then
+            api_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${API_IMAGE_NAME}"
+            web_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${WEB_IMAGE_NAME}"
+          else
+            api_image="${API_IMAGE_NAME}"
+            web_image="${WEB_IMAGE_NAME}"
+          fi
+
+          {
+            echo "image_tag=$image_tag"
+            echo "next_public_api_base_url=$next_public_api_base_url"
+            echo "publish=$publish"
+            echo "api_image=$api_image"
+            echo "web_image=$web_image"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate ACR configuration
+        if: ${{ steps.meta.outputs.publish == 'true' }}
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+          ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          for name in ACR_REGISTRY ACR_NAMESPACE ACR_USERNAME ACR_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required secret: ${name}"
+              exit 1
+            fi
+          done
+
+      - name: Log in to Alibaba Cloud ACR
+        if: ${{ steps.meta.outputs.publish == 'true' }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build API image
+        run: |
+          set -euo pipefail
+
+          docker build \
+            -f deploy/app/api/Dockerfile \
+            -t "${{ steps.meta.outputs.api_image }}:${{ steps.meta.outputs.image_tag }}" \
+            .
+
+      - name: Build Web image
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ steps.meta.outputs.next_public_api_base_url }}
+        run: |
+          set -euo pipefail
+
+          docker build \
+            -f deploy/app/web/Dockerfile \
+            -t "${{ steps.meta.outputs.web_image }}:${{ steps.meta.outputs.image_tag }}" \
+            --build-arg "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+            .
+
+      - name: Push images
+        if: ${{ steps.meta.outputs.publish == 'true' }}
+        run: |
+          set -euo pipefail
+
+          api_image="${{ steps.meta.outputs.api_image }}"
+          web_image="${{ steps.meta.outputs.web_image }}"
+          image_tag="${{ steps.meta.outputs.image_tag }}"
+
+          docker tag "${api_image}:${image_tag}" "${api_image}:latest"
+          docker tag "${web_image}:${image_tag}" "${web_image}:latest"
+
+          docker push "${api_image}:${image_tag}"
+          docker push "${api_image}:latest"
+          docker push "${web_image}:${image_tag}"
+          docker push "${web_image}:latest"
+
+      - name: Write build summary
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## App image build"
+            echo ""
+            echo "- API image: \`${{ steps.meta.outputs.api_image }}:${{ steps.meta.outputs.image_tag }}\`"
+            echo "- Web image: \`${{ steps.meta.outputs.web_image }}:${{ steps.meta.outputs.image_tag }}\`"
+            echo "- Web API base URL: \`${{ steps.meta.outputs.next_public_api_base_url }}\`"
+            echo "- Published to ACR: \`${{ steps.meta.outputs.publish }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

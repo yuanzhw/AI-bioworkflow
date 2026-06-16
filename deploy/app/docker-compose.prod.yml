@@ -1,0 +1,24 @@
+name: ai-bioworkflow
+
+services:
+  api:
+    image: ${AI_BIOWORKFLOW_API_IMAGE:?Set AI_BIOWORKFLOW_API_IMAGE in .env.deploy}
+    restart: unless-stopped
+    env_file:
+      - ${AI_BIOWORKFLOW_RUNTIME_ENV_FILE:-./.env.prod}
+    ports:
+      - "${AI_BIOWORKFLOW_API_BIND:-127.0.0.1}:${AI_BIOWORKFLOW_API_HOST_PORT:-8010}:8010"
+    volumes:
+      - api_data:/data/ai-bioworkflow
+
+  web:
+    image: ${AI_BIOWORKFLOW_WEB_IMAGE:?Set AI_BIOWORKFLOW_WEB_IMAGE in .env.deploy}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${AI_BIOWORKFLOW_WEB_BIND:-0.0.0.0}:${AI_BIOWORKFLOW_WEB_HOST_PORT:-3000}:3000"
+
+volumes:
+  api_data:

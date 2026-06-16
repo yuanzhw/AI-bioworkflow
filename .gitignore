@@ -150,8 +150,13 @@ activemq-data/
 # Environments
 .env
 .envrc
+.env.deploy
+.env.prod
 .venv
 env/
+env.deploy
+env.prod
+env.*.local
 venv/
 ENV/
 env.bak/
