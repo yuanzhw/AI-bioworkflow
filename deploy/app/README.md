@@ -28,7 +28,8 @@ docker build \
 ```
 
 生产环境构建 Web 镜像时，`NEXT_PUBLIC_API_BASE_URL` 应设置为浏览器可访问的
-API 地址，而不是 Docker 内部 hostname。
+HTTPS 站点根地址，例如 `https://your-domain.example.com`，而不是 Docker 内部
+hostname 或 `localhost`。
 
 ## API 运行时
 
@@ -86,16 +87,20 @@ sudo mkdir -p /opt/ai-bioworkflow
 sudo chown -R "$USER":"$USER" /opt/ai-bioworkflow
 
 cp deploy/app/docker-compose.prod.yml /opt/ai-bioworkflow/
+cp deploy/app/Caddyfile /opt/ai-bioworkflow/
 cp deploy/app/env.deploy.example /opt/ai-bioworkflow/.env.deploy
 cp deploy/app/env.prod.example /opt/ai-bioworkflow/.env.prod
 ```
 
-编辑 `/opt/ai-bioworkflow/.env.deploy`，设置不可变镜像 tag：
+编辑 `/opt/ai-bioworkflow/.env.deploy`，设置不可变镜像 tag、域名和证书通知邮箱：
 
 ```text
 AI_BIOWORKFLOW_API_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<commit-sha>
 AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<commit-sha>
 AI_BIOWORKFLOW_RUNTIME_ENV_FILE=./.env.prod
+
+AI_BIOWORKFLOW_SITE_ADDRESS=your-domain.example.com
+AI_BIOWORKFLOW_TLS_EMAIL=you@example.com
 ```
 
 编辑 `/opt/ai-bioworkflow/.env.prod`，填写运行时配置。真实密钥只保存在 ECS：
@@ -115,19 +120,53 @@ docker compose --env-file .env.deploy -f docker-compose.prod.yml up -d --remove-
 docker compose --env-file .env.deploy -f docker-compose.prod.yml ps
 ```
 
-默认情况下，Web 服务发布到宿主机 `0.0.0.0:3000`，API 服务只发布到
-宿主机 `127.0.0.1:8010`。容器内端口固定为 API `8010`、Web `3000`；
-`.env.deploy` 中的 `AI_BIOWORKFLOW_API_HOST_PORT` 和
-`AI_BIOWORKFLOW_WEB_HOST_PORT` 只控制宿主机 published port。
-这样便于后续通过宿主机 Nginx 或 Caddy 反向代理暴露 API。
-只有在明确需要公网直接访问 API 时，才在 `.env.deploy` 中设置：
+默认情况下，只有 Caddy proxy 服务发布到宿主机 `80/443`。API 和 Web 服务
+不直接发布宿主机端口，只在 Docker 网络内暴露容器端口：API `8010`、Web
+`3000`。公网入口统一为：
 
 ```text
-AI_BIOWORKFLOW_API_BIND=0.0.0.0
+https://your-domain.example.com/          -> web:3000
+https://your-domain.example.com/api/...   -> api:8010
+https://your-domain.example.com/docs      -> api:8010/docs
+https://your-domain.example.com/health    -> api:8010/health
 ```
 
 API run 历史记录保存在 Docker named volume `ai-bioworkflow_api_data`，
 容器内挂载路径为 `/data/ai-bioworkflow`。
+
+## HTTPS 入口
+
+生产入口由 `deploy/app/Caddyfile` 定义。Caddy 会自动申请和续期证书，并将
+HTTP 请求重定向到 HTTPS。
+
+上线前确认：
+
+- 域名 A 记录已经指向 ECS 公网 IP。
+- ECS 安全组允许入站 TCP `80` 和 `443`。
+- ECS 防火墙没有拦截 `80/443`。
+- `3000` 和 `8010` 不需要对公网开放。
+
+如果 ECS 无法直接拉取 Docker Hub 的 `caddy:2-alpine`，可以将 Caddy 镜像同步
+到 ACR 后，在 `.env.deploy` 中设置：
+
+```text
+AI_BIOWORKFLOW_CADDY_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/caddy:2-alpine
+```
+
+启动后可用以下命令检查：
+
+```bash
+docker compose --env-file .env.deploy -f docker-compose.prod.yml logs -f proxy
+curl -I http://your-domain.example.com
+curl https://your-domain.example.com/health
+curl https://your-domain.example.com/api/recipes
+```
+
+浏览器访问应用时应使用 HTTPS 域名，不再使用 `:3000`：
+
+```text
+https://your-domain.example.com/workspace?example=rnaseq-deg
+```
 
 ## CI 构建并推送 ACR
 
