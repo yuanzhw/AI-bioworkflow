@@ -125,6 +125,41 @@ AI_BIOWORKFLOW_API_BIND=0.0.0.0
 API run 历史记录保存在 Docker named volume `ai-bioworkflow_api_data`，
 容器内挂载路径为 `/data/ai-bioworkflow`。
 
+## CI 构建并推送 ACR
+
+应用镜像由 `.github/workflows/build-app-images.yml` 构建。默认行为：
+
+- `main` 分支收到 push 时，构建 API 和 Web 镜像并推送到阿里云 ACR。
+- 手动触发 `workflow_dispatch` 时，可以选择只构建不推送，或指定自定义 tag。
+- 每次发布都会推送两个 tag：短 commit SHA 和 `latest`。
+
+需要在 GitHub repository secrets 中配置：
+
+```text
+ACR_REGISTRY=registry.cn-hangzhou.aliyuncs.com
+ACR_NAMESPACE=your-namespace
+ACR_USERNAME=your-acr-username
+ACR_PASSWORD=your-acr-password
+```
+
+建议在 GitHub repository variables 中配置 Web 构建时使用的公开 API 地址：
+
+```text
+NEXT_PUBLIC_API_BASE_URL=https://your-domain.example.com
+```
+
+CI 推送后的镜像形式为：
+
+```text
+registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<commit-sha>
+registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:latest
+registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<commit-sha>
+registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:latest
+```
+
+ECS 部署时优先在 `.env.deploy` 中使用 commit SHA tag，而不是只依赖
+`latest`。这样可以明确知道线上运行版本，也方便回滚。
+
 ## 手动回滚
 
 将 `/opt/ai-bioworkflow/.env.deploy` 中的镜像 tag 改回已知可用的 commit SHA，
