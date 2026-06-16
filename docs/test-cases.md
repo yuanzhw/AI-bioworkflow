@@ -665,6 +665,32 @@ OK (skipped=2)
 
 该文件验证 persistent run lifecycle service。Service 层连接 API DTO、RunRepository、自然语言 planner 和 deterministic compiler graph，FastAPI routes 只调用 service 方法。
 
+### `test_structured_compile_run_succeeds_and_records_events`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- `check=False`
+
+执行：
+
+- 通过 `RunService.create_structured_compile_run(...)` 创建 run。
+- 调用 `RunService.execute_structured_compile_run(...)`。
+- 读取 snapshot 与 events。
+
+期望输出：
+
+- snapshot `status == "succeeded"`。
+- snapshot `kind == "structured_compile"`。
+- snapshot 包含 `created_at`、`updated_at` 和 `completed_at`。
+- Workflow IR 名称为 `RNASeqDEG`。
+- WDL 包含 `workflow RNASeqDEG`。
+- events 包含 `run.created`、`artifact.updated`，最后一条为 `run.completed`。
+
+覆盖点：
+
+- 结构化编译 run 会持久化详情页所需元数据、产物、诊断和事件回放记录。
+
 ### `test_list_runs_returns_api_summaries`
 
 输入：
