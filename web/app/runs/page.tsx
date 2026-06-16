@@ -39,6 +39,13 @@ const kindLabels: Record<string, string> = {
   structured_compile: "结构化编译",
 };
 
+const runListDateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function isRunStatus(value: string | undefined): value is RunStatus {
   return value === "created" || value === "running" || value === "succeeded" || value === "failed";
 }
@@ -80,19 +87,12 @@ function formatDateTime(value: string | null): string {
   if (!value) {
     return "未完成";
   }
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return runListDateTimeFormat.format(new Date(value));
 }
 
 function formatError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Run 历史记录读取失败。";
+  console.error("Failed to load run history.", error);
+  return "Run 历史记录暂时无法读取，请确认 FastAPI 服务正在运行后重试。";
 }
 
 function buildRunsHref(status: RunStatus | "all", page = 1): string {
