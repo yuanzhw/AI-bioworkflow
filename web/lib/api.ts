@@ -4,6 +4,8 @@ import type {
   NaturalLanguageRunRequest,
   RecipeListResponse,
   RunAcceptedResponse,
+  RunListResponse,
+  RunStatus,
   ToolListResponse,
   WorkflowRunSnapshotResponse,
 } from "@/lib/types";
@@ -92,6 +94,33 @@ export function createStructuredCompileRun(
   };
 
   return postJson<RunAcceptedResponse>("/api/compile", body);
+}
+
+export type ListRunsParams = {
+  limit?: number;
+  offset?: number;
+  status?: RunStatus;
+};
+
+export function listRuns(params: ListRunsParams = {}): Promise<RunListResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (params.limit !== undefined) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params.offset !== undefined) {
+    searchParams.set("offset", String(params.offset));
+  }
+  if (params.status !== undefined) {
+    searchParams.set("status", params.status);
+  }
+
+  const query = searchParams.toString();
+  const path = query ? `/api/runs?${query}` : "/api/runs";
+
+  return requestJson<RunListResponse>(path, {
+    cache: "no-store",
+  });
 }
 
 export function getRunSnapshot(runId: string): Promise<WorkflowRunSnapshotResponse> {

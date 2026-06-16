@@ -84,6 +84,33 @@ export type RunAcceptedResponse = {
   events_url: string;
 };
 
+export type RunDiagnosticSummary = {
+  analysis_error_count: number;
+  analysis_warning_count: number;
+  repair_action_count: number;
+  check_performed: boolean;
+  is_valid: boolean;
+};
+
+export type RunSummary = {
+  run_id: string;
+  status: RunStatus;
+  kind: string;
+  request_summary: string | null;
+  events_url: string;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  diagnostic_summary: RunDiagnosticSummary;
+};
+
+export type RunListResponse = {
+  runs: RunSummary[];
+  limit: number;
+  offset: number;
+  total: number;
+};
+
 export type WorkflowArtifacts = {
   plan: JsonObject | null;
   workflow_ir: JsonObject;
