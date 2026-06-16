@@ -1,12 +1,12 @@
 {
-    email {$AI_BIOWORKFLOW_TLS_EMAIL}
+	email {$AI_BIOWORKFLOW_TLS_EMAIL}
 }
 
 {$AI_BIOWORKFLOW_SITE_ADDRESS} {
-    encode zstd gzip
+	encode zstd gzip
 
-    @api path /api /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health
-    reverse_proxy @api api:8010
+	@api path /api /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health
+	reverse_proxy @api api:8010
 
-    reverse_proxy web:3000
+	reverse_proxy web:3000
 }
