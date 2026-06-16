@@ -153,7 +153,7 @@ CLI --input / API POST /api/compile / tests
 
 目标：把现有 `create_natural_language_plan` 包装为上层图节点。
 
-建议行为：
+已落地行为（`src/orchestration/nodes/planner.py`）：
 
 - 输入 `request`、`planner_model`、可选测试注入的 `llm` / catalog 对象。
 - 输出 `plan`、`planner_prompt`、`planner_raw_response`。
@@ -391,7 +391,7 @@ run.completed
 - [x] `compiler_graph` 成为结构化编译图的明确导出名。
 - [x] `agent` 兼容别名仍可用于旧调用，或有明确迁移说明。
 - [x] Orchestration State 不污染 `WorkflowState`。
-- [ ] Planner node 只产出 Recipe Tool Plan 和 trace，不产出最终 WDL。
+- [x] Planner node 只产出 Recipe Tool Plan 和 trace，不产出最终 WDL。
 - [ ] Orchestration Graph 实现 `natural_language_planner -> compiler_graph`。
 - [ ] 自然语言入口调用 Orchestration Graph。
 - [ ] `--input`、测试入口和 `/api/compile` 直接调用 Compiler Graph。

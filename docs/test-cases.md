@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 147 tests
+Ran 153 tests
 OK (skipped=2)
 ```
 
@@ -1568,6 +1568,139 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 覆盖点：
 
 - P1 上层 run 的成功语义要求 orchestration 和 delegated compiler 都成功。
+
+## `tests/test_orchestration_planner_node.py`
+
+该文件验证 P1 Planner Node 初版。Planner Node 负责把自然语言请求转换为
+Recipe Tool Plan，并记录 planner prompt / raw response 等 trace；它不运行
+Compiler Graph，也不产出 Workflow IR 或 WDL。
+
+### `test_planner_node_returns_plan_trace_and_events`
+
+输入：
+
+- 自然语言请求：`Run RNA-seq differential expression.`
+- `FakePlannerLlm` 返回有效 RNA-seq Recipe Tool Plan JSON。
+
+执行：
+
+- 调用 `make_natural_language_planner_node(llm=fake_llm)(state)`。
+
+期望输出：
+
+- update 中包含 Recipe Tool Plan。
+- `planner_prompt` 包含 `Catalog:`。
+- `planner_raw_response` 包含 `RNASeqDEG`。
+- `errors == []`。
+- update 不包含 `compiler_result`、`workflow_ir` 或 `wdl`。
+- events 顺序为 `node.started`、`node.completed`、`artifact.updated`。
+- artifact event payload 为 `{"artifact": "plan"}`。
+
+覆盖点：
+
+- Planner Node 只产出 Recipe Tool Plan 和 planner trace。
+- Planner Node 成功事件可被后续 run history 或 SSE 层复用。
+
+### `test_default_planner_node_uses_same_node_contract`
+
+输入：
+
+- 默认 `natural_language_planner_node`。
+
+执行：
+
+- 检查该对象是否可调用。
+
+期望输出：
+
+- 默认 Planner Node 是可注册到 LangGraph 的 callable。
+
+覆盖点：
+
+- 后续 Orchestration Graph 可以直接注册默认 planner node。
+
+### `test_planner_node_records_json_failure_without_secret_payloads`
+
+输入：
+
+- `FakePlannerLlm` 返回非 JSON 文本。
+
+执行：
+
+- 调用 Planner Node。
+
+期望输出：
+
+- `errors` 包含 JSON 解析失败信息。
+- `plan`、`planner_prompt`、`planner_raw_response` 均为 `None`。
+- events 顺序为 `node.started`、`node.failed`。
+- failure payload 的 `error_type == "PlannerJsonError"`。
+- failure payload 不包含 `api_key` 或 `authorization`。
+
+覆盖点：
+
+- Planner JSON 失败保留结构化错误分类。
+- 失败事件不记录鉴权敏感信息。
+
+### `test_planner_node_records_unexpected_failure`
+
+输入：
+
+- 注入的 Planner LLM 抛出 `RuntimeError("planner transport unavailable")`。
+
+执行：
+
+- 调用 Planner Node。
+
+期望输出：
+
+- `errors` 包含原始异常消息。
+- `plan`、`planner_prompt`、`planner_raw_response` 均为 `None`。
+- events 顺序为 `node.started`、`node.failed`。
+- failure payload 的 `error_type == "RuntimeError"`。
+
+覆盖点：
+
+- 非 `NaturalLanguagePlanningError` 的意外异常也会被 Planner Node 转换为结构化失败。
+- 上层 Orchestration Graph 可以继续聚合 `errors` / `events`，不会被异常直接打断。
+
+### `test_planner_node_preserves_schema_error_classification`
+
+输入：
+
+- `FakePlannerLlm` 返回缺少 `tool_calls` 的 plan JSON。
+
+执行：
+
+- 调用 Planner Node。
+
+期望输出：
+
+- `errors` 包含 `plan schema validation failed`。
+- failure event payload 的 `error_type == "PlannerSchemaError"`。
+
+覆盖点：
+
+- Planner schema 错误不会被吞成泛化错误。
+
+### `test_planner_node_preserves_catalog_error_classification`
+
+输入：
+
+- `FakePlannerLlm` 返回缺少 differential expression step 的 RNA-seq plan。
+
+执行：
+
+- 调用 Planner Node。
+
+期望输出：
+
+- `errors` 包含 `recipe/catalog validation failed`。
+- failure event payload 的 `error_type == "PlannerCatalogError"`。
+
+覆盖点：
+
+- Planner catalog/resolver 错误可被上层 graph 识别为 planner-stage 失败。
 
 ## `tests/test_workflow_service.py`
 
