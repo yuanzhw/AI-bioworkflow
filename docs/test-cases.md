@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 152 tests
+Ran 153 tests
 OK (skipped=2)
 ```
 
@@ -1529,7 +1529,7 @@ Compiler Graph，也不产出 Workflow IR 或 WDL。
 期望输出：
 
 - `errors` 包含 JSON 解析失败信息。
-- update 不包含 `plan`。
+- `plan`、`planner_prompt`、`planner_raw_response` 均为 `None`。
 - events 顺序为 `node.started`、`node.failed`。
 - failure payload 的 `error_type == "PlannerJsonError"`。
 - failure payload 不包含 `api_key` 或 `authorization`。
@@ -1538,6 +1538,28 @@ Compiler Graph，也不产出 Workflow IR 或 WDL。
 
 - Planner JSON 失败保留结构化错误分类。
 - 失败事件不记录鉴权敏感信息。
+
+### `test_planner_node_records_unexpected_failure`
+
+输入：
+
+- 注入的 Planner LLM 抛出 `RuntimeError("planner transport unavailable")`。
+
+执行：
+
+- 调用 Planner Node。
+
+期望输出：
+
+- `errors` 包含原始异常消息。
+- `plan`、`planner_prompt`、`planner_raw_response` 均为 `None`。
+- events 顺序为 `node.started`、`node.failed`。
+- failure payload 的 `error_type == "RuntimeError"`。
+
+覆盖点：
+
+- 非 `NaturalLanguagePlanningError` 的意外异常也会被 Planner Node 转换为结构化失败。
+- 上层 Orchestration Graph 可以继续聚合 `errors` / `events`，不会被异常直接打断。
 
 ### `test_planner_node_preserves_schema_error_classification`
 

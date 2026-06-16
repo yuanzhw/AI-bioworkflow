@@ -34,7 +34,7 @@ def make_natural_language_planner_node(
         started_event = _planner_event(
             "node.started",
             "Natural-language planner started.",
-            {"planner_model": state["planner_model"]},
+            {"model": state["planner_model"]},
         )
 
         try:
@@ -56,6 +56,24 @@ def make_natural_language_planner_node(
                     _planner_event(
                         "node.failed",
                         "Natural-language planner failed.",
+                        {
+                            "error_type": exc.__class__.__name__,
+                            "error": str(exc),
+                        },
+                    ),
+                ],
+            }
+        except Exception as exc:
+            return {
+                "plan": None,
+                "planner_prompt": None,
+                "planner_raw_response": None,
+                "errors": [str(exc)],
+                "events": [
+                    started_event,
+                    _planner_event(
+                        "node.failed",
+                        "Natural-language planner failed unexpectedly.",
                         {
                             "error_type": exc.__class__.__name__,
                             "error": str(exc),

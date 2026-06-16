@@ -106,6 +106,11 @@ class FakePlannerLlm:
         return SimpleNamespace(content=self.response)
 
 
+class RaisingPlannerLlm:
+    def invoke(self, prompt: str):
+        raise RuntimeError("planner transport unavailable")
+
+
 class OrchestrationPlannerNodeTests(unittest.TestCase):
     def test_planner_node_returns_plan_trace_and_events(self):
         fake_llm = FakePlannerLlm(json.dumps(sample_rnaseq_tool_plan()))
@@ -127,7 +132,7 @@ class OrchestrationPlannerNodeTests(unittest.TestCase):
             [event["type"] for event in update["events"]],
             ["node.started", "node.completed", "artifact.updated"],
         )
-        self.assertEqual(update["events"][0]["payload"], {"planner_model": DEFAULT_PLANNER_MODEL})
+        self.assertEqual(update["events"][0]["payload"], {"model": DEFAULT_PLANNER_MODEL})
         self.assertEqual(update["events"][-1]["payload"], {"artifact": "plan"})
         self.assertEqual(len(fake_llm.prompts), 1)
 
@@ -155,6 +160,26 @@ class OrchestrationPlannerNodeTests(unittest.TestCase):
         self.assertEqual(failure_payload["error_type"], "PlannerJsonError")
         self.assertNotIn("api_key", json.dumps(failure_payload).lower())
         self.assertNotIn("authorization", json.dumps(failure_payload).lower())
+
+    def test_planner_node_records_unexpected_failure(self):
+        state = build_initial_orchestration_state(
+            "Run RNA-seq differential expression.",
+            planner_model=DEFAULT_PLANNER_MODEL,
+        )
+
+        update = make_natural_language_planner_node(llm=RaisingPlannerLlm())(state)
+
+        self.assertIn("planner transport unavailable", update["errors"][0])
+        self.assertIsNone(update["plan"])
+        self.assertIsNone(update["planner_prompt"])
+        self.assertIsNone(update["planner_raw_response"])
+        self.assertEqual(
+            [event["type"] for event in update["events"]],
+            ["node.started", "node.failed"],
+        )
+        failure_payload = update["events"][-1]["payload"]
+        self.assertEqual(failure_payload["error_type"], "RuntimeError")
+        self.assertEqual(failure_payload["error"], "planner transport unavailable")
 
     def test_planner_node_preserves_schema_error_classification(self):
         fake_llm = FakePlannerLlm(json.dumps({"workflow": {"name": "RNASeqDEG"}}))
