@@ -114,8 +114,11 @@ docker compose --env-file .env.deploy -f docker-compose.prod.yml up -d --remove-
 docker compose --env-file .env.deploy -f docker-compose.prod.yml ps
 ```
 
-默认情况下，Web 服务绑定到 `0.0.0.0:3000`，API 服务只绑定到
-`127.0.0.1:8010`。这样便于后续通过宿主机 Nginx 或 Caddy 反向代理暴露 API。
+默认情况下，Web 服务发布到宿主机 `0.0.0.0:3000`，API 服务只发布到
+宿主机 `127.0.0.1:8010`。容器内端口固定为 API `8010`、Web `3000`；
+`.env.deploy` 中的 `AI_BIOWORKFLOW_API_HOST_PORT` 和
+`AI_BIOWORKFLOW_WEB_HOST_PORT` 只控制宿主机 published port。
+这样便于后续通过宿主机 Nginx 或 Caddy 反向代理暴露 API。
 只有在明确需要公网直接访问 API 时，才在 `.env.deploy` 中设置：
 
 ```text
