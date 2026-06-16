@@ -164,8 +164,31 @@ function RunRow({ run }: { run: RunSummary }) {
   );
 }
 
-function RunsList({ response }: { response: RunListResponse }) {
+function RunsList({
+  firstPageHref,
+  response,
+}: {
+  firstPageHref: string;
+  response: RunListResponse;
+}) {
   if (response.runs.length === 0) {
+    if (response.total > 0) {
+      return (
+        <div className="rounded-md border bg-background p-6">
+          <div className="flex items-center gap-2 font-semibold">
+            <History className="h-5 w-5 text-primary" />
+            当前页没有记录
+          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            该筛选条件下共有 {response.total} 条 run，但当前分页已超出结果范围。
+          </p>
+          <Button asChild className="mt-5" variant="outline">
+            <Link href={firstPageHref}>返回第一页</Link>
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <div className="rounded-md border bg-background p-6">
         <div className="flex items-center gap-2 font-semibold">
@@ -218,7 +241,6 @@ export default async function RunsPage({
     errorMessage = formatError(error);
   }
 
-  const total = runList?.total ?? 0;
   const hasPreviousPage = page > 1;
   const hasNextPage = runList ? runList.offset + runList.runs.length < runList.total : false;
 
@@ -271,7 +293,7 @@ export default async function RunsPage({
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <Badge variant="outline">{total} 条记录</Badge>
+          {runList ? <Badge variant="outline">{runList.total} 条记录</Badge> : null}
           {status ? <span>当前筛选：{statusLabels[status]}</span> : <span>当前筛选：全部</span>}
         </div>
 
@@ -285,7 +307,7 @@ export default async function RunsPage({
               <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{errorMessage}</p>
             </div>
           ) : runList ? (
-            <RunsList response={runList} />
+            <RunsList firstPageHref={buildRunsHref(selectedFilter)} response={runList} />
           ) : null}
         </div>
 
