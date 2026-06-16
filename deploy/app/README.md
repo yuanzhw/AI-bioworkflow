@@ -38,11 +38,12 @@ API 镜像暴露 `8010` 端口，启动命令为：
 uvicorn src.api.app:app --host 0.0.0.0 --port 8010
 ```
 
+容器内监听地址固定为 `0.0.0.0:8010`，不通过 `.env.prod` 配置；
+宿主机 published port 在 `.env.deploy` 中配置。
+
 运行时环境变量：
 
 ```text
-AI_BIOWORKFLOW_API_HOST=0.0.0.0
-AI_BIOWORKFLOW_API_PORT=8010
 AI_BIOWORKFLOW_DB_PATH=/data/ai-bioworkflow/ai-bioworkflow.sqlite3
 AI_BIOWORKFLOW_RUN_BACKEND=disabled
 WDL_VALIDATOR=miniwdl

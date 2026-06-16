@@ -27,8 +27,6 @@ RUN useradd --create-home --uid 10001 appuser \
 USER appuser
 
 ENV PATH="/app/.venv/bin:${PATH}" \
-    AI_BIOWORKFLOW_API_HOST=0.0.0.0 \
-    AI_BIOWORKFLOW_API_PORT=8010 \
     AI_BIOWORKFLOW_DB_PATH=/data/ai-bioworkflow/ai-bioworkflow.sqlite3 \
     AI_BIOWORKFLOW_RUN_BACKEND=disabled \
     WDL_VALIDATOR=miniwdl
@@ -36,6 +34,6 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 EXPOSE 8010
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import os, urllib.request; port = os.environ.get('AI_BIOWORKFLOW_API_PORT', '8010'); urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=3).read()"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3).read()"
 
-CMD ["sh", "-c", "exec uvicorn src.api.app:app --host \"${AI_BIOWORKFLOW_API_HOST:-0.0.0.0}\" --port \"${AI_BIOWORKFLOW_API_PORT:-8010}\""]
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8010"]

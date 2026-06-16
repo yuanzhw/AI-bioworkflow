@@ -41,6 +41,6 @@ USER nextjs
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD node -e "const http = require('http'); const port = process.env.PORT || 3000; const req = http.get({ host: '127.0.0.1', port, path: '/' }, (res) => process.exit(res.statusCode < 500 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(3000, () => { req.destroy(); process.exit(1); });"
+    CMD node -e "const http = require('http'); const port = process.env.PORT || 3000; const req = http.get({ host: '127.0.0.1', port, path: '/' }, (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(3000, () => { req.destroy(); process.exit(1); });"
 
 CMD ["node", "server.js"]
