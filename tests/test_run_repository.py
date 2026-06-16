@@ -134,6 +134,74 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
             self.assertEqual(events[-1].payload["status"], "succeeded")
 
+    def test_list_runs_returns_paginated_summaries_with_status_filter(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+
+            repository.create_run(
+                run_id="run_failed",
+                kind="structured_compile",
+                request={"workflow": {"recipe": "bad_recipe"}},
+                check_performed=False,
+                events_url="/api/runs/run_failed/events",
+            )
+            repository.save_diagnostics(
+                "run_failed",
+                DiagnosticReport(
+                    analysis_errors=["missing input"],
+                    analysis_warnings=["unused output"],
+                    repair_actions=["reordered calls"],
+                    validation_message="missing input",
+                    is_valid=False,
+                    succeeded=False,
+                    check_performed=False,
+                ),
+            )
+            repository.complete_run(
+                run_id="run_failed",
+                status=RunStatus.FAILED,
+                summary="Run failed.",
+            )
+
+            repository.create_run(
+                run_id="run_succeeded",
+                kind="structured_compile",
+                request={"workflow": {"recipe": "rnaseq_differential_expression"}},
+                check_performed=True,
+                events_url="/api/runs/run_succeeded/events",
+            )
+            repository.save_diagnostics(
+                "run_succeeded",
+                DiagnosticReport(
+                    validation_message="valid WDL",
+                    is_valid=True,
+                    succeeded=True,
+                    check_performed=True,
+                ),
+            )
+            repository.complete_run(
+                run_id="run_succeeded",
+                status=RunStatus.SUCCEEDED,
+                summary="Run succeeded.",
+            )
+
+            first_page, total = repository.list_runs(limit=1)
+            self.assertEqual(total, 2)
+            self.assertEqual(len(first_page), 1)
+            self.assertEqual(first_page[0].run.run_id, "run_succeeded")
+            self.assertTrue(first_page[0].diagnostic_summary.is_valid)
+
+            second_page, _ = repository.list_runs(limit=1, offset=1)
+            self.assertEqual(second_page[0].run.run_id, "run_failed")
+
+            failed_runs, failed_total = repository.list_runs(status=RunStatus.FAILED)
+            self.assertEqual(failed_total, 1)
+            self.assertEqual(failed_runs[0].run.run_id, "run_failed")
+            self.assertEqual(failed_runs[0].diagnostic_summary.analysis_error_count, 1)
+            self.assertEqual(failed_runs[0].diagnostic_summary.analysis_warning_count, 1)
+            self.assertEqual(failed_runs[0].diagnostic_summary.repair_action_count, 1)
+            self.assertFalse(failed_runs[0].diagnostic_summary.check_performed)
+
     def test_sqlite_connection_uses_wal_and_busy_timeout(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")

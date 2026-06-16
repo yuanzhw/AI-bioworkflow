@@ -13,7 +13,9 @@ from src.api.models import (
     RunAcceptedResponse,
     RunEvent,
     RunEventType,
+    RunListResponse,
     RunStatus,
+    RunSummary,
     ToolListResponse,
     WorkflowRunSnapshotResponse,
 )
@@ -99,6 +101,37 @@ class WorkflowDtoTests(unittest.TestCase):
         self.assertEqual(response.artifacts.workflow_ir, {})
         self.assertEqual(response.artifacts.wdl, "")
         self.assertFalse(response.diagnostics.succeeded)
+
+    def test_run_list_response_accepts_history_summaries(self):
+        created_at = datetime(2026, 6, 16, tzinfo=UTC)
+        response = RunListResponse(
+            runs=[
+                RunSummary(
+                    run_id="run_001",
+                    status=RunStatus.SUCCEEDED,
+                    kind="structured_compile",
+                    request_summary="rnaseq_differential_expression",
+                    events_url="/api/runs/run_001/events",
+                    created_at=created_at,
+                    updated_at=created_at,
+                    completed_at=created_at,
+                    diagnostic_summary={
+                        "analysis_error_count": 0,
+                        "analysis_warning_count": 1,
+                        "repair_action_count": 0,
+                        "check_performed": True,
+                        "is_valid": True,
+                    },
+                )
+            ],
+            limit=20,
+            offset=0,
+            total=1,
+        )
+
+        self.assertEqual(response.runs[0].run_id, "run_001")
+        self.assertEqual(response.runs[0].diagnostic_summary.analysis_warning_count, 1)
+        self.assertTrue(response.runs[0].diagnostic_summary.is_valid)
 
 
 class CatalogDtoTests(unittest.TestCase):

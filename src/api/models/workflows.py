@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -89,6 +90,45 @@ class DiagnosticReport(BaseModel):
     is_valid: bool = False
     succeeded: bool = False
     check_performed: bool = True
+
+
+class RunDiagnosticSummary(BaseModel):
+    """Small diagnostic counters for run list views."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_error_count: int = Field(default=0, ge=0)
+    analysis_warning_count: int = Field(default=0, ge=0)
+    repair_action_count: int = Field(default=0, ge=0)
+    check_performed: bool = True
+    is_valid: bool = False
+
+
+class RunSummary(BaseModel):
+    """Compact run record for history list views."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    status: RunStatus
+    kind: str
+    request_summary: str | None = None
+    events_url: str
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    diagnostic_summary: RunDiagnosticSummary = Field(default_factory=RunDiagnosticSummary)
+
+
+class RunListResponse(BaseModel):
+    """Paginated response for persistent run history."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    runs: list[RunSummary] = Field(default_factory=list)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
+    total: int = Field(ge=0)
 
 
 class CompilationResultResponse(BaseModel):

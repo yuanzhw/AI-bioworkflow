@@ -381,6 +381,7 @@ W2 当前接口：
 | --- | --- | --- |
 | `POST /api/runs` | 从自然语言需求创建一次 Agent run | `run_id`、初始状态、事件流 URL |
 | `POST /api/compile` | 从 Recipe Tool Plan 或 Workflow IR 创建一次确定性编译 run | `run_id`、初始状态、事件流 URL |
+| `GET /api/runs` | 分页查询历史 run 摘要 | run 状态、请求摘要、时间戳、诊断计数 |
 | `GET /api/runs/{run_id}` | 查询详情页所需的 run 快照 | 请求、状态、Plan、IR、WDL、诊断、修复记录 |
 | `GET /api/runs/{run_id}/events` | 订阅或回放当前 run 的 SSE 事件 | 节点开始/完成/失败、产物更新、最终结果 |
 | `GET /api/recipes` | 查询支持的分析配方列表 | recipe 元数据、required inputs 与步骤 |

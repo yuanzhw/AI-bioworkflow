@@ -6,7 +6,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
-from src.api.models import RunAcceptedResponse, RunStatus, WorkflowRunSnapshotResponse
+from src.api.models import RunAcceptedResponse, RunListResponse, RunStatus, RunSummary, WorkflowRunSnapshotResponse
 from src.services.catalog_service import get_recipe, get_tool, list_recipes, list_tools
 
 
@@ -173,6 +173,41 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         created_request = create_run.call_args.args[0]
         self.assertEqual(created_request.planner_model, "custom-planner")
+
+    def test_list_runs_uses_run_service_with_filters(self):
+        response_body = RunListResponse(
+            runs=[
+                RunSummary(
+                    run_id="run_123",
+                    status=RunStatus.SUCCEEDED,
+                    kind="structured_compile",
+                    request_summary="rnaseq_differential_expression",
+                    events_url="/api/runs/run_123/events",
+                    created_at="2026-06-16T00:00:00Z",
+                    updated_at="2026-06-16T00:00:01Z",
+                    completed_at="2026-06-16T00:00:01Z",
+                    diagnostic_summary={
+                        "analysis_error_count": 0,
+                        "analysis_warning_count": 0,
+                        "repair_action_count": 0,
+                        "check_performed": True,
+                        "is_valid": True,
+                    },
+                )
+            ],
+            limit=5,
+            offset=10,
+            total=42,
+        )
+
+        with patch("src.api.routes.workflows.run_service.list_runs", return_value=response_body) as list_runs:
+            response = self.client.get("/api/runs?limit=5&offset=10&status=succeeded")
+
+        self.assertEqual(response.status_code, 200)
+        list_runs.assert_called_once_with(limit=5, offset=10, status=RunStatus.SUCCEEDED)
+        body = response.json()
+        self.assertEqual(body["runs"][0]["run_id"], "run_123")
+        self.assertEqual(body["total"], 42)
 
     def test_get_run_returns_snapshot(self):
         snapshot = WorkflowRunSnapshotResponse(

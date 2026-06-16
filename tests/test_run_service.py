@@ -6,7 +6,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from src.api.models import CompileWorkflowRequest, NaturalLanguageRunRequest, RunEventType, RunStatus, WorkflowArtifacts
+from src.api.models import (
+    CompileWorkflowRequest,
+    DiagnosticReport,
+    NaturalLanguageRunRequest,
+    RunEventType,
+    RunStatus,
+    WorkflowArtifacts,
+)
 from src.nl_planner import NaturalLanguagePlanningError
 from src.services.run_repository import RunRepository
 from src.services.run_service import RunService
@@ -339,6 +346,41 @@ class RunServiceTests(unittest.TestCase):
             assert snapshot is not None
             self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
             self.assertIn("workflow Demo", snapshot.artifacts.wdl)
+
+    def test_list_runs_returns_api_summaries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            request = CompileWorkflowRequest(
+                payload=load_example("rnaseq_deg_recipe_plan.json"),
+                check=False,
+            )
+
+            accepted = service.create_structured_compile_run(request)
+            service.repository.save_diagnostics(
+                accepted.run_id,
+                DiagnosticReport(
+                    validation_message="WDL syntax validation skipped (--no-check).",
+                    is_valid=False,
+                    succeeded=True,
+                    check_performed=False,
+                ),
+            )
+            service.repository.complete_run(
+                run_id=accepted.run_id,
+                status=RunStatus.SUCCEEDED,
+                summary="Run succeeded.",
+            )
+
+            response = service.list_runs(status=RunStatus.SUCCEEDED)
+
+            self.assertEqual(response.total, 1)
+            self.assertEqual(response.runs[0].run_id, accepted.run_id)
+            self.assertEqual(response.runs[0].status, RunStatus.SUCCEEDED)
+            self.assertEqual(response.runs[0].kind, "structured_compile")
+            self.assertEqual(response.runs[0].request_summary, "rnaseq_differential_expression")
+            self.assertFalse(response.runs[0].diagnostic_summary.check_performed)
+            self.assertEqual(response.runs[0].diagnostic_summary.analysis_error_count, 0)
+            self.assertIsNotNone(response.runs[0].completed_at)
 
 
 async def _collect_async(stream):

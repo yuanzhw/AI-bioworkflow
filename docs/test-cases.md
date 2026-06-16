@@ -227,6 +227,31 @@ OK (skipped=2)
 
 - API response DTO 能保留 service 诊断，不把无效 plan 包装成成功响应。
 
+### `test_run_list_response_accepts_history_summaries`
+
+输入：
+
+- 一条 `RunSummary`：
+  - `run_id == "run_001"`
+  - `status == "succeeded"`
+  - `kind == "structured_compile"`
+  - `request_summary == "rnaseq_differential_expression"`
+  - diagnostic summary 中 warning count 为 `1`
+
+执行：
+
+- 构造 `RunListResponse(...)`。
+
+期望输出：
+
+- response 保留 run id。
+- diagnostic summary 保留 warning count。
+- `is_valid == True`。
+
+覆盖点：
+
+- W5 run history 列表 DTO 只暴露轻量摘要，不返回完整 artifacts。
+
 ### `test_recipe_list_response_accepts_catalog_service_records`
 
 输入：
@@ -318,7 +343,7 @@ OK (skipped=2)
 
 `POST /api/runs` 当前契约为 W2 异步 run 创建入口：请求体包含自然语言 `request`、可选 `planner_model` 和 `check`；响应返回 HTTP 202 与 `RunAcceptedResponse`，包括 `run_id`、初始 `created` 状态和 `events_url`。`POST /api/compile` 同样创建 run，但输入是 Recipe Tool Plan / Workflow IR JSON，跳过自然语言 planner。
 
-`GET /api/runs/{run_id}` 返回持久化 run 快照；`GET /api/runs/{run_id}/events` 返回 SSE 事件流，用于实时展示和历史回放。
+`GET /api/runs` 返回分页 run 摘要列表，用于 W5 历史页首屏；`GET /api/runs/{run_id}` 返回持久化 run 快照；`GET /api/runs/{run_id}/events` 返回 SSE 事件流，用于实时展示和历史回放。
 
 ### `test_list_recipes`
 
@@ -539,6 +564,29 @@ OK (skipped=2)
 - API 支持调用方显式指定 planner model。
 - `planner_model` 不在 API 层解释，原样传递给 run service。
 
+### `test_list_runs_uses_run_service_with_filters`
+
+输入：
+
+- mock `run_service.list_runs(...)` 返回 `RunListResponse`。
+- HTTP 请求：`GET /api/runs?limit=5&offset=10&status=succeeded`
+
+执行：
+
+- 调用 FastAPI TestClient。
+
+期望输出：
+
+- HTTP status 为 `200`。
+- route 调用 `run_service.list_runs(limit=5, offset=10, status=RunStatus.SUCCEEDED)`。
+- response 中 `runs[0].run_id == "run_123"`。
+- response 中 `total == 42`。
+
+覆盖点：
+
+- W5 run history 列表 endpoint 只做分页/filter 参数解析和响应序列化。
+- API 层不直接查询 SQLite 或展开 artifacts。
+
 ### `test_get_run_returns_snapshot`
 
 输入：
@@ -578,6 +626,70 @@ OK (skipped=2)
 覆盖点：
 
 - SSE endpoint 复用 run service 的事件流，不在 API 层查询 SQLite。
+
+## `tests/test_run_repository.py`
+
+该文件验证 SQLite-backed run repository。Repository 负责持久化 run、event、artifact 和 diagnostic 数据，并提供面向 service 层的查询能力；它不调用 planner、compiler 或 FastAPI route。
+
+### `test_list_runs_returns_paginated_summaries_with_status_filter`
+
+输入：
+
+- 一个 failed run：
+  - `run_id == "run_failed"`
+  - diagnostics 含 1 条 analysis error、1 条 warning 和 1 条 repair action
+- 一个 succeeded run：
+  - `run_id == "run_succeeded"`
+  - diagnostics 中 `is_valid == True`
+
+执行：
+
+- 调用 `repository.list_runs(limit=1)`。
+- 调用 `repository.list_runs(limit=1, offset=1)`。
+- 调用 `repository.list_runs(status=RunStatus.FAILED)`。
+
+期望输出：
+
+- 未过滤列表 total 为 `2`。
+- 第一页返回较新的 `run_succeeded`。
+- 第二页返回 `run_failed`。
+- failed filter total 为 `1`。
+- failed run 的 diagnostic summary 计数分别为 `1`。
+
+覆盖点：
+
+- W5 历史列表的 repository 查询支持分页、状态过滤和稳定排序。
+- 列表查询只返回 diagnostic counters，不读取完整 artifact。
+
+## `tests/test_run_service.py`
+
+该文件验证 persistent run lifecycle service。Service 层连接 API DTO、RunRepository、自然语言 planner 和 deterministic compiler graph，FastAPI routes 只调用 service 方法。
+
+### `test_list_runs_returns_api_summaries`
+
+输入：
+
+- 通过 `RunService.create_structured_compile_run(...)` 创建一条 RNA-seq Recipe Tool Plan run。
+- repository 中保存 succeeded diagnostics 并完成 run。
+
+执行：
+
+- 调用 `service.list_runs(status=RunStatus.SUCCEEDED)`。
+
+期望输出：
+
+- response total 为 `1`。
+- run id 与创建时返回的 id 一致。
+- `status == "succeeded"`。
+- `kind == "structured_compile"`。
+- `request_summary == "rnaseq_differential_expression"`。
+- diagnostic summary 中 `check_performed == False`。
+- `completed_at` 不为空。
+
+覆盖点：
+
+- Service 层把 repository records 转成 API-facing `RunListResponse`。
+- 结构化 Recipe Tool Plan 的历史摘要优先使用 recipe id。
 
 ## `tests/api/test_server.py`
 
