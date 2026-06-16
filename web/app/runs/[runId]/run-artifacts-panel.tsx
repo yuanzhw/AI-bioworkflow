@@ -143,15 +143,14 @@ export function RunArtifactsPanel({
             Plan、Workflow IR、WDL 与诊断来自持久化 run snapshot。
           </p>
         </div>
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Run artifacts">
+        <div className="flex flex-wrap gap-2" aria-label="Run artifacts">
           {artifactTabs.map((tab) => (
             <Button
               key={tab.id}
               type="button"
               variant={activeTab === tab.id ? "secondary" : "outline"}
               size="sm"
-              role="tab"
-              aria-selected={activeTab === tab.id}
+              aria-pressed={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
             >
               <tab.icon className="h-4 w-4" />
@@ -161,7 +160,7 @@ export function RunArtifactsPanel({
         </div>
       </div>
 
-      <div className="mt-5 rounded-md border bg-background p-4" role="tabpanel">
+      <div className="mt-5 rounded-md border bg-background p-4">
         {activeTab === "diagnostics" ? (
           <DiagnosticsView diagnostics={diagnostics} />
         ) : content[activeTab] ? (

@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { buildRunEventsUrl } from "@/lib/api";
-import type { RunEvent, RunEventType, RunStatus } from "@/lib/types";
+import type { JsonObject, RunEvent, RunEventType, RunStatus } from "@/lib/types";
 
 const eventTypes: RunEventType[] = [
   "run.created",
@@ -75,13 +75,48 @@ function mergeEvent(events: RunEvent[], nextEvent: RunEvent): RunEvent[] {
   return Array.from(bySequence.values()).sort((left, right) => left.sequence - right.sequence);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRunEventType(value: unknown): value is RunEventType {
+  return typeof value === "string" && eventTypes.includes(value as RunEventType);
+}
+
 function parseRunEvent(message: MessageEvent<string>): RunEvent | null {
   try {
-    const parsed = JSON.parse(message.data) as RunEvent;
-    if (typeof parsed.sequence !== "number" || typeof parsed.type !== "string") {
+    const parsed: unknown = JSON.parse(message.data);
+    if (!isRecord(parsed)) {
       return null;
     }
-    return parsed;
+
+    const { event_id, node, payload, run_id, sequence, summary, timestamp, type } = parsed;
+    if (
+      typeof event_id !== "string" ||
+      typeof run_id !== "string" ||
+      typeof sequence !== "number" ||
+      !Number.isInteger(sequence) ||
+      sequence < 1 ||
+      !isRunEventType(type) ||
+      typeof timestamp !== "string" ||
+      Number.isNaN(Date.parse(timestamp)) ||
+      typeof summary !== "string" ||
+      !(node === null || typeof node === "string") ||
+      !isRecord(payload)
+    ) {
+      return null;
+    }
+
+    return {
+      event_id,
+      run_id,
+      sequence,
+      type,
+      timestamp,
+      summary,
+      node,
+      payload: payload as JsonObject,
+    };
   } catch (error) {
     console.error("Failed to parse run event.", error);
     return null;
