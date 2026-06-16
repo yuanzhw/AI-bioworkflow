@@ -102,7 +102,7 @@ AI_BIOWORKFLOW_RUNTIME_ENV_FILE=./.env.prod
 ```text
 AI_BIOWORKFLOW_RUN_BACKEND=disabled
 WDL_VALIDATOR=miniwdl
-DEEPSEEK_API_KEY=sk-your-real-key
+DEEPSEEK_API_KEY=<your-deepseek-api-key>
 ```
 
 启动或更新应用：

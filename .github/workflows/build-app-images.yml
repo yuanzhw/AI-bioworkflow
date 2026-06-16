@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/build-app-images.yml"
+      - "deploy/app/**"
+      - "main.py"
+      - "pyproject.toml"
+      - "src/**"
+      - "uv.lock"
+      - "web/**"
   pull_request:
     branches:
       - main
