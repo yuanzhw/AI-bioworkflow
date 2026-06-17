@@ -229,8 +229,8 @@ jobs:
           fi
 
           for name in AI_BIOWORKFLOW_API_IMAGE AI_BIOWORKFLOW_WEB_IMAGE; do
-            if [[ -z "${!name}" || "${!name}" == *"'"* || "${!name}" == *[[:space:]]* ]]; then
-              echo "::error::${name} must be a non-empty image reference without whitespace or single quotes"
+            if ! [[ "${!name}" =~ ^[A-Za-z0-9._/@:-]+$ ]]; then
+              echo "::error::${name} must be a non-empty image reference using only letters, numbers, '.', '_', '-', '/', ':', and '@'"
               exit 1
             fi
           done
@@ -281,7 +281,18 @@ jobs:
           ssh_opts=(-i "$HOME/.ssh/id_ed25519" -p "$ssh_port" -o StrictHostKeyChecking=yes)
 
           ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" \
-            "cd '${deploy_path}' && AI_BIOWORKFLOW_API_IMAGE='${AI_BIOWORKFLOW_API_IMAGE}' AI_BIOWORKFLOW_WEB_IMAGE='${AI_BIOWORKFLOW_WEB_IMAGE}' ./scripts/deploy-ecs.sh"
+            bash -s -- "$deploy_path" "$AI_BIOWORKFLOW_API_IMAGE" "$AI_BIOWORKFLOW_WEB_IMAGE" <<'REMOTE_DEPLOY'
+          set -euo pipefail
+
+          deploy_path="$1"
+          api_image="$2"
+          web_image="$3"
+
+          cd "$deploy_path"
+          AI_BIOWORKFLOW_API_IMAGE="$api_image" \
+            AI_BIOWORKFLOW_WEB_IMAGE="$web_image" \
+            ./scripts/deploy-ecs.sh
+          REMOTE_DEPLOY
 
       - name: Write deploy summary
         if: ${{ always() }}
