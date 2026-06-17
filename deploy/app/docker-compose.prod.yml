@@ -22,7 +22,7 @@ services:
       - caddy_config:/config
 
   api:
-    image: ${AI_BIOWORKFLOW_API_IMAGE:?Set AI_BIOWORKFLOW_API_IMAGE in .env.deploy}
+    image: ${AI_BIOWORKFLOW_API_IMAGE:?Set AI_BIOWORKFLOW_API_IMAGE in .env.images}
     restart: unless-stopped
     env_file:
       - ${AI_BIOWORKFLOW_RUNTIME_ENV_FILE:-./.env.prod}
@@ -32,7 +32,7 @@ services:
       - api_data:/data/ai-bioworkflow
 
   web:
-    image: ${AI_BIOWORKFLOW_WEB_IMAGE:?Set AI_BIOWORKFLOW_WEB_IMAGE in .env.deploy}
+    image: ${AI_BIOWORKFLOW_WEB_IMAGE:?Set AI_BIOWORKFLOW_WEB_IMAGE in .env.images}
     restart: unless-stopped
     depends_on:
       api:
