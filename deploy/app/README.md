@@ -246,6 +246,40 @@ cd /opt/ai-bioworkflow
 ./scripts/deploy-ecs.sh
 ```
 
+## 自动部署到 ECS
+
+`main` 分支 push 后，`.github/workflows/build-app-images.yml` 会先构建并推送
+API/Web 镜像到 ACR。镜像发布成功后，`Deploy app to ECS` job 会：
+
+- 通过 SSH 连接 ECS。
+- 同步仓库管理的 `docker-compose.prod.yml`、`Caddyfile` 和
+  `scripts/deploy-ecs.sh`。
+- 用当前 commit SHA tag 生成 ECS 上的 `.env.images`。
+- 执行 `./scripts/deploy-ecs.sh` 完成 `pull`、`up -d` 和健康检查。
+
+需要配置 GitHub repository secrets：
+
+```text
+ECS_HOST=<ecs-public-ip-or-hostname>
+ECS_USER=<ssh-user>
+ECS_SSH_PRIVATE_KEY=<private-key>
+```
+
+可选 secret：
+
+```text
+ECS_SSH_PORT=22
+```
+
+可选 repository variable：
+
+```text
+ECS_DEPLOY_PATH=/opt/ai-bioworkflow
+```
+
+自动部署不会覆盖 ECS 上的 `.env.deploy` 和 `.env.prod`。这两个文件仍由 ECS
+本地维护；CI 只更新仓库管理的部署文件和自动生成的 `.env.images`。
+
 ## 手动回滚
 
 将 `/opt/ai-bioworkflow/.env.images` 中的镜像 tag 改回已知可用的 commit SHA，

@@ -55,6 +55,11 @@ jobs:
   build:
     name: Build app images
     runs-on: ubuntu-latest
+    outputs:
+      api_image: ${{ steps.meta.outputs.api_image }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      publish: ${{ steps.meta.outputs.publish }}
+      web_image: ${{ steps.meta.outputs.web_image }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -177,4 +182,94 @@ jobs:
             echo "- Web image: \`${{ steps.meta.outputs.web_image }}:${{ steps.meta.outputs.image_tag }}\`"
             echo "- Web API base URL: \`${{ steps.meta.outputs.next_public_api_base_url }}\`"
             echo "- Published to ACR: \`${{ steps.meta.outputs.publish }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy app to ECS
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.outputs.publish == 'true' }}
+    env:
+      ECS_DEPLOY_PATH: ${{ vars.ECS_DEPLOY_PATH }}
+      ECS_HOST: ${{ secrets.ECS_HOST }}
+      ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
+      ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+      ECS_USER: ${{ secrets.ECS_USER }}
+      AI_BIOWORKFLOW_API_IMAGE: ${{ needs.build.outputs.api_image }}:${{ needs.build.outputs.image_tag }}
+      AI_BIOWORKFLOW_WEB_IMAGE: ${{ needs.build.outputs.web_image }}:${{ needs.build.outputs.image_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate ECS deployment configuration
+        run: |
+          set -euo pipefail
+
+          for name in ECS_HOST ECS_USER ECS_SSH_PRIVATE_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required secret: ${name}"
+              exit 1
+            fi
+          done
+
+          deploy_path="${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}"
+          if [[ "$deploy_path" != /* || "$deploy_path" == *"'"* || "$deploy_path" == *[[:space:]]* ]]; then
+            echo "::error::ECS_DEPLOY_PATH must be an absolute path without whitespace or single quotes"
+            exit 1
+          fi
+
+          for name in AI_BIOWORKFLOW_API_IMAGE AI_BIOWORKFLOW_WEB_IMAGE; do
+            if [[ -z "${!name}" || "${!name}" == *"'"* || "${!name}" == *[[:space:]]* ]]; then
+              echo "::error::${name} must be a non-empty image reference without whitespace or single quotes"
+              exit 1
+            fi
+          done
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+
+          ssh_port="${ECS_SSH_PORT:-22}"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -p "$ssh_port" -H "$ECS_HOST" >> "$HOME/.ssh/known_hosts"
+
+      - name: Sync deployment files
+        run: |
+          set -euo pipefail
+
+          ssh_port="${ECS_SSH_PORT:-22}"
+          deploy_path="${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}"
+          ssh_opts=(-i "$HOME/.ssh/id_ed25519" -p "$ssh_port" -o StrictHostKeyChecking=yes)
+          scp_opts=(-i "$HOME/.ssh/id_ed25519" -P "$ssh_port" -o StrictHostKeyChecking=yes)
+
+          ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" "mkdir -p '${deploy_path}/scripts'"
+          scp "${scp_opts[@]}" deploy/app/docker-compose.prod.yml deploy/app/Caddyfile "${ECS_USER}@${ECS_HOST}:${deploy_path}/"
+          scp "${scp_opts[@]}" deploy/app/scripts/deploy-ecs.sh "${ECS_USER}@${ECS_HOST}:${deploy_path}/scripts/deploy-ecs.sh"
+          ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" "chmod +x '${deploy_path}/scripts/deploy-ecs.sh'"
+
+      - name: Run ECS deployment
+        run: |
+          set -euo pipefail
+
+          ssh_port="${ECS_SSH_PORT:-22}"
+          deploy_path="${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}"
+          ssh_opts=(-i "$HOME/.ssh/id_ed25519" -p "$ssh_port" -o StrictHostKeyChecking=yes)
+
+          ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" \
+            "cd '${deploy_path}' && AI_BIOWORKFLOW_API_IMAGE='${AI_BIOWORKFLOW_API_IMAGE}' AI_BIOWORKFLOW_WEB_IMAGE='${AI_BIOWORKFLOW_WEB_IMAGE}' ./scripts/deploy-ecs.sh"
+
+      - name: Write deploy summary
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## ECS app deploy"
+            echo ""
+            echo "- API image: \`${AI_BIOWORKFLOW_API_IMAGE}\`"
+            echo "- Web image: \`${AI_BIOWORKFLOW_WEB_IMAGE}\`"
+            echo "- Deploy path: \`${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}\`"
           } >> "$GITHUB_STEP_SUMMARY"
