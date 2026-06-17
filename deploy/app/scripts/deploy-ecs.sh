@@ -59,6 +59,12 @@ validate_image_ref() {
 	[[ "$value" != *[[:space:]]* ]] || die "$name must not contain whitespace"
 }
 
+validate_positive_integer() {
+	local name="$1"
+	local value="$2"
+	[[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$name must be a positive integer"
+}
+
 if [[ -n "${AI_BIOWORKFLOW_API_IMAGE:-}" || -n "${AI_BIOWORKFLOW_WEB_IMAGE:-}" ]]; then
 	validate_image_ref AI_BIOWORKFLOW_API_IMAGE "${AI_BIOWORKFLOW_API_IMAGE:-}"
 	validate_image_ref AI_BIOWORKFLOW_WEB_IMAGE "${AI_BIOWORKFLOW_WEB_IMAGE:-}"
@@ -117,12 +123,18 @@ check_url() {
 	local url="$2"
 	local attempts="${AI_BIOWORKFLOW_HEALTH_ATTEMPTS:-12}"
 	local delay="${AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS:-5}"
+	local connect_timeout="${AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS:-5}"
+	local max_time="${AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS:-15}"
 	local attempt
 
 	[[ -n "$url" ]] || die "No URL configured for $label health check"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_ATTEMPTS "$attempts"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS "$delay"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS "$connect_timeout"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS "$max_time"
 
 	for attempt in $(seq 1 "$attempts"); do
-		if curl -fsS "$url" >/dev/null; then
+		if curl --connect-timeout "$connect_timeout" --max-time "$max_time" -fsS "$url" >/dev/null; then
 			log "$label health check passed: $url"
 			return 0
 		fi
