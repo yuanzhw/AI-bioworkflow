@@ -237,9 +237,17 @@ jobs:
             exit 1
           fi
 
-          if ! [[ "$ACR_REGISTRY" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
-            echo "::error::ACR_REGISTRY must be a registry host without a scheme or path"
+          if ! [[ "$ACR_REGISTRY" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?$ ]]; then
+            echo "::error::ACR_REGISTRY must be a registry host, optionally with a port, without a scheme or path"
             exit 1
+          fi
+
+          if [[ "$ACR_REGISTRY" == *:* ]]; then
+            acr_registry_port="${ACR_REGISTRY##*:}"
+            if ! [[ "$acr_registry_port" =~ ^[0-9]{1,5}$ ]] || (( 10#$acr_registry_port < 1 || 10#$acr_registry_port > 65535 )); then
+              echo "::error::ACR_REGISTRY port must be an integer between 1 and 65535"
+              exit 1
+            fi
           fi
 
           if ! [[ "$ACR_NAMESPACE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
@@ -255,7 +263,7 @@ jobs:
           web_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${WEB_IMAGE_NAME}:${IMAGE_TAG}"
 
           for image_ref in "$api_image" "$web_image"; do
-            if ! [[ "$image_ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]+/[A-Za-z0-9._/-]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            if ! [[ "$image_ref" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
               echo "::error::Invalid deploy image reference"
               exit 1
             fi
