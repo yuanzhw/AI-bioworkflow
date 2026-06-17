@@ -5,8 +5,13 @@ log() {
 	printf '[deploy] %s\n' "$*"
 }
 
+rollback_after_failure() {
+	:
+}
+
 die() {
 	printf '[deploy:error] %s\n' "$*" >&2
+	rollback_after_failure
 	exit 1
 }
 
@@ -22,6 +27,7 @@ fi
 compose_file="${AI_BIOWORKFLOW_COMPOSE_FILE:-docker-compose.prod.yml}"
 deploy_env_file="${AI_BIOWORKFLOW_DEPLOY_ENV_FILE:-.env.deploy}"
 images_env_file="${AI_BIOWORKFLOW_IMAGES_ENV_FILE:-.env.images}"
+rollback_images_env_file="${AI_BIOWORKFLOW_ROLLBACK_IMAGES_ENV_FILE:-${images_env_file}.rollback}"
 
 resolve_deploy_path() {
 	local value="$1"
@@ -35,6 +41,7 @@ resolve_deploy_path() {
 compose_path="$(resolve_deploy_path "$compose_file")"
 deploy_env_path="$(resolve_deploy_path "$deploy_env_file")"
 images_env_path="$(resolve_deploy_path "$images_env_file")"
+rollback_images_env_path="$(resolve_deploy_path "$rollback_images_env_file")"
 
 [[ -d "$deploy_dir" ]] || die "Deploy directory not found: $deploy_dir"
 [[ -f "$compose_path" ]] || die "Compose file not found: $compose_path"
@@ -74,9 +81,34 @@ validate_positive_integer() {
 	[[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$name must be a positive integer"
 }
 
+health_attempts="${AI_BIOWORKFLOW_HEALTH_ATTEMPTS:-12}"
+health_delay="${AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS:-5}"
+health_connect_timeout="${AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS:-5}"
+health_max_time="${AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS:-15}"
+if [[ "${AI_BIOWORKFLOW_SKIP_HEALTHCHECK:-false}" != "true" ]]; then
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_ATTEMPTS "$health_attempts"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS "$health_delay"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS "$health_connect_timeout"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS "$health_max_time"
+fi
+
+rollback_on_failure="${AI_BIOWORKFLOW_ROLLBACK_ON_FAILURE:-true}"
+if [[ "$rollback_on_failure" != "true" && "$rollback_on_failure" != "false" ]]; then
+	die "AI_BIOWORKFLOW_ROLLBACK_ON_FAILURE must be true or false"
+fi
+rollback_available=false
+rollback_running=false
+rollback_completed=false
+
 if [[ -n "${AI_BIOWORKFLOW_API_IMAGE:-}" || -n "${AI_BIOWORKFLOW_WEB_IMAGE:-}" ]]; then
 	validate_image_ref AI_BIOWORKFLOW_API_IMAGE "${AI_BIOWORKFLOW_API_IMAGE:-}"
 	validate_image_ref AI_BIOWORKFLOW_WEB_IMAGE "${AI_BIOWORKFLOW_WEB_IMAGE:-}"
+
+	if [[ "$rollback_on_failure" == "true" && -f "$images_env_path" ]]; then
+		log "Backing up current image env to $rollback_images_env_path"
+		cp "$images_env_path" "$rollback_images_env_path"
+		rollback_available=true
+	fi
 
 	log "Writing $images_env_path"
 	umask 077
@@ -96,23 +128,6 @@ fi
 
 compose=(docker compose --env-file "$deploy_env_path" --env-file "$images_env_path" -f "$compose_path")
 
-log "Validating Compose configuration"
-"${compose[@]}" config >/dev/null
-
-log "Pulling images"
-"${compose[@]}" pull
-
-log "Starting services"
-"${compose[@]}" up -d --remove-orphans
-
-log "Current service status"
-"${compose[@]}" ps
-
-if [[ "${AI_BIOWORKFLOW_SKIP_HEALTHCHECK:-false}" == "true" ]]; then
-	log "Skipping health checks"
-	exit 0
-fi
-
 site_address="$(read_env_value "$deploy_env_path" AI_BIOWORKFLOW_SITE_ADDRESS)"
 if [[ -n "$site_address" ]]; then
 	if [[ "$site_address" == http://* || "$site_address" == https://* ]]; then
@@ -130,35 +145,108 @@ recipes_url="${AI_BIOWORKFLOW_RECIPES_URL:-${public_base_url:+$public_base_url/a
 check_url() {
 	local label="$1"
 	local url="$2"
-	local attempts="${AI_BIOWORKFLOW_HEALTH_ATTEMPTS:-12}"
-	local delay="${AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS:-5}"
-	local connect_timeout="${AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS:-5}"
-	local max_time="${AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS:-15}"
 	local attempt
 
-	[[ -n "$url" ]] || die "No URL configured for $label health check"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_ATTEMPTS "$attempts"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS "$delay"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS "$connect_timeout"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS "$max_time"
+	if [[ -z "$url" ]]; then
+		log "No URL configured for $label health check"
+		return 1
+	fi
 
-	for attempt in $(seq 1 "$attempts"); do
-		if curl --connect-timeout "$connect_timeout" --max-time "$max_time" -fsS "$url" >/dev/null; then
-			log "$label health check passed: $url"
+	for attempt in $(seq 1 "$health_attempts"); do
+		if curl --connect-timeout "$health_connect_timeout" --max-time "$health_max_time" -fsS "$url" >/dev/null; then
+			log "$label check passed: $url"
 			return 0
 		fi
 
-		if [[ "$attempt" == "$attempts" ]]; then
+		if [[ "$attempt" == "$health_attempts" ]]; then
 			break
 		fi
-		log "$label health check not ready; retrying in ${delay}s ($attempt/$attempts)"
-		sleep "$delay"
+		log "$label check not ready; retrying in ${health_delay}s ($attempt/$health_attempts)"
+		sleep "$health_delay"
 	done
 
-	die "$label health check failed: $url"
+	log "$label check failed: $url"
+	return 1
 }
 
-check_url "API health" "$health_url"
-check_url "API recipes" "$recipes_url"
+rollback_after_failure() {
+	local rollback_status=0
+
+	if [[ "$rollback_on_failure" != "true" || "$rollback_available" != "true" || "$rollback_completed" == "true" || "$rollback_running" == "true" ]]; then
+		return 0
+	fi
+
+	rollback_running=true
+	rollback_completed=true
+	set +e
+
+	log "Deployment failed; rolling back to previous image env from $rollback_images_env_path"
+	cp "$rollback_images_env_path" "$images_env_path"
+	rollback_status=$?
+
+	if [[ "$rollback_status" -eq 0 ]]; then
+		compose=(docker compose --env-file "$deploy_env_path" --env-file "$images_env_path" -f "$compose_path")
+		"${compose[@]}" config >/dev/null
+		rollback_status=$?
+	fi
+	if [[ "$rollback_status" -eq 0 ]]; then
+		"${compose[@]}" pull
+		rollback_status=$?
+	fi
+	if [[ "$rollback_status" -eq 0 ]]; then
+		"${compose[@]}" up -d --remove-orphans
+		rollback_status=$?
+	fi
+	if [[ "$rollback_status" -eq 0 ]]; then
+		"${compose[@]}" ps
+		rollback_status=$?
+	fi
+	if [[ "$rollback_status" -eq 0 && "${AI_BIOWORKFLOW_SKIP_HEALTHCHECK:-false}" != "true" ]]; then
+		check_url "Rollback API health" "$health_url"
+		rollback_status=$?
+	fi
+	if [[ "$rollback_status" -eq 0 && "${AI_BIOWORKFLOW_SKIP_HEALTHCHECK:-false}" != "true" ]]; then
+		check_url "Rollback API recipes" "$recipes_url"
+		rollback_status=$?
+	fi
+
+	if [[ "$rollback_status" -eq 0 ]]; then
+		log "Rollback completed"
+	else
+		printf '[deploy:error] Rollback failed; previous image env remains at %s\n' "$rollback_images_env_path" >&2
+	fi
+
+	rollback_running=false
+	set -e
+	return 0
+}
+
+on_error() {
+	local status=$?
+	rollback_after_failure
+	exit "$status"
+}
+
+trap on_error ERR
+
+log "Validating Compose configuration"
+"${compose[@]}" config >/dev/null
+
+log "Pulling images"
+"${compose[@]}" pull
+
+log "Starting services"
+"${compose[@]}" up -d --remove-orphans
+
+log "Current service status"
+"${compose[@]}" ps
+
+if [[ "${AI_BIOWORKFLOW_SKIP_HEALTHCHECK:-false}" == "true" ]]; then
+	log "Skipping health checks"
+	exit 0
+fi
+
+check_url "API health" "$health_url" || die "API health check failed"
+check_url "API recipes" "$recipes_url" || die "API recipes check failed"
 
 log "Deploy completed"

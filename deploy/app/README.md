@@ -229,9 +229,20 @@ ECS 部署时优先在 `.env.images` 中使用 commit SHA tag，而不是只依�
 - 执行 `docker compose config`、`pull`、`up -d --remove-orphans` 和 `ps`。
 - 默认检查 `https://<AI_BIOWORKFLOW_SITE_ADDRESS>/health` 和
   `https://<AI_BIOWORKFLOW_SITE_ADDRESS>/api/recipes`。
+- 自动部署新镜像前会将当前 `.env.images` 备份为 `.env.images.rollback`；
+  如果新版本启动或健康检查失败，会恢复该备份并重新拉起上一版镜像。
 
 `AI_BIOWORKFLOW_COMPOSE_FILE`、`AI_BIOWORKFLOW_DEPLOY_ENV_FILE` 和
 `AI_BIOWORKFLOW_IMAGES_ENV_FILE` 可以使用绝对路径；相对路径会按部署目录解析。
+
+默认启用失败自动回滚。临时关闭时可以设置：
+
+```bash
+AI_BIOWORKFLOW_ROLLBACK_ON_FAILURE=false ./scripts/deploy-ecs.sh
+```
+
+健康检查的重试次数、间隔和超时参数会在部署动作开始前校验；如果配置不合法，
+脚本会直接失败，不会写入新的 `.env.images` 或触发回滚。
 
 手动部署新镜像：
 
@@ -302,5 +313,13 @@ ECS_DEPLOY_PATH=/opt/ai-bioworkflow
 
 ```bash
 cd /opt/ai-bioworkflow
+./scripts/deploy-ecs.sh
+```
+
+自动部署失败时也会保留上一版备份：
+
+```bash
+cd /opt/ai-bioworkflow
+cp .env.images.rollback .env.images
 ./scripts/deploy-ecs.sh
 ```
