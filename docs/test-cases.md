@@ -227,6 +227,26 @@ OK (skipped=2)
 
 - API response DTO 能保留 service 诊断，不把无效 plan 包装成成功响应。
 
+### `test_run_snapshot_response_defaults_to_empty_artifacts_and_diagnostics`
+
+输入：
+
+- 只包含 run id、运行状态、请求内容和事件 URL 的 `WorkflowRunSnapshotResponse`。
+
+执行：
+
+- 直接构造 `WorkflowRunSnapshotResponse(...)`。
+
+期望输出：
+
+- artifacts 默认为空 Workflow IR 与空 WDL。
+- diagnostics 默认不是 succeeded。
+- `kind`、`created_at`、`updated_at` 和 `completed_at` 默认为 `None`。
+
+覆盖点：
+
+- run 详情页依赖的 snapshot metadata 默认契约保持显式、稳定。
+
 ### `test_run_list_response_accepts_history_summaries`
 
 输入：
