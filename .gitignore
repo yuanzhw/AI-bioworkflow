@@ -152,11 +152,13 @@ activemq-data/
 .envrc
 .env.deploy
 .env.images
+.env.images.rollback
 .env.prod
 .venv
 env/
 env.deploy
 env.images
+env.images.rollback
 env.prod
 env.*.local
 venv/
