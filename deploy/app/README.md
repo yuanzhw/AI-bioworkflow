@@ -260,6 +260,9 @@ API/Web 镜像到 ACR。镜像发布成功后，`Deploy app to ECS` job 会：
 - 用当前 commit SHA tag 生成 ECS 上的 `.env.images`。
 - 执行 `./scripts/deploy-ecs.sh` 完成 `pull`、`up -d` 和健康检查。
 
+部署 job 会在本 job 内使用 `ACR_REGISTRY`、`ACR_NAMESPACE` 和当前 commit SHA tag
+重新拼出完整镜像引用，避免跨 job 传递由 secret 派生出的完整镜像地址。
+
 需要配置 GitHub repository secrets：
 
 ```text

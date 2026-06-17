@@ -56,10 +56,8 @@ jobs:
     name: Build app images
     runs-on: ubuntu-latest
     outputs:
-      api_image: ${{ steps.meta.outputs.api_image }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
       publish: ${{ steps.meta.outputs.publish }}
-      web_image: ${{ steps.meta.outputs.web_image }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -79,6 +77,11 @@ jobs:
           short_sha="${GITHUB_SHA::12}"
           image_tag="${DISPATCH_IMAGE_TAG:-$short_sha}"
           next_public_api_base_url="${DISPATCH_NEXT_PUBLIC_API_BASE_URL:-${REPO_NEXT_PUBLIC_API_BASE_URL:-$FALLBACK_NEXT_PUBLIC_API_BASE_URL}}"
+
+          if ! [[ "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::image_tag must be a valid Docker tag using letters, numbers, '_', '.', and '-'"
+            exit 1
+          fi
 
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$DISPATCH_PUBLISH" == "true" && "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "::error::publish=true is only allowed from refs/heads/main"
@@ -199,8 +202,9 @@ jobs:
       ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
       ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
       ECS_USER: ${{ secrets.ECS_USER }}
-      AI_BIOWORKFLOW_API_IMAGE: ${{ needs.build.outputs.api_image }}:${{ needs.build.outputs.image_tag }}
-      AI_BIOWORKFLOW_WEB_IMAGE: ${{ needs.build.outputs.web_image }}:${{ needs.build.outputs.image_tag }}
+      ACR_REGISTRY: ${{ secrets.ACR_REGISTRY }}
+      ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -209,9 +213,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          for name in ECS_HOST ECS_USER ECS_SSH_PRIVATE_KEY; do
+          for name in ECS_HOST ECS_USER ECS_SSH_PRIVATE_KEY ACR_REGISTRY ACR_NAMESPACE IMAGE_TAG; do
             if [[ -z "${!name}" ]]; then
-              echo "::error::Missing required secret: ${name}"
+              echo "::error::Missing required deployment value: ${name}"
               exit 1
             fi
           done
@@ -228,12 +232,39 @@ jobs:
             exit 1
           fi
 
-          for name in AI_BIOWORKFLOW_API_IMAGE AI_BIOWORKFLOW_WEB_IMAGE; do
-            if ! [[ "${!name}" =~ ^[A-Za-z0-9._/@:-]+$ ]]; then
-              echo "::error::${name} must be a non-empty image reference using only letters, numbers, '.', '_', '-', '/', ':', and '@'"
+          if ! [[ "$IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::IMAGE_TAG must be a valid Docker tag using letters, numbers, '_', '.', and '-'"
+            exit 1
+          fi
+
+          if ! [[ "$ACR_REGISTRY" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
+            echo "::error::ACR_REGISTRY must be a registry host without a scheme or path"
+            exit 1
+          fi
+
+          if ! [[ "$ACR_NAMESPACE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::ACR_NAMESPACE must be a single registry namespace segment"
+            exit 1
+          fi
+
+      - name: Prepare deploy image references
+        run: |
+          set -euo pipefail
+
+          api_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${API_IMAGE_NAME}:${IMAGE_TAG}"
+          web_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${WEB_IMAGE_NAME}:${IMAGE_TAG}"
+
+          for image_ref in "$api_image" "$web_image"; do
+            if ! [[ "$image_ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]+/[A-Za-z0-9._/-]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "::error::Invalid deploy image reference"
               exit 1
             fi
           done
+
+          {
+            echo "AI_BIOWORKFLOW_API_IMAGE=$api_image"
+            echo "AI_BIOWORKFLOW_WEB_IMAGE=$web_image"
+          } >> "$GITHUB_ENV"
 
       - name: Configure SSH
         run: |
@@ -318,7 +349,7 @@ jobs:
           {
             echo "## ECS app deploy"
             echo ""
-            echo "- API image: \`${AI_BIOWORKFLOW_API_IMAGE}\`"
-            echo "- Web image: \`${AI_BIOWORKFLOW_WEB_IMAGE}\`"
+            echo "- API image: \`${AI_BIOWORKFLOW_API_IMAGE:-not prepared}\`"
+            echo "- Web image: \`${AI_BIOWORKFLOW_WEB_IMAGE:-not prepared}\`"
             echo "- Deploy path: \`${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}\`"
           } >> "$GITHUB_STEP_SUMMARY"
