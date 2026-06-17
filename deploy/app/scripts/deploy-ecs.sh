@@ -81,6 +81,17 @@ validate_positive_integer() {
 	[[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$name must be a positive integer"
 }
 
+health_attempts="${AI_BIOWORKFLOW_HEALTH_ATTEMPTS:-12}"
+health_delay="${AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS:-5}"
+health_connect_timeout="${AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS:-5}"
+health_max_time="${AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS:-15}"
+if [[ "${AI_BIOWORKFLOW_SKIP_HEALTHCHECK:-false}" != "true" ]]; then
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_ATTEMPTS "$health_attempts"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS "$health_delay"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS "$health_connect_timeout"
+	validate_positive_integer AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS "$health_max_time"
+fi
+
 rollback_on_failure="${AI_BIOWORKFLOW_ROLLBACK_ON_FAILURE:-true}"
 if [[ "$rollback_on_failure" != "true" && "$rollback_on_failure" != "false" ]]; then
 	die "AI_BIOWORKFLOW_ROLLBACK_ON_FAILURE must be true or false"
@@ -134,32 +145,24 @@ recipes_url="${AI_BIOWORKFLOW_RECIPES_URL:-${public_base_url:+$public_base_url/a
 check_url() {
 	local label="$1"
 	local url="$2"
-	local attempts="${AI_BIOWORKFLOW_HEALTH_ATTEMPTS:-12}"
-	local delay="${AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS:-5}"
-	local connect_timeout="${AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS:-5}"
-	local max_time="${AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS:-15}"
 	local attempt
 
 	if [[ -z "$url" ]]; then
 		log "No URL configured for $label health check"
 		return 1
 	fi
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_ATTEMPTS "$attempts"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_DELAY_SECONDS "$delay"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_CONNECT_TIMEOUT_SECONDS "$connect_timeout"
-	validate_positive_integer AI_BIOWORKFLOW_HEALTH_MAX_TIME_SECONDS "$max_time"
 
-	for attempt in $(seq 1 "$attempts"); do
-		if curl --connect-timeout "$connect_timeout" --max-time "$max_time" -fsS "$url" >/dev/null; then
+	for attempt in $(seq 1 "$health_attempts"); do
+		if curl --connect-timeout "$health_connect_timeout" --max-time "$health_max_time" -fsS "$url" >/dev/null; then
 			log "$label check passed: $url"
 			return 0
 		fi
 
-		if [[ "$attempt" == "$attempts" ]]; then
+		if [[ "$attempt" == "$health_attempts" ]]; then
 			break
 		fi
-		log "$label check not ready; retrying in ${delay}s ($attempt/$attempts)"
-		sleep "$delay"
+		log "$label check not ready; retrying in ${health_delay}s ($attempt/$health_attempts)"
+		sleep "$health_delay"
 	done
 
 	log "$label check failed: $url"

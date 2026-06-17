@@ -241,6 +241,9 @@ ECS 部署时优先在 `.env.images` 中使用 commit SHA tag，而不是只依�
 AI_BIOWORKFLOW_ROLLBACK_ON_FAILURE=false ./scripts/deploy-ecs.sh
 ```
 
+健康检查的重试次数、间隔和超时参数会在部署动作开始前校验；如果配置不合法，
+脚本会直接失败，不会写入新的 `.env.images` 或触发回滚。
+
 手动部署新镜像：
 
 ```bash
