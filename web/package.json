@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app components lib --max-warnings=0"
+    "lint": "eslint app components lib --max-warnings=0",
+    "test:graph": "node --no-warnings --test tests/workflow-graph.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",
