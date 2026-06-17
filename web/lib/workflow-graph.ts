@@ -1,8 +1,4 @@
-type JsonPrimitive = string | number | boolean | null;
-type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
-type JsonObject = {
-  [key: string]: JsonValue;
-};
+import type { JsonObject, JsonValue } from "./types";
 
 export type WorkflowGraphNodeKind =
   | "workflow-input"

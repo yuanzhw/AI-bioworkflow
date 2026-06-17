@@ -2728,8 +2728,8 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 ## `web/tests/workflow-graph.test.mjs`
 
 该文件验证 W5 DAG 可视化前置的数据模型转换层。测试通过 Node 内置
-test runner 直接调用 `web/lib/workflow-graph.ts`，不启动 Next.js，也不引入额外
-前端测试依赖。
+test runner 配合 `tsx` loader 直接调用 `web/lib/workflow-graph.ts`，不启动
+Next.js。
 
 运行方式：
 
