@@ -221,6 +221,12 @@ jobs:
             exit 1
           fi
 
+          ssh_port="${ECS_SSH_PORT:-22}"
+          if ! [[ "$ssh_port" =~ ^[0-9]{1,5}$ ]] || (( 10#$ssh_port < 1 || 10#$ssh_port > 65535 )); then
+            echo "::error::ECS_SSH_PORT must be an integer between 1 and 65535"
+            exit 1
+          fi
+
           for name in AI_BIOWORKFLOW_API_IMAGE AI_BIOWORKFLOW_WEB_IMAGE; do
             if [[ -z "${!name}" || "${!name}" == *"'"* || "${!name}" == *[[:space:]]* ]]; then
               echo "::error::${name} must be a non-empty image reference without whitespace or single quotes"
