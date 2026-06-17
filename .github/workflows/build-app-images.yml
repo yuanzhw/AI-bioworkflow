@@ -264,8 +264,16 @@ jobs:
 
           ssh_port="${ECS_SSH_PORT:-22}"
           deploy_path="${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}"
-          ssh_opts=(-i "$HOME/.ssh/id_ed25519" -p "$ssh_port" -o StrictHostKeyChecking=yes)
-          scp_opts=(-i "$HOME/.ssh/id_ed25519" -P "$ssh_port" -o StrictHostKeyChecking=yes)
+          ssh_common_opts=(
+            -i "$HOME/.ssh/id_ed25519"
+            -o BatchMode=yes
+            -o ConnectTimeout=10
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=2
+            -o StrictHostKeyChecking=yes
+          )
+          ssh_opts=("${ssh_common_opts[@]}" -p "$ssh_port")
+          scp_opts=("${ssh_common_opts[@]}" -P "$ssh_port")
 
           ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" "mkdir -p '${deploy_path}/scripts'"
           scp "${scp_opts[@]}" deploy/app/docker-compose.prod.yml deploy/app/Caddyfile "${ECS_USER}@${ECS_HOST}:${deploy_path}/"
@@ -278,7 +286,15 @@ jobs:
 
           ssh_port="${ECS_SSH_PORT:-22}"
           deploy_path="${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}"
-          ssh_opts=(-i "$HOME/.ssh/id_ed25519" -p "$ssh_port" -o StrictHostKeyChecking=yes)
+          ssh_opts=(
+            -i "$HOME/.ssh/id_ed25519"
+            -p "$ssh_port"
+            -o BatchMode=yes
+            -o ConnectTimeout=10
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=2
+            -o StrictHostKeyChecking=yes
+          )
 
           ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" \
             bash -s -- "$deploy_path" "$AI_BIOWORKFLOW_API_IMAGE" "$AI_BIOWORKFLOW_WEB_IMAGE" <<'REMOTE_DEPLOY'
