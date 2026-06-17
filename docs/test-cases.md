@@ -227,6 +227,26 @@ OK (skipped=2)
 
 - API response DTO 能保留 service 诊断，不把无效 plan 包装成成功响应。
 
+### `test_run_snapshot_response_defaults_to_empty_artifacts_and_diagnostics`
+
+输入：
+
+- 只包含 run id、运行状态、请求内容和事件 URL 的 `WorkflowRunSnapshotResponse`。
+
+执行：
+
+- 直接构造 `WorkflowRunSnapshotResponse(...)`。
+
+期望输出：
+
+- artifacts 默认为空 Workflow IR 与空 WDL。
+- diagnostics 默认不是 succeeded。
+- `kind`、`created_at`、`updated_at` 和 `completed_at` 默认为 `None`。
+
+覆盖点：
+
+- run 详情页依赖的 snapshot metadata 默认契约保持显式、稳定。
+
 ### `test_run_list_response_accepts_history_summaries`
 
 输入：
@@ -664,6 +684,32 @@ OK (skipped=2)
 ## `tests/test_run_service.py`
 
 该文件验证 persistent run lifecycle service。Service 层连接 API DTO、RunRepository、自然语言 planner 和 deterministic compiler graph，FastAPI routes 只调用 service 方法。
+
+### `test_structured_compile_run_succeeds_and_records_events`
+
+输入：
+
+- `examples/rnaseq_deg_recipe_plan.json`
+- `check=False`
+
+执行：
+
+- 通过 `RunService.create_structured_compile_run(...)` 创建 run。
+- 调用 `RunService.execute_structured_compile_run(...)`。
+- 读取 snapshot 与 events。
+
+期望输出：
+
+- snapshot `status == "succeeded"`。
+- snapshot `kind == "structured_compile"`。
+- snapshot 包含 `created_at`、`updated_at` 和 `completed_at`。
+- Workflow IR 名称为 `RNASeqDEG`。
+- WDL 包含 `workflow RNASeqDEG`。
+- events 包含 `run.created`、`artifact.updated`，最后一条为 `run.completed`。
+
+覆盖点：
+
+- 结构化编译 run 会持久化详情页所需元数据、产物、诊断和事件回放记录。
 
 ### `test_list_runs_returns_api_summaries`
 

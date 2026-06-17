@@ -42,6 +42,10 @@ class RunServiceTests(unittest.TestCase):
             self.assertIsNotNone(snapshot)
             assert snapshot is not None
             self.assertEqual(snapshot.status, RunStatus.SUCCEEDED)
+            self.assertEqual(snapshot.kind, "structured_compile")
+            self.assertIsNotNone(snapshot.created_at)
+            self.assertIsNotNone(snapshot.updated_at)
+            self.assertIsNotNone(snapshot.completed_at)
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
             self.assertIn("workflow RNASeqDEG", snapshot.artifacts.wdl)
             self.assertTrue(snapshot.diagnostics.succeeded)

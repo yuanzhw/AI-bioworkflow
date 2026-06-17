@@ -438,8 +438,12 @@ W2 当前接口：
 {
   "run_id": "run_001",
   "status": "succeeded",
+  "kind": "structured_compile",
   "request": "Run bulk RNA-seq differential expression.",
   "events_url": "/api/runs/run_001/events",
+  "created_at": "2026-06-16T00:00:00Z",
+  "updated_at": "2026-06-16T00:00:02Z",
+  "completed_at": "2026-06-16T00:00:02Z",
   "artifacts": {
     "plan": {},
     "workflow_ir": {},

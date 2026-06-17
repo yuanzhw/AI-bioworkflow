@@ -171,8 +171,12 @@ class RunService:
         return WorkflowRunSnapshotResponse(
             run_id=snapshot.run.run_id,
             status=snapshot.run.status,
+            kind=snapshot.run.kind,
             request=snapshot.run.request,
             events_url=snapshot.run.events_url,
+            created_at=snapshot.run.created_at,
+            updated_at=snapshot.run.updated_at,
+            completed_at=snapshot.run.completed_at,
             artifacts=snapshot.artifacts,
             diagnostics=snapshot.diagnostics,
         )

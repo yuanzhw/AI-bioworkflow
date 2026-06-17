@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleDashed,
   Clock3,
+  Eye,
   History,
   Loader2,
   RotateCcw,
@@ -116,7 +117,7 @@ function RunRow({ run }: { run: RunSummary }) {
   const diagnostic = run.diagnostic_summary;
 
   return (
-    <div className="grid gap-4 rounded-md border bg-background p-4 lg:grid-cols-[minmax(0,1.2fr)_auto_auto] lg:items-center">
+    <div className="grid gap-4 rounded-md border bg-background p-4 lg:grid-cols-[minmax(0,1.2fr)_auto_auto_auto] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={getStatusBadgeVariant(run.status)} className="gap-1.5">
@@ -160,6 +161,13 @@ function RunRow({ run }: { run: RunSummary }) {
         <div className="mt-2 text-xs">创建 {formatDateTime(run.created_at)}</div>
         <div className="mt-1 text-xs">完成 {formatDateTime(run.completed_at)}</div>
       </div>
+
+      <Button asChild variant="outline" size="sm">
+        <Link href={`/runs/${encodeURIComponent(run.run_id)}`}>
+          <Eye className="h-4 w-4" />
+          查看详情
+        </Link>
+      </Button>
     </div>
   );
 }

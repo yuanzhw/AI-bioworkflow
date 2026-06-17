@@ -172,7 +172,11 @@ class WorkflowRunSnapshotResponse(BaseModel):
 
     run_id: str
     status: RunStatus
+    kind: str | None = None
     request: str | JsonObject | None = None
     events_url: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
     artifacts: WorkflowArtifacts = Field(default_factory=WorkflowArtifacts)
     diagnostics: DiagnosticReport = Field(default_factory=DiagnosticReport)

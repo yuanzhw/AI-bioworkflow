@@ -101,6 +101,10 @@ class WorkflowDtoTests(unittest.TestCase):
         self.assertEqual(response.artifacts.workflow_ir, {})
         self.assertEqual(response.artifacts.wdl, "")
         self.assertFalse(response.diagnostics.succeeded)
+        self.assertIsNone(response.kind)
+        self.assertIsNone(response.created_at)
+        self.assertIsNone(response.updated_at)
+        self.assertIsNone(response.completed_at)
 
     def test_run_list_response_accepts_history_summaries(self):
         created_at = datetime(2026, 6, 16, tzinfo=UTC)

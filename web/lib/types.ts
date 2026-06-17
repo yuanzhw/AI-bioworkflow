@@ -130,8 +130,12 @@ export type DiagnosticReport = {
 export type WorkflowRunSnapshotResponse = {
   run_id: string;
   status: RunStatus;
+  kind: string | null;
   request: string | JsonObject | null;
   events_url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  completed_at: string | null;
   artifacts: WorkflowArtifacts;
   diagnostics: DiagnosticReport;
 };
