@@ -269,13 +269,22 @@ ECS_SSH_PRIVATE_KEY=<private-key>
 
 ```text
 ECS_SSH_PORT=22
+ECS_KNOWN_HOSTS=<pinned-known-hosts-lines>
 ```
+
+建议配置 `ECS_KNOWN_HOSTS` 固定 ECS 的 SSH host key。可以在可信网络环境中用
+`ssh-keyscan -p 22 -H <ecs-public-ip-or-hostname>` 生成后核对并保存到 GitHub
+secret。未配置时，workflow 会使用带超时的 `ssh-keyscan` 动态生成
+`known_hosts`。
 
 可选 repository variable：
 
 ```text
 ECS_DEPLOY_PATH=/opt/ai-bioworkflow
 ```
+
+`ECS_DEPLOY_PATH` 必须是绝对路径，只能包含字母、数字、`/`、`.`、`_` 和 `-`，
+且不能包含 `.` 或 `..` 路径段。
 
 自动部署不会覆盖 ECS 上的 `.env.deploy` 和 `.env.prod`。这两个文件仍由 ECS
 本地维护；CI 只更新仓库管理的部署文件和自动生成的 `.env.images`。

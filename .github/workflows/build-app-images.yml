@@ -195,6 +195,7 @@ jobs:
     env:
       ECS_DEPLOY_PATH: ${{ vars.ECS_DEPLOY_PATH }}
       ECS_HOST: ${{ secrets.ECS_HOST }}
+      ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
       ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
       ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
       ECS_USER: ${{ secrets.ECS_USER }}
@@ -216,8 +217,8 @@ jobs:
           done
 
           deploy_path="${ECS_DEPLOY_PATH:-/opt/ai-bioworkflow}"
-          if [[ "$deploy_path" != /* || "$deploy_path" == *"'"* || "$deploy_path" == *[[:space:]]* ]]; then
-            echo "::error::ECS_DEPLOY_PATH must be an absolute path without whitespace or single quotes"
+          if ! [[ "$deploy_path" =~ ^/[A-Za-z0-9._/-]+$ ]] || [[ "$deploy_path" == *"/../"* || "$deploy_path" == */.. || "$deploy_path" == *"/./"* || "$deploy_path" == */. ]]; then
+            echo "::error::ECS_DEPLOY_PATH must be an absolute path using only letters, numbers, '/', '.', '_' and '-' without '.' or '..' path segments"
             exit 1
           fi
 
@@ -239,11 +240,23 @@ jobs:
           set -euo pipefail
 
           ssh_port="${ECS_SSH_PORT:-22}"
+          known_hosts_path="$HOME/.ssh/known_hosts"
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
           printf '%s\n' "$ECS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
           chmod 600 "$HOME/.ssh/id_ed25519"
-          ssh-keyscan -p "$ssh_port" -H "$ECS_HOST" >> "$HOME/.ssh/known_hosts"
+          : > "$known_hosts_path"
+          chmod 600 "$known_hosts_path"
+          if [[ -n "${ECS_KNOWN_HOSTS:-}" ]]; then
+            printf '%s\n' "$ECS_KNOWN_HOSTS" > "$known_hosts_path"
+          else
+            ssh-keyscan -T 10 -p "$ssh_port" -H "$ECS_HOST" > "$known_hosts_path"
+          fi
+          if [[ ! -s "$known_hosts_path" ]]; then
+            echo "::error::known_hosts is empty; set ECS_KNOWN_HOSTS or verify ECS_HOST/ECS_SSH_PORT"
+            exit 1
+          fi
+          chmod 600 "$known_hosts_path"
 
       - name: Sync deployment files
         run: |
