@@ -250,24 +250,42 @@ jobs:
             fi
           fi
 
-          if ! [[ "$ACR_NAMESPACE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-            echo "::error::ACR_NAMESPACE must be a single registry namespace segment"
+          docker_name_component_re='[a-z0-9]+([._-][a-z0-9]+)*'
+          if ! [[ "$ACR_NAMESPACE" =~ ^$docker_name_component_re$ ]]; then
+            echo "::error::ACR_NAMESPACE must be a lowercase Docker repository path component"
             exit 1
           fi
+
+          for name in API_IMAGE_NAME WEB_IMAGE_NAME; do
+            if ! [[ "${!name}" =~ ^$docker_name_component_re$ ]]; then
+              echo "::error::${name} must be a lowercase Docker repository path component"
+              exit 1
+            fi
+          done
 
       - name: Prepare deploy image references
         run: |
           set -euo pipefail
 
+          registry_host_re='[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?'
+          docker_name_component_re='[a-z0-9]+([._-][a-z0-9]+)*'
+          image_tag_re='[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}'
+
+          validate_deploy_image_ref() {
+            local name="$1"
+            local image_ref="$2"
+
+            if ! [[ "$image_ref" =~ ^$registry_host_re/$docker_name_component_re/$docker_name_component_re:$image_tag_re$ ]]; then
+              echo "::error::${name} must be a valid Docker image reference with lowercase repository path components"
+              exit 1
+            fi
+          }
+
           api_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${API_IMAGE_NAME}:${IMAGE_TAG}"
           web_image="${ACR_REGISTRY}/${ACR_NAMESPACE}/${WEB_IMAGE_NAME}:${IMAGE_TAG}"
 
-          for image_ref in "$api_image" "$web_image"; do
-            if ! [[ "$image_ref" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?/[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
-              echo "::error::Invalid deploy image reference"
-              exit 1
-            fi
-          done
+          validate_deploy_image_ref AI_BIOWORKFLOW_API_IMAGE "$api_image"
+          validate_deploy_image_ref AI_BIOWORKFLOW_WEB_IMAGE "$web_image"
 
           {
             echo "AI_BIOWORKFLOW_API_IMAGE=$api_image"
