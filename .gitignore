@@ -151,10 +151,12 @@ activemq-data/
 .env
 .envrc
 .env.deploy
+.env.images
 .env.prod
 .venv
 env/
 env.deploy
+env.images
 env.prod
 env.*.local
 venv/

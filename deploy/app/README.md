@@ -40,7 +40,7 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 8010
 ```
 
 容器内监听地址固定为 `0.0.0.0:8010`，不通过 `.env.prod` 配置；
-宿主机 published port 在 `.env.deploy` 中配置。
+公网入口由 Caddy proxy 统一暴露。
 
 运行时环境变量：
 
@@ -88,19 +88,28 @@ sudo chown -R "$USER":"$USER" /opt/ai-bioworkflow
 
 cp deploy/app/docker-compose.prod.yml /opt/ai-bioworkflow/
 cp deploy/app/Caddyfile /opt/ai-bioworkflow/
+mkdir -p /opt/ai-bioworkflow/scripts
+cp deploy/app/scripts/deploy-ecs.sh /opt/ai-bioworkflow/scripts/
 cp deploy/app/env.deploy.example /opt/ai-bioworkflow/.env.deploy
+cp deploy/app/env.images.example /opt/ai-bioworkflow/.env.images
 cp deploy/app/env.prod.example /opt/ai-bioworkflow/.env.prod
+chmod +x /opt/ai-bioworkflow/scripts/deploy-ecs.sh
 ```
 
-编辑 `/opt/ai-bioworkflow/.env.deploy`，设置不可变镜像 tag、域名和证书通知邮箱：
+编辑 `/opt/ai-bioworkflow/.env.deploy`，设置域名和证书通知邮箱等 ECS 固定配置：
 
 ```text
-AI_BIOWORKFLOW_API_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<commit-sha>
-AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<commit-sha>
 AI_BIOWORKFLOW_RUNTIME_ENV_FILE=./.env.prod
 
 AI_BIOWORKFLOW_SITE_ADDRESS=your-domain.example.com
 AI_BIOWORKFLOW_TLS_EMAIL=you@example.com
+```
+
+编辑 `/opt/ai-bioworkflow/.env.images`，设置当前要运行的不可变镜像 tag：
+
+```text
+AI_BIOWORKFLOW_API_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<commit-sha>
+AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<commit-sha>
 ```
 
 编辑 `/opt/ai-bioworkflow/.env.prod`，填写运行时配置。真实密钥只保存在 ECS：
@@ -115,9 +124,15 @@ DEEPSEEK_API_KEY=<your-deepseek-api-key>
 
 ```bash
 cd /opt/ai-bioworkflow
-docker compose --env-file .env.deploy -f docker-compose.prod.yml pull
-docker compose --env-file .env.deploy -f docker-compose.prod.yml up -d --remove-orphans
-docker compose --env-file .env.deploy -f docker-compose.prod.yml ps
+./scripts/deploy-ecs.sh
+```
+
+也可以直接执行 Compose 命令：
+
+```bash
+docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml pull
+docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml up -d --remove-orphans
+docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml ps
 ```
 
 默认情况下，只有 Caddy proxy 服务发布到宿主机 `80/443`。API 和 Web 服务
@@ -200,16 +215,89 @@ registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<commit-sha>
 registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:latest
 ```
 
-ECS 部署时优先在 `.env.deploy` 中使用 commit SHA tag，而不是只依赖
-`latest`。这样可以明确知道线上运行版本，也方便回滚。
+ECS 部署时优先在 `.env.images` 中使用 commit SHA tag，而不是只依赖
+`latest`。这样可以明确知道线上运行版本，也方便回滚。后续自动部署只应更新
+`.env.images`，不要覆盖 `.env.deploy` 或 `.env.prod`。
+
+## ECS 部署脚本
+
+`deploy/app/scripts/deploy-ecs.sh` 用于在 ECS 上执行一次部署。它会：
+
+- 校验 `docker-compose.prod.yml`、`.env.deploy`、`.env.prod` 和 `.env.images`。
+- 在传入 `AI_BIOWORKFLOW_API_IMAGE` 和 `AI_BIOWORKFLOW_WEB_IMAGE` 时重新生成
+  `.env.images`。
+- 执行 `docker compose config`、`pull`、`up -d --remove-orphans` 和 `ps`。
+- 默认检查 `https://<AI_BIOWORKFLOW_SITE_ADDRESS>/health` 和
+  `https://<AI_BIOWORKFLOW_SITE_ADDRESS>/api/recipes`。
+
+`AI_BIOWORKFLOW_COMPOSE_FILE`、`AI_BIOWORKFLOW_DEPLOY_ENV_FILE` 和
+`AI_BIOWORKFLOW_IMAGES_ENV_FILE` 可以使用绝对路径；相对路径会按部署目录解析。
+
+手动部署新镜像：
+
+```bash
+cd /opt/ai-bioworkflow
+AI_BIOWORKFLOW_API_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<commit-sha> \
+AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<commit-sha> \
+./scripts/deploy-ecs.sh
+```
+
+如果只想复用现有 `.env.images` 重启服务：
+
+```bash
+cd /opt/ai-bioworkflow
+./scripts/deploy-ecs.sh
+```
+
+## 自动部署到 ECS
+
+`main` 分支 push 后，`.github/workflows/build-app-images.yml` 会先构建并推送
+API/Web 镜像到 ACR。镜像发布成功后，`Deploy app to ECS` job 会：
+
+- 通过 SSH 连接 ECS。
+- 同步仓库管理的 `docker-compose.prod.yml`、`Caddyfile` 和
+  `scripts/deploy-ecs.sh`。
+- 用当前 commit SHA tag 生成 ECS 上的 `.env.images`。
+- 执行 `./scripts/deploy-ecs.sh` 完成 `pull`、`up -d` 和健康检查。
+
+需要配置 GitHub repository secrets：
+
+```text
+ECS_HOST=<ecs-public-ip-or-hostname>
+ECS_USER=<ssh-user>
+ECS_SSH_PRIVATE_KEY=<private-key>
+```
+
+可选 secret：
+
+```text
+ECS_SSH_PORT=22
+ECS_KNOWN_HOSTS=<pinned-known-hosts-lines>
+```
+
+建议配置 `ECS_KNOWN_HOSTS` 固定 ECS 的 SSH host key。可以在可信网络环境中用
+`ssh-keyscan -p 22 -H <ecs-public-ip-or-hostname>` 生成后核对并保存到 GitHub
+secret。未配置时，workflow 会使用带超时的 `ssh-keyscan` 动态生成
+`known_hosts`。
+
+可选 repository variable：
+
+```text
+ECS_DEPLOY_PATH=/opt/ai-bioworkflow
+```
+
+`ECS_DEPLOY_PATH` 必须是绝对路径，只能包含字母、数字、`/`、`.`、`_` 和 `-`，
+且不能包含 `.` 或 `..` 路径段。
+
+自动部署不会覆盖 ECS 上的 `.env.deploy` 和 `.env.prod`。这两个文件仍由 ECS
+本地维护；CI 只更新仓库管理的部署文件和自动生成的 `.env.images`。
 
 ## 手动回滚
 
-将 `/opt/ai-bioworkflow/.env.deploy` 中的镜像 tag 改回已知可用的 commit SHA，
+将 `/opt/ai-bioworkflow/.env.images` 中的镜像 tag 改回已知可用的 commit SHA，
 然后执行：
 
 ```bash
 cd /opt/ai-bioworkflow
-docker compose --env-file .env.deploy -f docker-compose.prod.yml pull
-docker compose --env-file .env.deploy -f docker-compose.prod.yml up -d --remove-orphans
+./scripts/deploy-ecs.sh
 ```
