@@ -250,7 +250,7 @@ jobs:
           if [[ -n "${ECS_KNOWN_HOSTS:-}" ]]; then
             printf '%s\n' "$ECS_KNOWN_HOSTS" > "$known_hosts_path"
           else
-            ssh-keyscan -T 10 -p "$ssh_port" -H "$ECS_HOST" > "$known_hosts_path"
+            ssh-keyscan -T 10 -p "$ssh_port" -H "$ECS_HOST" > "$known_hosts_path" || true
           fi
           if [[ ! -s "$known_hosts_path" ]]; then
             echo "::error::known_hosts is empty; set ECS_KNOWN_HOSTS or verify ECS_HOST/ECS_SSH_PORT"

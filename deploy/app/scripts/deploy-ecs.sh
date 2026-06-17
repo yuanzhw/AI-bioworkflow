@@ -23,9 +23,18 @@ compose_file="${AI_BIOWORKFLOW_COMPOSE_FILE:-docker-compose.prod.yml}"
 deploy_env_file="${AI_BIOWORKFLOW_DEPLOY_ENV_FILE:-.env.deploy}"
 images_env_file="${AI_BIOWORKFLOW_IMAGES_ENV_FILE:-.env.images}"
 
-compose_path="$deploy_dir/$compose_file"
-deploy_env_path="$deploy_dir/$deploy_env_file"
-images_env_path="$deploy_dir/$images_env_file"
+resolve_deploy_path() {
+	local value="$1"
+	if [[ "$value" = /* ]]; then
+		printf '%s' "$value"
+	else
+		printf '%s/%s' "$deploy_dir" "${value#./}"
+	fi
+}
+
+compose_path="$(resolve_deploy_path "$compose_file")"
+deploy_env_path="$(resolve_deploy_path "$deploy_env_file")"
+images_env_path="$(resolve_deploy_path "$images_env_file")"
 
 [[ -d "$deploy_dir" ]] || die "Deploy directory not found: $deploy_dir"
 [[ -f "$compose_path" ]] || die "Compose file not found: $compose_path"

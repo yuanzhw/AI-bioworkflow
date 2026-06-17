@@ -230,6 +230,9 @@ ECS 部署时优先在 `.env.images` 中使用 commit SHA tag，而不是只依�
 - 默认检查 `https://<AI_BIOWORKFLOW_SITE_ADDRESS>/health` 和
   `https://<AI_BIOWORKFLOW_SITE_ADDRESS>/api/recipes`。
 
+`AI_BIOWORKFLOW_COMPOSE_FILE`、`AI_BIOWORKFLOW_DEPLOY_ENV_FILE` 和
+`AI_BIOWORKFLOW_IMAGES_ENV_FILE` 可以使用绝对路径；相对路径会按部署目录解析。
+
 手动部署新镜像：
 
 ```bash
