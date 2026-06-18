@@ -46,7 +46,13 @@ function Resolve-ApiBaseUrl {
     if ($ApiBaseUrl) {
         return $ApiBaseUrl.TrimEnd("/")
     }
-    return "http://${ApiHost}:${ApiPort}"
+
+    $apiBaseHost = $ApiHost
+    if ($apiBaseHost -eq "0.0.0.0") {
+        $apiBaseHost = "127.0.0.1"
+    }
+
+    return "http://${apiBaseHost}:${ApiPort}"
 }
 
 function Get-WebCorsOrigins {
@@ -298,9 +304,13 @@ if ($ApiOnly -and $WebOnly) {
     throw "Choose at most one of -ApiOnly or -WebOnly."
 }
 
-Set-PythonCommand
 $resolvedApiBaseUrl = Resolve-ApiBaseUrl
-$corsOrigins = Get-WebCorsOrigins
+$corsOrigins = ""
+
+if (-not $WebOnly) {
+    Set-PythonCommand
+    $corsOrigins = Get-WebCorsOrigins
+}
 
 if (-not $WebOnly) {
     Assert-PortAvailable -Name "API" -HostName $ApiHost -Port $ApiPort
