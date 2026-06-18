@@ -378,3 +378,56 @@ test("records unresolved references without guessing unsupported expressions", (
     }),
   );
 });
+
+test("normalizes object expression fallbacks with stable key order", () => {
+  const firstGraph = buildWorkflowGraph({
+    workflow: {
+      name: "StableExpressionDemo",
+      steps: [
+        {
+          id: "report",
+          kind: "call",
+          task: "multiqc",
+          inputs: {
+            config: {
+              b: 2,
+              a: 1,
+              nested: {
+                z: true,
+                y: false,
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+  const secondGraph = buildWorkflowGraph({
+    workflow: {
+      name: "StableExpressionDemo",
+      steps: [
+        {
+          id: "report",
+          kind: "call",
+          task: "multiqc",
+          inputs: {
+            config: {
+              nested: {
+                y: false,
+                z: true,
+              },
+              a: 1,
+              b: 2,
+            },
+          },
+        },
+      ],
+    },
+  });
+
+  const firstConfig = nodeById(firstGraph, "call:report").metadata.call.inputs.config;
+  const secondConfig = nodeById(secondGraph, "call:report").metadata.call.inputs.config;
+
+  assert.equal(firstConfig, '{"a":1,"b":2,"nested":{"y":false,"z":true}}');
+  assert.equal(firstConfig, secondConfig);
+});

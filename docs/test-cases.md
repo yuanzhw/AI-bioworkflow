@@ -2809,6 +2809,24 @@ npm run test:graph
 - 前端图模型只做可解释的引用提取。
 - 无法解析或无法确认的表达式保留在节点详情中，供后续 UI 展示和审计。
 
+### `normalizes object expression fallbacks with stable key order`
+
+输入：
+
+- 两份语义相同但 object key 插入顺序不同的 call input：
+  - `{b: 2, a: 1, nested: {z: true, y: false}}`
+  - `{nested: {y: false, z: true}, a: 1, b: 2}`
+
+期望输出：
+
+- 两份 graph 中 `metadata.call.inputs.config` 的 fallback JSON 字符串完全一致。
+- 嵌套 object key 也按稳定顺序输出。
+
+覆盖点：
+
+- graph metadata 中无法直接转成表达式文本的 object fallback 保持 deterministic。
+- 该行为只影响节点详情/审计字符串，不改变 Workflow IR，也不参与 Analyzer 或 Renderer。
+
 ## 当前测试覆盖边界
 
 已有测试重点覆盖：

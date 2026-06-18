@@ -600,7 +600,21 @@ function stableJson(value: unknown): string {
   if (value === undefined) {
     return "";
   }
-  return JSON.stringify(value);
+  return JSON.stringify(canonicalJsonValue(value)) ?? "";
+}
+
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalJsonValue);
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalJsonValue(value[key])]),
+    );
+  }
+  return value;
 }
 
 function maskQuotedText(value: string): string {
