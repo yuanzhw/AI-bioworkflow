@@ -15,6 +15,8 @@ DEFAULT_CORS_ORIGINS = (
     "http://localhost:3000",
 )
 
+UNKNOWN_BUILD_VALUE = "unknown"
+
 
 def get_cors_origins() -> list[str]:
     configured = os.environ.get("AI_BIOWORKFLOW_CORS_ORIGINS")
@@ -22,6 +24,15 @@ def get_cors_origins() -> list[str]:
         return list(DEFAULT_CORS_ORIGINS)
 
     return [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+
+
+def get_version_info() -> dict[str, str]:
+    return {
+        "service": "AI-bioworkflow API",
+        "build_sha": os.environ.get("AI_BIOWORKFLOW_BUILD_SHA", UNKNOWN_BUILD_VALUE),
+        "build_tag": os.environ.get("AI_BIOWORKFLOW_BUILD_TAG", UNKNOWN_BUILD_VALUE),
+        "build_time": os.environ.get("AI_BIOWORKFLOW_BUILD_TIME", UNKNOWN_BUILD_VALUE),
+    }
 
 
 def create_app() -> FastAPI:
@@ -44,6 +55,14 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     def read_health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/version", tags=["version"])
+    def read_version() -> dict[str, str]:
+        return get_version_info()
+
+    @app.get("/api/version", tags=["version"])
+    def read_api_version() -> dict[str, str]:
+        return get_version_info()
 
     @app.get("/favicon.ico", include_in_schema=False)
     def read_favicon() -> Response:

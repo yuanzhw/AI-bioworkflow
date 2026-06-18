@@ -47,6 +47,17 @@ rollback_images_env_path="$(resolve_deploy_path "$rollback_images_env_file")"
 [[ -f "$compose_path" ]] || die "Compose file not found: $compose_path"
 [[ -f "$deploy_env_path" ]] || die "Deploy env file not found: $deploy_env_path"
 
+if [[ "${AI_BIOWORKFLOW_SKIP_PREFLIGHT:-false}" != "true" ]]; then
+	preflight_script="${AI_BIOWORKFLOW_PREFLIGHT_SCRIPT:-$script_dir/preflight-ecs.sh}"
+	[[ -x "$preflight_script" ]] || die "Preflight script not found or not executable: $preflight_script"
+	log "Running ECS preflight checks"
+	AI_BIOWORKFLOW_DEPLOY_DIR="$deploy_dir" \
+	AI_BIOWORKFLOW_COMPOSE_FILE="$compose_file" \
+	AI_BIOWORKFLOW_DEPLOY_ENV_FILE="$deploy_env_file" \
+	AI_BIOWORKFLOW_IMAGES_ENV_FILE="$images_env_file" \
+	"$preflight_script"
+fi
+
 read_env_value() {
 	local file="$1"
 	local name="$2"

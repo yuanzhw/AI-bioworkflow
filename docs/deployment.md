@@ -32,6 +32,8 @@ https://your-domain.example.com/api/...   -> api:8010
 https://your-domain.example.com/docs      -> api:8010/docs
 https://your-domain.example.com/redoc     -> api:8010/redoc
 https://your-domain.example.com/health    -> api:8010/health
+https://your-domain.example.com/version   -> api:8010/version
+https://your-domain.example.com/api/version -> api:8010/api/version
 ```
 
 这个部署不启动 Cromwell runner，也不默认执行真实 WDL 后端。API 运行时默认保持 `AI_BIOWORKFLOW_RUN_BACKEND=disabled`。
@@ -122,6 +124,7 @@ ssh-keyscan -p <ecs-ssh-port> -H <ecs-public-ip-or-hostname>
 | `docker-compose.prod.yml` | 生产 Compose 定义 |
 | `Caddyfile` | HTTPS 入口和反向代理规则 |
 | `scripts/deploy-ecs.sh` | ECS 部署脚本 |
+| `scripts/preflight-ecs.sh` | ECS 部署前置检查脚本 |
 
 只在 ECS 上维护，不提交到 Git：
 
@@ -248,11 +251,11 @@ sudo chown -R "$USER":"$USER" /opt/ai-bioworkflow
 cp deploy/app/docker-compose.prod.yml /opt/ai-bioworkflow/
 cp deploy/app/Caddyfile /opt/ai-bioworkflow/
 mkdir -p /opt/ai-bioworkflow/scripts
-cp deploy/app/scripts/deploy-ecs.sh /opt/ai-bioworkflow/scripts/
+cp deploy/app/scripts/*.sh /opt/ai-bioworkflow/scripts/
 cp deploy/app/env.deploy.example /opt/ai-bioworkflow/.env.deploy
 cp deploy/app/env.images.example /opt/ai-bioworkflow/.env.images
 cp deploy/app/env.prod.example /opt/ai-bioworkflow/.env.prod
-chmod +x /opt/ai-bioworkflow/scripts/deploy-ecs.sh
+chmod +x /opt/ai-bioworkflow/scripts/*.sh
 ```
 
 编辑：
@@ -276,6 +279,7 @@ cd /opt/ai-bioworkflow
 docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml ps
 curl -fsS https://your-domain.example.com/health
 curl -fsS https://your-domain.example.com/api/recipes
+curl -fsS https://your-domain.example.com/api/version
 ```
 
 浏览器访问：
@@ -297,11 +301,12 @@ AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bio
 
 脚本会：
 
-1. 校验部署目录、Compose 文件、`.env.deploy`、`.env.prod` 和镜像引用。
-2. 在写入新 `.env.images` 前备份当前文件为 `.env.images.rollback`。
-3. 执行 `docker compose config`、`pull`、`up -d --remove-orphans` 和 `ps`。
-4. 默认检查 `/health` 和 `/api/recipes`。
-5. 如果新版本启动或健康检查失败，恢复 `.env.images.rollback` 并重新拉起上一版。
+1. 运行 `scripts/preflight-ecs.sh`，检查 Docker、Compose、部署目录、环境文件、端口配置、磁盘空间和 Compose 配置。
+2. 校验部署目录、Compose 文件、`.env.deploy`、`.env.prod` 和镜像引用。
+3. 在写入新 `.env.images` 前备份当前文件为 `.env.images.rollback`。
+4. 执行 `docker compose config`、`pull`、`up -d --remove-orphans` 和 `ps`。
+5. 默认检查 `/health` 和 `/api/recipes`。
+6. 如果新版本启动或健康检查失败，恢复 `.env.images.rollback` 并重新拉起上一版。
 
 健康检查参数：
 
@@ -315,6 +320,20 @@ AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bio
 
 这些参数会在写入新 `.env.images` 之前校验。配置不合法时，部署会直接失败，不会覆盖当前镜像配置。
 
+preflight 默认启用。可选参数：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `AI_BIOWORKFLOW_SKIP_PREFLIGHT` | `false` | 临时跳过 preflight |
+| `AI_BIOWORKFLOW_PREFLIGHT_MIN_FREE_MB` | `512` | 部署目录所在文件系统的最小可用空间 |
+
+单独运行 preflight：
+
+```bash
+cd /opt/ai-bioworkflow
+./scripts/preflight-ecs.sh
+```
+
 ## 自动部署
 
 `.github/workflows/build-app-images.yml` 在 `main` 分支 push 后自动执行：
@@ -326,6 +345,20 @@ AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bio
 5. 同步仓库管理的部署文件。
 6. 用当前 commit SHA tag 生成 `.env.images`。
 7. 执行 `./scripts/deploy-ecs.sh`。
+
+workflow 只在会影响应用镜像或生产部署行为的路径变化时触发，例如
+`.github/workflows/build-app-images.yml`、`src/**`、`web/**`、
+`deploy/app/api/**`、`deploy/app/web/**`、`deploy/app/Caddyfile`、
+`deploy/app/docker-compose.prod.yml` 和 `deploy/app/scripts/**`。单纯修改
+`docs/**`、`deploy/app/README.md` 或 env example 不会触发生产部署。
+
+构建时会将 commit SHA、镜像 tag 和 UTC build time 写入 API/Web 镜像。线上可通过
+以下地址查看当前部署版本：
+
+```bash
+curl -fsS https://your-domain.example.com/api/version
+curl -fsS https://your-domain.example.com/version
+```
 
 部署 job 使用 concurrency：
 
@@ -397,6 +430,13 @@ docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.p
 docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml logs -f proxy
 docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml logs -f api
 docker compose --env-file .env.deploy --env-file .env.images -f docker-compose.prod.yml logs -f web
+```
+
+查看线上版本：
+
+```bash
+curl -fsS https://your-domain.example.com/api/version
+cat .env.images
 ```
 
 验证 Compose 配置：
@@ -488,6 +528,12 @@ docker pull registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:
 docker pull registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<short-sha>
 ```
 
+### Preflight 失败
+
+按错误信息检查 Docker daemon、Docker Compose plugin、部署目录权限、`.env.deploy`、
+`.env.prod`、镜像引用和磁盘空间。默认要求部署目录所在文件系统至少有 `512MB`
+可用空间；可以通过 `AI_BIOWORKFLOW_PREFLIGHT_MIN_FREE_MB` 调整。
+
 ## 运维检查清单
 
 首次上线前：
@@ -509,4 +555,16 @@ docker pull registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:
 - ECS `docker compose ps` 显示 `proxy`、`api`、`web` 正常运行。
 - `https://your-domain.example.com/health` 返回成功。
 - `https://your-domain.example.com/api/recipes` 返回成功。
+- `https://your-domain.example.com/api/version` 显示预期 commit SHA 或 tag。
 - `https://your-domain.example.com/workspace?example=rnaseq-deg` 可以触发示例编译。
+
+## 可选后续运维打磨
+
+这些不是当前自动部署链路的必要条件，可以在后续项目打磨阶段逐步补齐：
+
+- 外部站点监控和告警：定期检查 `/`、`/health`、`/api/recipes` 和 `/api/version`，连续失败后通过邮件、短信或 IM 通知。
+- 多版本发布历史：保留多份 `.env.images` release 记录，支持回滚到指定 commit SHA。
+- 镜像 digest 固定：部署时记录或使用 ACR 返回的 image digest，进一步避免 tag 被覆盖带来的不确定性。
+- GitHub Environment 保护：对 production 部署增加手动审批、部署窗口或分支保护策略。
+- 数据备份：定期备份 API SQLite volume，记录恢复步骤。
+- 主机指标监控：通过阿里云 CloudMonitor 或其它监控系统覆盖 CPU、内存、磁盘、Docker daemon 和容器状态。

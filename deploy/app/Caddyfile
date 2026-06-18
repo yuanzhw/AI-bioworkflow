@@ -5,7 +5,7 @@
 {$AI_BIOWORKFLOW_SITE_ADDRESS} {
 	encode zstd gzip
 
-	@api path /api /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health
+	@api path /api /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health /version
 	reverse_proxy @api api:8010
 
 	reverse_proxy web:3000

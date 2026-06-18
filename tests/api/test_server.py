@@ -70,6 +70,25 @@ class ApiServerConfigTests(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.json(), {"status": "ok"})
 
+    def test_version_endpoints_expose_build_metadata(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "AI_BIOWORKFLOW_BUILD_SHA": "abc123",
+                "AI_BIOWORKFLOW_BUILD_TAG": "abc123",
+                "AI_BIOWORKFLOW_BUILD_TIME": "2026-06-18T00:00:00Z",
+            },
+        ):
+            client = TestClient(create_app())
+            expected = {
+                "service": "AI-bioworkflow API",
+                "build_sha": "abc123",
+                "build_tag": "abc123",
+                "build_time": "2026-06-18T00:00:00Z",
+            }
+            self.assertEqual(client.get("/version").json(), expected)
+            self.assertEqual(client.get("/api/version").json(), expected)
+
     def test_favicon_request_does_not_log_404(self):
         client = TestClient(create_app())
 
