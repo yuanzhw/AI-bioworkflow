@@ -7,7 +7,11 @@ on:
     paths:
       - ".dockerignore"
       - ".github/workflows/build-app-images.yml"
-      - "deploy/app/**"
+      - "deploy/app/api/**"
+      - "deploy/app/web/**"
+      - "deploy/app/Caddyfile"
+      - "deploy/app/docker-compose.prod.yml"
+      - "deploy/app/scripts/**"
       - "main.py"
       - "pyproject.toml"
       - "src/**"
@@ -19,7 +23,11 @@ on:
     paths:
       - ".dockerignore"
       - ".github/workflows/build-app-images.yml"
-      - "deploy/app/**"
+      - "deploy/app/api/**"
+      - "deploy/app/web/**"
+      - "deploy/app/Caddyfile"
+      - "deploy/app/docker-compose.prod.yml"
+      - "deploy/app/scripts/**"
       - "main.py"
       - "pyproject.toml"
       - "src/**"
@@ -76,6 +84,7 @@ jobs:
 
           short_sha="${GITHUB_SHA::12}"
           image_tag="${DISPATCH_IMAGE_TAG:-$short_sha}"
+          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           next_public_api_base_url="${DISPATCH_NEXT_PUBLIC_API_BASE_URL:-${REPO_NEXT_PUBLIC_API_BASE_URL:-$FALLBACK_NEXT_PUBLIC_API_BASE_URL}}"
 
           if ! [[ "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
@@ -105,6 +114,7 @@ jobs:
 
           {
             echo "image_tag=$image_tag"
+            echo "build_time=$build_time"
             echo "next_public_api_base_url=$next_public_api_base_url"
             echo "publish=$publish"
             echo "api_image=$api_image"
@@ -143,6 +153,9 @@ jobs:
           docker build \
             -f deploy/app/api/Dockerfile \
             -t "${{ steps.meta.outputs.api_image }}:${{ steps.meta.outputs.image_tag }}" \
+            --build-arg "AI_BIOWORKFLOW_BUILD_SHA=${GITHUB_SHA}" \
+            --build-arg "AI_BIOWORKFLOW_BUILD_TAG=${{ steps.meta.outputs.image_tag }}" \
+            --build-arg "AI_BIOWORKFLOW_BUILD_TIME=${{ steps.meta.outputs.build_time }}" \
             .
 
       - name: Build Web image
@@ -155,6 +168,9 @@ jobs:
             -f deploy/app/web/Dockerfile \
             -t "${{ steps.meta.outputs.web_image }}:${{ steps.meta.outputs.image_tag }}" \
             --build-arg "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" \
+            --build-arg "NEXT_PUBLIC_BUILD_SHA=${GITHUB_SHA}" \
+            --build-arg "NEXT_PUBLIC_BUILD_TAG=${{ steps.meta.outputs.image_tag }}" \
+            --build-arg "NEXT_PUBLIC_BUILD_TIME=${{ steps.meta.outputs.build_time }}" \
             .
 
       - name: Push images
@@ -183,6 +199,8 @@ jobs:
             echo ""
             echo "- API image: \`${{ steps.meta.outputs.api_image }}:${{ steps.meta.outputs.image_tag }}\`"
             echo "- Web image: \`${{ steps.meta.outputs.web_image }}:${{ steps.meta.outputs.image_tag }}\`"
+            echo "- Build SHA: \`${GITHUB_SHA}\`"
+            echo "- Build time: \`${{ steps.meta.outputs.build_time }}\`"
             echo "- Web API base URL: \`${{ steps.meta.outputs.next_public_api_base_url }}\`"
             echo "- Published to ACR: \`${{ steps.meta.outputs.publish }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -334,8 +352,8 @@ jobs:
 
           ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" "mkdir -p '${deploy_path}/scripts'"
           scp "${scp_opts[@]}" deploy/app/docker-compose.prod.yml deploy/app/Caddyfile "${ECS_USER}@${ECS_HOST}:${deploy_path}/"
-          scp "${scp_opts[@]}" deploy/app/scripts/deploy-ecs.sh "${ECS_USER}@${ECS_HOST}:${deploy_path}/scripts/deploy-ecs.sh"
-          ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" "chmod +x '${deploy_path}/scripts/deploy-ecs.sh'"
+          scp "${scp_opts[@]}" deploy/app/scripts/*.sh "${ECS_USER}@${ECS_HOST}:${deploy_path}/scripts/"
+          ssh "${ssh_opts[@]}" "${ECS_USER}@${ECS_HOST}" "chmod +x '${deploy_path}/scripts/'*.sh"
 
       - name: Run ECS deployment
         run: |

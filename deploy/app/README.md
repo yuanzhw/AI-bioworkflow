@@ -92,11 +92,11 @@ sudo chown -R "$USER":"$USER" /opt/ai-bioworkflow
 cp deploy/app/docker-compose.prod.yml /opt/ai-bioworkflow/
 cp deploy/app/Caddyfile /opt/ai-bioworkflow/
 mkdir -p /opt/ai-bioworkflow/scripts
-cp deploy/app/scripts/deploy-ecs.sh /opt/ai-bioworkflow/scripts/
+cp deploy/app/scripts/*.sh /opt/ai-bioworkflow/scripts/
 cp deploy/app/env.deploy.example /opt/ai-bioworkflow/.env.deploy
 cp deploy/app/env.images.example /opt/ai-bioworkflow/.env.images
 cp deploy/app/env.prod.example /opt/ai-bioworkflow/.env.prod
-chmod +x /opt/ai-bioworkflow/scripts/deploy-ecs.sh
+chmod +x /opt/ai-bioworkflow/scripts/*.sh
 ```
 
 编辑 `/opt/ai-bioworkflow/.env.deploy`，设置域名和证书通知邮箱等 ECS 固定配置：
@@ -147,6 +147,8 @@ https://your-domain.example.com/          -> web:3000
 https://your-domain.example.com/api/...   -> api:8010
 https://your-domain.example.com/docs      -> api:8010/docs
 https://your-domain.example.com/health    -> api:8010/health
+https://your-domain.example.com/version   -> api:8010/version
+https://your-domain.example.com/api/version -> api:8010/api/version
 ```
 
 API run 历史记录保存在 Docker named volume `ai-bioworkflow_api_data`，
@@ -178,6 +180,7 @@ docker compose --env-file .env.deploy -f docker-compose.prod.yml logs -f proxy
 curl -I http://your-domain.example.com
 curl https://your-domain.example.com/health
 curl https://your-domain.example.com/api/recipes
+curl https://your-domain.example.com/api/version
 ```
 
 浏览器访问应用时应使用 HTTPS 域名，不再使用 `:3000`：
@@ -227,6 +230,8 @@ ECS 部署时优先在 `.env.images` 中使用 commit SHA tag，而不是只依�
 `deploy/app/scripts/deploy-ecs.sh` 用于在 ECS 上执行一次部署。它会：
 
 - 校验 `docker-compose.prod.yml`、`.env.deploy`、`.env.prod` 和 `.env.images`。
+- 默认先运行 `scripts/preflight-ecs.sh`，检查 Docker、Compose、部署目录、
+  环境文件、端口配置、磁盘空间和 Compose 配置。
 - 在传入 `AI_BIOWORKFLOW_API_IMAGE` 和 `AI_BIOWORKFLOW_WEB_IMAGE` 时重新生成
   `.env.images`。
 - 执行 `docker compose config`、`pull`、`up -d --remove-orphans` 和 `ps`。

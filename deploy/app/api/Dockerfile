@@ -11,6 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+ARG AI_BIOWORKFLOW_BUILD_SHA=unknown
+ARG AI_BIOWORKFLOW_BUILD_TAG=local
+ARG AI_BIOWORKFLOW_BUILD_TIME=unknown
+
 COPY pyproject.toml uv.lock .python-version ./
 
 # miniwdl is included for Linux container-local WDL syntax checks.
@@ -29,6 +33,9 @@ USER appuser
 ENV PATH="/app/.venv/bin:${PATH}" \
     AI_BIOWORKFLOW_DB_PATH=/data/ai-bioworkflow/ai-bioworkflow.sqlite3 \
     AI_BIOWORKFLOW_RUN_BACKEND=disabled \
+    AI_BIOWORKFLOW_BUILD_SHA=${AI_BIOWORKFLOW_BUILD_SHA} \
+    AI_BIOWORKFLOW_BUILD_TAG=${AI_BIOWORKFLOW_BUILD_TAG} \
+    AI_BIOWORKFLOW_BUILD_TIME=${AI_BIOWORKFLOW_BUILD_TIME} \
     WDL_VALIDATOR=miniwdl
 
 EXPOSE 8010
