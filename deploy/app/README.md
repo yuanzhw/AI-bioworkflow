@@ -3,6 +3,9 @@
 本目录包含 AI-bioworkflow 作品集 demo 的应用镜像定义，以及面向单台
 阿里云 ECS 的 Docker Compose 部署骨架。
 
+完整的生产部署、GitHub Secrets、ECS 安全组、HTTPS、手动发布和回滚说明见
+[`docs/deployment.md`](../../docs/deployment.md)。
+
 这里的文件只启动 FastAPI 后端和 Next.js 前端，不启动 Cromwell，也不运行
 workflow task 容器。Cromwell runner 仍独立维护在 `deploy/cromwell/`。
 
