@@ -50,7 +50,16 @@ function Resolve-ApiBaseUrl {
 }
 
 function Get-WebCorsOrigins {
-    $origins = @("http://${WebHost}:${WebPort}")
+    if ($WebHost -eq "0.0.0.0") {
+        $origins = @(
+            "http://127.0.0.1:${WebPort}",
+            "http://localhost:${WebPort}"
+        )
+    }
+    else {
+        $origins = @("http://${WebHost}:${WebPort}")
+    }
+
     if ($WebHost -eq "127.0.0.1") {
         $origins += "http://localhost:${WebPort}"
     }
@@ -61,6 +70,30 @@ function Get-WebCorsOrigins {
     return (($origins | Select-Object -Unique) -join ",")
 }
 
+function Resolve-BindAddress {
+    param([Parameter(Mandatory = $true)][string]$HostName)
+
+    $address = [System.Net.IPAddress]::Any
+    if ([System.Net.IPAddress]::TryParse($HostName, [ref]$address)) {
+        return $address
+    }
+
+    try {
+        $address = [System.Net.Dns]::GetHostAddresses($HostName) |
+            Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+            Select-Object -First 1
+    }
+    catch {
+        throw "Host could not be resolved: $HostName"
+    }
+
+    if ($null -eq $address) {
+        throw "Host did not resolve to an IPv4 address: $HostName"
+    }
+
+    return $address
+}
+
 function Test-TcpPortAvailable {
     param(
         [Parameter(Mandatory = $true)][string]$HostName,
@@ -69,23 +102,36 @@ function Test-TcpPortAvailable {
 
     $listener = $null
     try {
-        $address = [System.Net.IPAddress]::Any
-        if (-not [System.Net.IPAddress]::TryParse($HostName, [ref]$address)) {
-            $address = [System.Net.Dns]::GetHostAddresses($HostName) |
-                Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
-                Select-Object -First 1
-        }
-
-        if ($null -eq $address) {
-            return $false
-        }
-
+        $address = Resolve-BindAddress -HostName $HostName
         $listener = [System.Net.Sockets.TcpListener]::new($address, $Port)
         $listener.Start()
-        return $true
+        return [pscustomobject]@{
+            Available = $true
+            Reason = ""
+            Message = ""
+        }
+    }
+    catch [System.Net.Sockets.SocketException] {
+        $reason = "BindFailed"
+        if ($_.Exception.SocketErrorCode -eq [System.Net.Sockets.SocketError]::AddressAlreadyInUse) {
+            $reason = "PortInUse"
+        }
+        elseif ($_.Exception.SocketErrorCode -eq [System.Net.Sockets.SocketError]::AddressNotAvailable) {
+            $reason = "AddressNotAvailable"
+        }
+
+        return [pscustomobject]@{
+            Available = $false
+            Reason = $reason
+            Message = $_.Exception.Message
+        }
     }
     catch {
-        return $false
+        return [pscustomobject]@{
+            Available = $false
+            Reason = "HostResolutionFailed"
+            Message = $_.Exception.Message
+        }
     }
     finally {
         if ($null -ne $listener) {
@@ -105,9 +151,22 @@ function Assert-PortAvailable {
         return
     }
 
-    if (-not (Test-TcpPortAvailable -HostName $HostName -Port $Port)) {
+    $result = Test-TcpPortAvailable -HostName $HostName -Port $Port
+    if ($result.Available) {
+        return
+    }
+
+    if ($result.Reason -eq "HostResolutionFailed") {
+        throw "$Name host could not be resolved for port check: $HostName. $($result.Message)"
+    }
+    elseif ($result.Reason -eq "AddressNotAvailable") {
+        throw "$Name host is not available for binding: ${HostName}:${Port}. $($result.Message)"
+    }
+    elseif ($result.Reason -eq "PortInUse") {
         throw "$Name port is already in use: ${HostName}:${Port}. Pass a different port or use -SkipPortCheck if this is expected."
     }
+
+    throw "$Name port check failed for ${HostName}:${Port}. $($result.Message)"
 }
 
 function Assert-WebReady {
