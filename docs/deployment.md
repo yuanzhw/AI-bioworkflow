@@ -436,8 +436,8 @@ cat .env.images
 应包含完整镜像：
 
 ```text
-registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<short-sha>
-registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<short-sha>
+AI_BIOWORKFLOW_API_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-api:<short-sha>
+AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bioworkflow-web:<short-sha>
 ```
 
 当前 workflow 会在 deploy job 内重新拼接镜像引用，并对 registry、namespace、image name 和 tag 做格式校验，避免由 secret 派生的空输出跨 job 传播。
