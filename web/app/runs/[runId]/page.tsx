@@ -13,6 +13,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
 import { getRunSnapshot } from "@/lib/api";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
 import { RunArtifactsPanel } from "./run-artifacts-panel";
@@ -197,6 +198,11 @@ function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
         <DiagnosticsSummary snapshot={snapshot} />
       </section>
 
+      <WorkflowGraphPanel
+        workflowIr={snapshot.artifacts.workflow_ir}
+        eventsUrl={snapshot.events_url}
+        status={snapshot.status}
+      />
       <RunEventsTimeline eventsUrl={snapshot.events_url} status={snapshot.status} />
       <RunArtifactsPanel artifacts={snapshot.artifacts} diagnostics={snapshot.diagnostics} />
     </>
