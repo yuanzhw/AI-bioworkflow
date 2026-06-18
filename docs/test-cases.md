@@ -2725,6 +2725,108 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 
 - `--all` 只发现实际容器目录，非容器草稿目录不会被强制要求声明镜像修订号。
 
+## `web/tests/workflow-graph.test.mjs`
+
+该文件验证 W5 DAG 可视化前置的数据模型转换层。测试通过 `tsx --test`
+调用 Node 内置 test runner，并直接加载 `web/lib/workflow-graph.ts`，不启动
+Next.js。
+
+运行方式：
+
+```powershell
+cd web
+npm run test:graph
+```
+
+### `builds call dependency and workflow output graph from legacy calls`
+
+输入：
+
+- legacy Workflow IR，使用 `workflow.calls`：
+  - workflow inputs：`raw_r1`、`raw_r2`、`reference`
+  - calls：`qc` 调用 `fastp`，`align` 调用 `bwa_mem`
+  - `align` 的输入引用 `qc.clean_r1/qc.clean_r2`
+  - workflow output：`bam = align.bam`
+- task metadata 包含 outputs 和 runtime docker。
+
+期望输出：
+
+- 生成 workflow input、call 和 workflow output 节点。
+- 生成 `qc -> align` 的 dependency edges。
+- 生成 `align -> bam output` 的 output edge。
+- call node metadata 保留 task、outputs 和 runtime。
+
+覆盖点：
+
+- 图模型兼容旧 `workflow.calls` 输入，但不修改 IR。
+- W5 DAG 模型能从 task metadata 暴露节点详情需要的核心字段。
+
+### `builds scatter group and nested call dependencies from workflow steps`
+
+输入：
+
+- canonical Workflow IR，使用 `workflow.steps`：
+  - workflow inputs：`sample_ids`、`raw_r1s`、`raw_r2s`、`transcriptome_index`
+  - scatter step：`per_sample`，`over = range(length(sample_ids))`
+  - scatter body 内含 `qc` 和 `quantify`
+  - scatter 后有 `summarize`，输入引用 `quantify.quant_file`
+  - workflow output：`counts = summarize.gene_counts`
+
+期望输出：
+
+- 生成 scatter group node。
+- scatter body 内的 call nodes 记录 `parentId = scatter:per_sample`。
+- 生成 `sample_ids -> scatter` 的 input edge。
+- 生成 `qc -> quantify`、`quantify -> summarize` 的 dependency edges。
+- 生成 `summarize -> counts output` 的 output edge。
+
+覆盖点：
+
+- 图模型优先读取 `workflow.steps`。
+- scatter body 会递归转成节点和边，但不做 Analyzer 的类型提升或修复工作。
+
+### `records unresolved references without guessing unsupported expressions`
+
+输入：
+
+- Workflow IR 中 `report` call 的输入包含：
+  - `missing.result`：未知 call。
+  - `qc.missing_report`：已知 call 上未知 output。
+  - `qc.html_report + qc.json_report`：不支持的字符串拼接表达式。
+  - `qc.html_report-qc.json_report` 和 `qc.html_report*qc.json_report`：不支持的无空格运算表达式。
+
+期望输出：
+
+- `graph.unresolvedReferences` 按原因记录：
+  - `unknown-call`
+  - `unknown-output`
+  - `unsupported-expression`
+- 对不支持表达式不生成猜测性的 dependency edge。
+- 对已解析的 `report.multiqc_report` workflow output 仍生成 output edge。
+
+覆盖点：
+
+- 前端图模型只做可解释的引用提取。
+- 无法解析或无法确认的表达式保留在节点详情中，供后续 UI 展示和审计。
+
+### `normalizes object expression fallbacks with stable key order`
+
+输入：
+
+- 两份语义相同但 object key 插入顺序不同的 call input：
+  - `{b: 2, a: 1, nested: {z: true, y: false}}`
+  - `{nested: {y: false, z: true}, a: 1, b: 2}`
+
+期望输出：
+
+- 两份 graph 中 `metadata.call.inputs.config` 的 fallback JSON 字符串完全一致。
+- 嵌套 object key 也按稳定顺序输出。
+
+覆盖点：
+
+- graph metadata 中无法直接转成表达式文本的 object fallback 保持 deterministic。
+- 该行为只影响节点详情/审计字符串，不改变 Workflow IR，也不参与 Analyzer 或 Renderer。
+
 ## 当前测试覆盖边界
 
 已有测试重点覆盖：
@@ -2744,6 +2846,7 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 - Planner 的 JSON 解析、prompt 构建、schema 错误和 catalog 错误归类。
 - Cromwell execution backend 的可用性检查、提交、轮询、结果收集错误语义和 factory 路由。
 - WDL validator wrapper 和可选 miniwdl tiny run。
+- W5 前端 workflow graph 数据模型对 call、scatter、workflow output 和 unresolved reference 的覆盖。
 
 目前相对少覆盖或未覆盖的方向：
 
