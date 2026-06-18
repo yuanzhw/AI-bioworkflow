@@ -144,7 +144,7 @@ elif [[ -n "${AI_BIOWORKFLOW_API_IMAGE:-}" || -n "${AI_BIOWORKFLOW_WEB_IMAGE:-}"
 	} > "$temp_images_env"
 	compose_images_env_path="$temp_images_env"
 else
-	log "No image env file or incoming image refs; skipping image-dependent Compose config check"
+	die "Set AI_BIOWORKFLOW_API_IMAGE and AI_BIOWORKFLOW_WEB_IMAGE, or create $images_env_path"
 fi
 
 if [[ -n "$compose_images_env_path" ]]; then
