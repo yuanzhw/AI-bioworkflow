@@ -20,7 +20,7 @@ GitHub main push
 
 | 服务 | 作用 | 对公网暴露 |
 | --- | --- | --- |
-| `proxy` | Caddy HTTPS 入口与反向代理 | `80/tcp`、`443/tcp`、可选 `443/udp` |
+| `proxy` | Caddy HTTPS 入口与反向代理 | Compose 默认绑定 `80/tcp`、`443/tcp`、`443/udp`；公网可达性取决于安全组和防火墙 |
 | `api` | FastAPI 后端 | 不直接暴露，仅 Docker 网络内 `8010` |
 | `web` | Next.js standalone 前端 | 不直接暴露，仅 Docker 网络内 `3000` |
 
@@ -192,7 +192,7 @@ AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bio
 | --- | --- | --- | --- |
 | TCP | `80` | `0.0.0.0/0`、`::/0` | HTTP 到 HTTPS 跳转、ACME 校验 |
 | TCP | `443` | `0.0.0.0/0`、`::/0` | HTTPS 访问 |
-| UDP | `443` | `0.0.0.0/0`、`::/0` | 可选，Caddy HTTP/3 |
+| UDP | `443` | `0.0.0.0/0`、`::/0` | 可选，仅影响 Caddy HTTP/3；不影响普通 HTTPS over TCP |
 | TCP | `22` 或自定义 SSH 端口 | 管理员固定 IP | SSH 部署与维护 |
 
 不建议对公网开放：
