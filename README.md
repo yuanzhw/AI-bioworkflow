@@ -70,6 +70,9 @@ JAVA_HOME="D:/path/to/jdk-17"
 # 本地 P0 快速检查：单测 + 代表性 WDL 编译/语法校验
 powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 
+# 启动本地 API + Web 开发服务
+powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1
+
 # 结构化 Recipe Tool Plan 编译
 uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl
 
@@ -150,6 +153,14 @@ uv run main.py \
 ### 6. 启动 FastAPI 开发服务
 
 如果本地同时运行 Cromwell server，建议保留 Cromwell 使用 `8000` 端口，本项目 FastAPI 开发服务使用 `8010` 端口，避免两个服务的 `/api/...` 路径互相混淆。
+
+本地同时观察 API 与 Web 工作台时，可以使用联合开发脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1
+```
+
+该脚本默认启动 FastAPI `127.0.0.1:8010` 与 Next.js `127.0.0.1:3000`，并支持 `-ApiOnly`、`-WebOnly`、`-ApiPort` 和 `-WebPort`。
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.api.server
