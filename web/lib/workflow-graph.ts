@@ -546,7 +546,7 @@ function findInputReferences(
 
 function isUnsupportedExpression(expression: string): boolean {
   const maskedExpression = maskQuotedText(expression);
-  return /(?:\+|&&|\|\|)/.test(maskedExpression) || /\s(?:-|\*|\/)\s/.test(maskedExpression);
+  return /(?:\+|-|\*|\/|&&|\|\|)/.test(maskedExpression);
 }
 
 function workflowInputNodeId(name: string): string {

@@ -274,6 +274,8 @@ test("records unresolved references without guessing unsupported expressions", (
             missing_call: "missing.result",
             missing_output: "qc.missing_report",
             unsupported: "qc.html_report + qc.json_report",
+            unsupported_minus: "qc.html_report-qc.json_report",
+            unsupported_multiply: "qc.html_report*qc.json_report",
           },
         },
       ],
@@ -327,16 +329,42 @@ test("records unresolved references without guessing unsupported expressions", (
         reference: null,
         expression: "qc.html_report + qc.json_report",
       },
+      {
+        reason: "unsupported-expression",
+        reference: null,
+        expression: "qc.html_report-qc.json_report",
+      },
+      {
+        reason: "unsupported-expression",
+        reference: null,
+        expression: "qc.html_report*qc.json_report",
+      },
     ],
   );
 
   const reportNode = nodeById(graph, "call:report");
-  assert.equal(reportNode.metadata.call.unresolvedReferences.length, 3);
+  assert.equal(reportNode.metadata.call.unresolvedReferences.length, 5);
   assert.equal(
     findEdge(graph, {
       source: "call:qc",
       target: "call:report",
       expression: "qc.html_report + qc.json_report",
+    }),
+    undefined,
+  );
+  assert.equal(
+    findEdge(graph, {
+      source: "call:qc",
+      target: "call:report",
+      expression: "qc.html_report-qc.json_report",
+    }),
+    undefined,
+  );
+  assert.equal(
+    findEdge(graph, {
+      source: "call:qc",
+      target: "call:report",
+      expression: "qc.html_report*qc.json_report",
     }),
     undefined,
   );

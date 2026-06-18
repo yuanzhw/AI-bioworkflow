@@ -2727,8 +2727,8 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 
 ## `web/tests/workflow-graph.test.mjs`
 
-该文件验证 W5 DAG 可视化前置的数据模型转换层。测试通过 Node 内置
-test runner 配合 `tsx` loader 直接调用 `web/lib/workflow-graph.ts`，不启动
+该文件验证 W5 DAG 可视化前置的数据模型转换层。测试通过 `tsx --test`
+调用 Node 内置 test runner，并直接加载 `web/lib/workflow-graph.ts`，不启动
 Next.js。
 
 运行方式：
@@ -2793,6 +2793,7 @@ npm run test:graph
   - `missing.result`：未知 call。
   - `qc.missing_report`：已知 call 上未知 output。
   - `qc.html_report + qc.json_report`：不支持的字符串拼接表达式。
+  - `qc.html_report-qc.json_report` 和 `qc.html_report*qc.json_report`：不支持的无空格运算表达式。
 
 期望输出：
 
