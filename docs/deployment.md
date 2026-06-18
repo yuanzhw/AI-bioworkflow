@@ -98,8 +98,10 @@ ECS 部署使用 commit SHA tag，而不是只依赖 `latest`。这样线上版�
 建议在可信网络环境中生成并核对 `ECS_KNOWN_HOSTS`：
 
 ```bash
-ssh-keyscan -p 22 -H <ecs-public-ip-or-hostname>
+ssh-keyscan -p <ecs-ssh-port> -H <ecs-public-ip-or-hostname>
 ```
+
+`<ecs-ssh-port>` 使用实际的 `ECS_SSH_PORT`，未自定义时为 `22`。
 
 未配置 `ECS_KNOWN_HOSTS` 时，workflow 会用带超时的 `ssh-keyscan` 动态生成 `known_hosts`。这能让自动部署跑起来，但安全性弱于固定 host key。
 
@@ -127,7 +129,7 @@ ssh-keyscan -p 22 -H <ecs-public-ip-or-hostname>
 | --- | --- | --- |
 | `.env.deploy` | `deploy/app/env.deploy.example` | ECS 固定配置，如域名、端口、Caddy 镜像 |
 | `.env.prod` | `deploy/app/env.prod.example` | API 运行时配置和密钥 |
-| `.env.images` | CI 自动生成，或从 `env.images.example` 复制 | 当前运行的 API/Web 镜像 |
+| `.env.images` | CI 自动生成，或从 `deploy/app/env.images.example` 复制 | 当前运行的 API/Web 镜像 |
 | `.env.images.rollback` | 部署脚本自动备份 | 上一版镜像配置，用于失败自动回滚或手动恢复 |
 
 这些真实环境文件已在 `.gitignore` 中忽略。不要提交 `.env.prod`、`.env.deploy`、`.env.images`、私钥、token 或 API key。
