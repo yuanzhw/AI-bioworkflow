@@ -10,6 +10,7 @@ from src.services.workflow_service import (
     compile_structured_workflow,
     plan_and_compile_workflow,
 )
+from src.nl_planner import PlannerJsonError
 
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
@@ -327,6 +328,16 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertIn("RNASeqDEG", result.planner_raw_response or "")
         self.assertIn("workflow RNASeqDEG", result.wdl)
         self.assertEqual(len(fake_llm.prompts), 1)
+
+    def test_plan_and_compile_workflow_preserves_planner_error_classification(self):
+        fake_llm = FakePlannerLlm("not json")
+
+        with self.assertRaisesRegex(PlannerJsonError, "does not contain a JSON object"):
+            plan_and_compile_workflow(
+                "Run bulk RNA-seq differential expression.",
+                llm=fake_llm,
+                check=False,
+            )
 
     def test_result_to_dict_exposes_json_ready_service_fields(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")

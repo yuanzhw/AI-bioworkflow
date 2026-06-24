@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import operator
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal
 
 from typing_extensions import Annotated, TypedDict
-
-if TYPE_CHECKING:
-    from src.services.workflow_service import WorkflowCompilationResult
 
 
 FailureStage = Literal["orchestration", "compiler"]
@@ -23,7 +20,7 @@ class OrchestrationState(TypedDict):
     plan: dict[str, Any] | None
     planner_prompt: str | None
     planner_raw_response: str | None
-    compiler_result: WorkflowCompilationResult | None
+    compiler_result: Any | None
     errors: Annotated[list[str], operator.add]
     events: Annotated[list[dict[str, Any]], operator.add]
 

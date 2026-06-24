@@ -95,16 +95,22 @@ Web 产品化遵循以下目标：
 
 ## 当前端到端调用链路与编译子图
 
-当前自然语言 Planner 尚未注册为 LangGraph 节点。`main.py` 在图外先调用 `src/nl_planner.py` 将自然语言需求转换为 Recipe Tool Plan，再将结构化 plan 提交给 LangGraph。`src/graph.py` 当前注册的是面向结构化输入的 **Compiler Graph**，而不是完整的自然语言编排图。
+当前自然语言服务入口已具备 P1 Orchestration Graph 外壳。`plan_and_compile_workflow` 会构造 `OrchestrationState`，运行 `src.orchestration.graph`，先通过 Planner node 生成 Recipe Tool Plan，再由上层 compiler delegate node 调用下层 **Compiler Graph**。`src/graph.py` 仍然是面向结构化输入的 Compiler Graph，结构化调试入口继续绕过自然语言编排层。
 
 ### 当前端到端调用链路
 
 ```text
 自然语言请求
   ↓
-main.py -> nl_planner          # 图外 LLM 调用，生成 Recipe Tool Plan
+main.py -> workflow_service.plan_and_compile_workflow
+  ↓
+Orchestration Graph
+  ↓
+natural_language_planner       # 生成 Recipe Tool Plan 和 planner trace
   ↓
 Recipe Tool Plan
+  ↓
+compiler_graph delegate
   ↓
 Compiler Graph
 

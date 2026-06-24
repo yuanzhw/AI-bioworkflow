@@ -179,7 +179,7 @@ CLI --input / API POST /api/compile / tests
 
 目标：第一版上层图只负责编排 Planner 与 Compiler Graph。
 
-建议节点：
+已落地节点（`src/orchestration/graph.py`）：
 
 ```text
 START
@@ -194,11 +194,14 @@ START
 - Compiler Graph 失败时保留下层 diagnostics，不由上层图直接修复。
 - `check=False` 时仍允许跳过 WDL syntax validation，但 Analyzer 和 Renderer 边界不变。
 
-验收：
+已落地行为：
 
-- 自然语言入口实际调用 Orchestration Graph。
-- 下层 Compiler Graph 仍可独立测试和调用。
-- 不引入 P2+ 的 Reviewer 或其他 Agent 占位逻辑。
+- `orchestration_graph` 组合 `natural_language_planner -> compiler_graph`。
+- `plan_and_compile_workflow` 已通过 Orchestration Graph 执行自然语言规划编译。
+- Planner 失败时通过条件路由停止，不进入 Compiler Graph。
+- Compiler Graph 失败时保留 `WorkflowCompilationResult` diagnostics，上层不做额外修复。
+- 下层 Compiler Graph 仍可通过 `compile_structured_workflow` 独立测试和调用。
+- 未引入 P2+ 的 Reviewer 或其他 Agent 占位逻辑。
 
 ### P1.5 Service 层入口
 
@@ -392,17 +395,17 @@ run.completed
 - [x] `agent` 兼容别名仍可用于旧调用，或有明确迁移说明。
 - [x] Orchestration State 不污染 `WorkflowState`。
 - [x] Planner node 只产出 Recipe Tool Plan 和 trace，不产出最终 WDL。
-- [ ] Orchestration Graph 实现 `natural_language_planner -> compiler_graph`。
-- [ ] 自然语言入口调用 Orchestration Graph。
-- [ ] `--input`、测试入口和 `/api/compile` 直接调用 Compiler Graph。
-- [ ] 结构化入口在没有 `DEEPSEEK_API_KEY` 时可运行。
-- [ ] Planner 失败不会进入 Compiler Graph。
-- [ ] Compiler Graph 失败保留 Analyzer/Checker diagnostics。
+- [x] Orchestration Graph 实现 `natural_language_planner -> compiler_graph`。
+- [x] 自然语言入口调用 Orchestration Graph。
+- [x] `--input`、测试入口和 `/api/compile` 直接调用 Compiler Graph。
+- [x] 结构化入口在没有 `DEEPSEEK_API_KEY` 时可运行。
+- [x] Planner 失败不会进入 Compiler Graph。
+- [x] Compiler Graph 失败保留 Analyzer/Checker diagnostics。
 - [ ] Planner 事件和 plan artifact 可被 run history 或 SSE 回放。
 - [ ] CLI stdout/stderr 契约保持不变。
 - [ ] API route tests 覆盖 `/api/runs` 和 `/api/compile` 的分层差异。
-- [ ] `docs/test-cases.md` 在测试覆盖意图变化时已同步更新。
-- [ ] 相关单元测试通过。
+- [x] `docs/test-cases.md` 在测试覆盖意图变化时已同步更新。
+- [x] 相关单元测试通过。
 
 ## 后续衔接
 
