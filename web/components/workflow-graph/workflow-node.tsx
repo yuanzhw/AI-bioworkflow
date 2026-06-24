@@ -53,6 +53,16 @@ const statusClassNames: Record<WorkflowGraphNodeStatus, string> = {
   unavailable: "border-muted-foreground/20 text-muted-foreground",
 };
 
+function formatEventCount(eventCount: number): string {
+  if (eventCount === 0) {
+    return "No events";
+  }
+  if (eventCount === 1) {
+    return "1 event";
+  }
+  return `${eventCount} events`;
+}
+
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowGraphReactNode>) {
   const { graphNode, status, eventCount } = data;
   const Icon = kindIcons[graphNode.kind];
@@ -92,7 +102,7 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowGraphReactNod
       {!isScatter ? (
         <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
           <Layers3 className="h-3.5 w-3.5" />
-          {eventCount ? `${eventCount} event` : "No event"}
+          {formatEventCount(eventCount)}
         </div>
       ) : (
         <div className="mt-3 text-xs leading-5 text-muted-foreground">per-sample group</div>

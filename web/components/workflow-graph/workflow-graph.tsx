@@ -100,7 +100,10 @@ export function WorkflowGraphPanel({
     [graph.nodes],
   );
   const nodeViews = useMemo(() => buildNodeViews(graph, events, status), [events, graph, status]);
-  const { edges, nodes } = useMemo(() => toReactFlowElements(graph, nodeViews), [graph, nodeViews]);
+  const { edges, nodes } = useMemo(
+    () => toReactFlowElements(graph, nodeViews, selectedNodeId),
+    [graph, nodeViews, selectedNodeId],
+  );
 
   useEffect(() => {
     if (!graph.nodes.length) {
@@ -275,6 +278,7 @@ function buildNodeViews(
 function toReactFlowElements(
   graph: WorkflowGraph,
   nodeViews: Map<string, GraphNodeView>,
+  selectedNodeId: string | null,
 ): { edges: Edge[]; nodes: WorkflowGraphReactNode[] } {
   const layouts = calculateNodeLayouts(graph);
   const nodes = graph.nodes.map((graphNode): PositionedNode => {
@@ -301,7 +305,7 @@ function toReactFlowElements(
       className: cn(graphNode.kind === "scatter" && "workflow-graph-scatter-node"),
       extent: graphNode.parentId ? "parent" : undefined,
       parentId: graphNode.parentId ?? undefined,
-      selected: false,
+      selected: graphNode.id === selectedNodeId,
       style: {
         height: layout.height,
         width: layout.width,

@@ -79,6 +79,11 @@ export function NodeDetailPanel({
   }
 
   const metadata = node.metadata;
+  const unresolvedReferences = [
+    ...(metadata.call?.unresolvedReferences ?? []),
+    ...(metadata.scatter?.unresolvedReferences ?? []),
+    ...(metadata.workflowOutput?.unresolvedReferences ?? []),
+  ];
 
   return (
     <aside className="rounded-md border bg-white p-5">
@@ -159,21 +164,24 @@ export function NodeDetailPanel({
         </section>
       ) : null}
 
-      {node.metadata.call?.unresolvedReferences.length ||
-      node.metadata.scatter?.unresolvedReferences.length ||
-      node.metadata.workflowOutput?.unresolvedReferences.length ? (
+      {unresolvedReferences.length ? (
         <section className="mt-5 rounded-md border border-destructive/40 bg-background p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
             <AlertCircle className="h-4 w-4" />
             Unresolved references
           </div>
           <ul className="mt-3 grid gap-2 text-xs leading-5 text-muted-foreground">
-            {[
-              ...(node.metadata.call?.unresolvedReferences ?? []),
-              ...(node.metadata.scatter?.unresolvedReferences ?? []),
-              ...(node.metadata.workflowOutput?.unresolvedReferences ?? []),
-            ].map((reference) => (
-              <li key={`${reference.expression}:${reference.reason}`} className="break-words">
+            {unresolvedReferences.map((reference, index) => (
+              <li
+                key={[
+                  reference.ownerId,
+                  reference.reference ?? "expression",
+                  reference.expression,
+                  reference.reason,
+                  index,
+                ].join(":")}
+                className="break-words"
+              >
                 {reference.reason}: {reference.expression}
               </li>
             ))}
