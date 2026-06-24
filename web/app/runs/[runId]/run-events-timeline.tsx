@@ -12,29 +12,14 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { buildRunEventsUrl } from "@/lib/api";
-import type { JsonObject, RunEvent, RunEventType, RunStatus } from "@/lib/types";
-
-const eventTypes: RunEventType[] = [
-  "run.created",
-  "node.started",
-  "node.completed",
-  "node.failed",
-  "artifact.updated",
-  "repair.applied",
-  "validation.completed",
-  "run.completed",
-];
-
-const eventLabels: Record<RunEventType, string> = {
-  "run.created": "Run 创建",
-  "node.started": "节点开始",
-  "node.completed": "节点完成",
-  "node.failed": "节点失败",
-  "artifact.updated": "产物更新",
-  "repair.applied": "修复应用",
-  "validation.completed": "校验完成",
-  "run.completed": "Run 完成",
-};
+import {
+  isTerminalRunStatus,
+  mergeRunEvent,
+  parseRunEventMessage,
+  runEventLabels,
+  runEventTypes,
+} from "@/lib/run-events";
+import type { RunEvent, RunStatus } from "@/lib/types";
 
 const eventDateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
   month: "2-digit",
@@ -43,10 +28,6 @@ const eventDateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   second: "2-digit",
 });
-
-function isTerminalRunStatus(status: RunStatus): boolean {
-  return status === "succeeded" || status === "failed";
-}
 
 function getEventIcon(event: RunEvent) {
   if (event.type === "node.failed" || event.payload.status === "failed") {
@@ -67,60 +48,6 @@ function getEventIcon(event: RunEvent) {
 
 function formatDateTime(value: string): string {
   return eventDateTimeFormat.format(new Date(value));
-}
-
-function mergeEvent(events: RunEvent[], nextEvent: RunEvent): RunEvent[] {
-  const bySequence = new Map(events.map((event) => [event.sequence, event]));
-  bySequence.set(nextEvent.sequence, nextEvent);
-  return Array.from(bySequence.values()).sort((left, right) => left.sequence - right.sequence);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isRunEventType(value: unknown): value is RunEventType {
-  return typeof value === "string" && eventTypes.includes(value as RunEventType);
-}
-
-function parseRunEvent(message: MessageEvent<string>): RunEvent | null {
-  try {
-    const parsed: unknown = JSON.parse(message.data);
-    if (!isRecord(parsed)) {
-      return null;
-    }
-
-    const { event_id, node, payload, run_id, sequence, summary, timestamp, type } = parsed;
-    if (
-      typeof event_id !== "string" ||
-      typeof run_id !== "string" ||
-      typeof sequence !== "number" ||
-      !Number.isInteger(sequence) ||
-      sequence < 1 ||
-      !isRunEventType(type) ||
-      typeof timestamp !== "string" ||
-      Number.isNaN(Date.parse(timestamp)) ||
-      typeof summary !== "string" ||
-      !(node === null || typeof node === "string") ||
-      !isRecord(payload)
-    ) {
-      return null;
-    }
-
-    return {
-      event_id,
-      run_id,
-      sequence,
-      type,
-      timestamp,
-      summary,
-      node,
-      payload: payload as JsonObject,
-    };
-  } catch (error) {
-    console.error("Failed to parse run event.", error);
-    return null;
-  }
 }
 
 export function RunEventsTimeline({
@@ -154,13 +81,13 @@ export function RunEventsTimeline({
       }
     };
 
-    const handlers = eventTypes.map((eventType) => {
+    const handlers = runEventTypes.map((eventType) => {
       const handler = (message: MessageEvent<string>) => {
-        const parsed = parseRunEvent(message);
+        const parsed = parseRunEventMessage(message);
         if (!parsed) {
           return;
         }
-        setEvents((currentEvents) => mergeEvent(currentEvents, parsed));
+        setEvents((currentEvents) => mergeRunEvent(currentEvents, parsed));
         if (parsed.type === "run.completed") {
           setIsConnected(false);
           eventSource.close();
@@ -211,7 +138,7 @@ export function RunEventsTimeline({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">#{event.sequence}</Badge>
-                  <span className="font-medium">{eventLabels[event.type]}</span>
+                  <span className="font-medium">{runEventLabels[event.type]}</span>
                   {event.node ? <Badge variant="secondary">{event.node}</Badge> : null}
                 </div>
                 <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">
