@@ -38,7 +38,7 @@ Approved Catalog Retriever
 它的职责是：
 
 - 从项目已批准的 recipe/tool catalog 中召回候选 recipe 和 tools。
-- 为每个候选项记录 score、matched terms、matched fields 和 reason。
+- 为每个候选项记录 `score`、`matched_terms`、`matched_fields` 和 `reason`。
 - 将召回结果作为 Planner prompt 的候选上下文。
 - 将召回结果保存为 run artifact，并通过事件流展示。
 
@@ -132,9 +132,9 @@ lexical retriever
 - **Bi-encoder retriever**：用于快速召回 top-K recipe / tools。
 - **Reranker**：用于对 top-K 候选做精排，尤其区分功能相近工具。
 
-训练后的实现必须保持与第一版 retriever 相同的外部契约：输出仍包含
-`score`、`matched_fields`、`reason`、`fallback_used`、`fallback_reason`
-和 `trust_status`。
+训练后的实现必须保持与第一版 retriever 相同的外部契约：recipe 和 tool 结果
+仍包含 `score`、`matched_terms`、`matched_fields` 和 `reason`，顶层结果仍包含
+`fallback_used` 与 `fallback_reason`，tool 结果仍包含 `trust_status`。
 完整 Catalog validation 仍然是准入边界，训练模型不能直接准入未知工具、
 替换镜像或绕过 Analyzer / Renderer / Checker。
 
@@ -261,6 +261,8 @@ User request
 - 小写化。
 - 按非字母数字字符切分。
 - 保留长度大于 1 的 token。
+- 对连续 CJK（中文、日文、韩文）字符生成确定性的单字 token 和重叠 2-gram，
+  例如 `差异表达` 生成 `差`、`异`、`表`、`达`、`差异`、`异表`、`表达`。
 - 对常见变体做轻量规范化，例如 `rna-seq`、`rnaseq`、`rna seq`。
 
 建议权重：
@@ -292,7 +294,7 @@ User request
 当前 Planner prompt 包含完整 catalog context。接入 retriever 后：
 
 1. `create_natural_language_plan(...)` 加载完整 Tool Catalog 和 Recipe Catalog。
-2. 调用 `retrieve_catalog_context(request, catalogs, top_k=...)`。
+2. 调用 `retrieve_catalog_context(query, tool_catalog, recipe_catalog, top_k_recipes, top_k_tools)`。
 3. Prompt 使用 retrieved context。
 4. LLM 输出 Recipe Tool Plan。
 5. 仍使用完整 recipe/tool catalog 执行 schema、resolver 和 analyzer 校验。
@@ -334,8 +336,8 @@ artifact.updated catalog_retrieval
 - Query。
 - Top recipe。
 - Top tools。
-- matched terms。
-- trust status。
+- `matched_terms`。
+- `trust_status`。
 - fallback 是否发生。
 - 提示该检索只来自 approved catalog。
 
@@ -410,7 +412,7 @@ docs/test-cases.md
 交付：
 
 - 工作台 timeline 增加 Catalog Retrieval 阶段。
-- run 卡片展示 top recipe/tools 和 matched terms。
+- run 卡片展示 top recipe/tools 和 `matched_terms`。
 - 文案明确“仅来自 approved catalog”。
 
 测试：
@@ -438,13 +440,13 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 ## 验收清单
 
 - [ ] 检索范围只包含 approved local catalog。
-- [ ] 检索结果包含 score、matched terms、matched fields 和 reason。
+- [ ] 检索结果包含 `score`、`matched_terms`、`matched_fields` 和 `reason`。
 - [ ] Planner prompt 使用 retrieved context。
 - [ ] 完整 Catalog validation 仍然执行。
 - [ ] 结构化入口不依赖 retriever。
 - [ ] 自然语言 run 记录 retriever 事件。
 - [ ] Run snapshot 暴露 retrieval artifact。
-- [ ] 前端能展示候选 recipe/tools 和 trust status。
+- [ ] 前端能展示候选 recipe/tools 和 `trust_status`。
 - [ ] 单测覆盖成功、fallback 和错误边界。
 - [ ] 文档说明内部 RAG 与外部工具发现的边界。
 
