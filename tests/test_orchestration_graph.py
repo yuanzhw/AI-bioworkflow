@@ -194,6 +194,33 @@ class OrchestrationGraphTests(unittest.TestCase):
             ["missing required workflow input 'sample_groups'"],
         )
 
+    def test_compiler_exception_errors_include_exception_type(self):
+        class EmptyCompilerError(Exception):
+            def __str__(self):
+                return ""
+
+        plan = sample_plan()
+
+        def compiler(parsed_json, check):
+            raise EmptyCompilerError()
+
+        graph = build_orchestration_graph(
+            planner_node=planner_success_node(plan),
+            compiler_node=make_compile_planned_workflow_node(compiler=compiler),
+        )
+        state = build_initial_orchestration_state(
+            "Run RNA-seq DEG.",
+            planner_model=DEFAULT_PLANNER_MODEL,
+        )
+
+        final_state = graph.invoke(state)
+
+        self.assertEqual(final_state["compiler_result"], None)
+        self.assertEqual(final_state["errors"], ["EmptyCompilerError"])
+        self.assertEqual(final_state["events"][-1]["type"], "node.failed")
+        self.assertEqual(final_state["events"][-1]["payload"]["error_type"], "EmptyCompilerError")
+        self.assertEqual(final_state["events"][-1]["payload"]["error"], "EmptyCompilerError")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,9 +50,10 @@ def make_compile_planned_workflow_node(
             compiler_fn = compiler or _default_structured_compiler
             compiler_result = compiler_fn(plan, state["check"])
         except Exception as exc:
+            error = _exception_message(exc)
             return {
                 "compiler_result": None,
-                "errors": [str(exc)],
+                "errors": [error],
                 "events": [
                     started_event,
                     _compiler_event(
@@ -60,7 +61,7 @@ def make_compile_planned_workflow_node(
                         "Compiler graph failed unexpectedly.",
                         {
                             "error_type": exc.__class__.__name__,
-                            "error": str(exc),
+                            "error": error,
                         },
                     ),
                 ],
@@ -100,6 +101,12 @@ def _compiler_result_payload(result: "WorkflowCompilationResult") -> dict[str, A
     if result.validation_message:
         payload["validation_message"] = result.validation_message
     return payload
+
+
+def _exception_message(exc: Exception) -> str:
+    error_type = exc.__class__.__name__
+    message = str(exc)
+    return f"{error_type}: {message}" if message else error_type
 
 
 def _compiler_event(

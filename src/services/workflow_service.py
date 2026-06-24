@@ -112,7 +112,7 @@ def plan_and_compile_workflow(
         raise RuntimeError("orchestration graph did not produce a compiler result")
 
     return replace(
-        compiler_result,
+        cast(WorkflowCompilationResult, compiler_result),
         planner_prompt=orchestration_state["planner_prompt"],
         planner_raw_response=orchestration_state["planner_raw_response"],
     )
@@ -258,8 +258,12 @@ def _raise_orchestration_error(state: OrchestrationState) -> None:
         "PlannerJsonError": PlannerJsonError,
         "PlannerSchemaError": PlannerSchemaError,
         "PlannerCatalogError": PlannerCatalogError,
-    }.get(error_type, NaturalLanguagePlanningError)
-    raise exception_type(message)
+    }.get(error_type)
+    if exception_type is not None:
+        raise exception_type(message)
+    if error_type:
+        raise RuntimeError(f"{error_type}: {message}")
+    raise NaturalLanguagePlanningError(message)
 
 
 def _last_failed_event(state: OrchestrationState) -> dict[str, Any] | None:

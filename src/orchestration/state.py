@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import operator
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from typing_extensions import Annotated, TypedDict
 
 
 FailureStage = Literal["orchestration", "compiler"]
+
+
+class CompilerResultLike(Protocol):
+    """Minimal compiler result surface consumed by orchestration helpers."""
+
+    succeeded: bool
 
 
 class OrchestrationState(TypedDict):
@@ -20,7 +26,7 @@ class OrchestrationState(TypedDict):
     plan: dict[str, Any] | None
     planner_prompt: str | None
     planner_raw_response: str | None
-    compiler_result: Any | None
+    compiler_result: CompilerResultLike | None
     errors: Annotated[list[str], operator.add]
     events: Annotated[list[dict[str, Any]], operator.add]
 
