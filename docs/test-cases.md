@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .venv\Scripts\python.exe -m unittest discover -v
-Ran 153 tests
+Ran 161 tests
 OK (skipped=2)
 ```
 
@@ -1860,6 +1860,100 @@ Compiler Graph，也不产出 Workflow IR 或 WDL。
 
 - Planner catalog/resolver 错误可被上层 graph 识别为 planner-stage 失败。
 
+## `tests/test_orchestration_graph.py`
+
+该文件验证 P1 Orchestration Graph 外壳。该图只负责编排 Planner Node
+和下层 Compiler Graph delegate，不引入 Reviewer、Retriever 或其他 P2+
+Agent 占位逻辑。
+
+### `test_default_orchestration_graph_is_invokable`
+
+输入：
+
+- 默认 `orchestration_graph`。
+
+执行：
+
+- 检查默认图是否暴露 `invoke` callable。
+
+期望输出：
+
+- 默认 Orchestration Graph 可被 LangGraph 运行。
+
+覆盖点：
+
+- P1.4 默认图已完成编译，可作为自然语言入口的上层图外壳。
+
+### `test_orchestration_graph_runs_planner_then_compiler`
+
+输入：
+
+- fake planner node 返回 Recipe Tool Plan 和 planner trace。
+- 注入的 compiler delegate 返回成功 `WorkflowCompilationResult`。
+- `check=False`。
+
+执行：
+
+- 调用注入节点后的 Orchestration Graph。
+
+期望输出：
+
+- compiler delegate 只被调用一次。
+- delegate 收到 planner 产出的 plan 和 `check=False`。
+- final state 保留 `plan`、`planner_prompt` 和 `compiler_result`。
+- `orchestration_succeeded(...) == True`。
+- events 顺序为 Planner started/completed/artifact.updated，随后 Compiler Graph started/completed。
+
+覆盖点：
+
+- 上层图按 `natural_language_planner -> compiler_graph` 顺序运行。
+- `check` 开关能从 Orchestration State 传给下层 Compiler Graph。
+
+### `test_orchestration_graph_stops_after_planner_failure`
+
+输入：
+
+- fake planner node 返回 planner 错误和 `node.failed` event。
+- compiler node 若被调用会抛出断言错误。
+
+执行：
+
+- 调用注入节点后的 Orchestration Graph。
+
+期望输出：
+
+- `compiler_result is None`。
+- `errors` 保留 planner 错误。
+- `orchestration_failure_stage(...) == "orchestration"`。
+- events 中只有 planner 事件。
+
+覆盖点：
+
+- Planner 失败时条件路由直接结束，不进入 Compiler Graph。
+
+### `test_orchestration_graph_preserves_compiler_failure_diagnostics`
+
+输入：
+
+- fake planner node 返回 Recipe Tool Plan。
+- 注入的 compiler delegate 返回 `succeeded=False` 和 Analyzer 诊断。
+
+执行：
+
+- 调用注入节点后的 Orchestration Graph。
+
+期望输出：
+
+- 上层 `errors == []`。
+- `orchestration_failure_stage(...) == "compiler"`。
+- `compiler_result.analysis_errors` 保留下层诊断。
+- 最后一个 event 是 `compiler_graph` 的 `node.failed`。
+
+覆盖点：
+
+- Compiler Graph 失败不由上层图修复，也不混入 Planner/orchestration 错误。
+- 下层 Analyzer/Checker diagnostics 仍通过 `WorkflowCompilationResult` 返回。
+
 ## `tests/test_workflow_service.py`
 
 该文件验证 W0 workflow application service。服务层用于让 CLI 和未来 FastAPI 复用同一套编译入口，避免 API 层复制 `main.py` 中的业务逻辑。
@@ -1981,9 +2075,31 @@ Compiler Graph，也不产出 Workflow IR 或 WDL。
 
 覆盖点：
 
-- 自然语言入口先生成 Recipe Tool Plan，再进入确定性编译链路。
+- 自然语言入口通过 Orchestration Graph 先生成 Recipe Tool Plan，再进入确定性编译链路。
 - LLM 仍不直接生成最终 WDL。
 - planner observability 信息被 service 结果保留。
+
+### `test_plan_and_compile_workflow_preserves_planner_error_classification`
+
+输入：
+
+- 用户请求：`Run bulk RNA-seq differential expression.`
+- `FakePlannerLlm` 返回非 JSON 文本。
+- `check=False`
+
+执行：
+
+- 调用 `plan_and_compile_workflow(..., llm=fake_llm, check=False)`。
+
+期望输出：
+
+- 抛出 `PlannerJsonError`。
+- 错误消息包含 `does not contain a JSON object`。
+
+覆盖点：
+
+- 自然语言 service 入口虽然改为通过 Orchestration Graph 执行，但仍保留既有 Planner 错误分类。
+- CLI/API 上层不需要为 P1.4 改动适配新的异常类型。
 
 ### `test_result_to_dict_exposes_json_ready_service_fields`
 

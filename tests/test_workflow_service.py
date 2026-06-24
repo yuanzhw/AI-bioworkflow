@@ -5,11 +5,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.services.workflow_service import (
+    _raise_orchestration_error,
     _validate_with_repair,
     build_initial_state,
     compile_structured_workflow,
     plan_and_compile_workflow,
 )
+from src.nl_planner import PlannerJsonError
+from src.orchestration.state import build_initial_orchestration_state
 
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
@@ -327,6 +330,34 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertIn("RNASeqDEG", result.planner_raw_response or "")
         self.assertIn("workflow RNASeqDEG", result.wdl)
         self.assertEqual(len(fake_llm.prompts), 1)
+
+    def test_plan_and_compile_workflow_preserves_planner_error_classification(self):
+        fake_llm = FakePlannerLlm("not json")
+
+        with self.assertRaisesRegex(PlannerJsonError, "does not contain a JSON object"):
+            plan_and_compile_workflow(
+                "Run bulk RNA-seq differential expression.",
+                llm=fake_llm,
+                check=False,
+            )
+
+    def test_orchestration_error_unknown_type_is_runtime_error(self):
+        state = build_initial_orchestration_state(
+            "Run bulk RNA-seq differential expression.",
+            planner_model="planner-model",
+        )
+        state["errors"].append("planner transport unavailable")
+        state["events"].append(
+            {
+                "type": "node.failed",
+                "node": "planner",
+                "summary": "Planner failed.",
+                "payload": {"error_type": "RuntimeError"},
+            }
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "RuntimeError: planner transport unavailable"):
+            _raise_orchestration_error(state)
 
     def test_result_to_dict_exposes_json_ready_service_fields(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")

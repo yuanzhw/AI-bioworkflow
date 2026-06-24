@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 
 from src.nl_planner import DEFAULT_PLANNER_MODEL
 from src.orchestration import (
@@ -117,6 +118,16 @@ class OrchestrationStateTests(unittest.TestCase):
             planner_prompt="planner prompt",
             planner_raw_response="{}",
         )
+
+        self.assertTrue(orchestration_succeeded(state))
+        self.assertIsNone(orchestration_failure_stage(state))
+
+    def test_orchestration_helpers_use_minimal_compiler_result_surface(self):
+        state = build_initial_orchestration_state(
+            "Run bulk RNA-seq differential expression.",
+            planner_model=DEFAULT_PLANNER_MODEL,
+        )
+        state["compiler_result"] = SimpleNamespace(succeeded=True)
 
         self.assertTrue(orchestration_succeeded(state))
         self.assertIsNone(orchestration_failure_stage(state))

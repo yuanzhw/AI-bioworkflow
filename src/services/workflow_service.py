@@ -1,16 +1,26 @@
 """Workflow planning and compilation service entry points."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, cast
 
 from src.catalog.loader import ToolCatalog
 from src.graph import MAX_REPAIR_ATTEMPTS, compiler_graph
 from src.nodes.checker import checker_node
-from src.nl_planner import DEFAULT_PLANNER_MODEL, PlannerLlm, create_natural_language_plan
+from src.nl_planner import (
+    DEFAULT_PLANNER_MODEL,
+    NaturalLanguagePlanningError,
+    PlannerCatalogError,
+    PlannerJsonError,
+    PlannerLlm,
+    PlannerSchemaError,
+)
 from src.nodes.analyzer import analyzer_node
 from src.nodes.ir_normalizer import ir_normalizer_node
 from src.nodes.renderer import renderer_node
 from src.nodes.repairer import repairer_node
+from src.orchestration.graph import build_orchestration_graph
+from src.orchestration.nodes.planner import make_natural_language_planner_node
+from src.orchestration.state import OrchestrationState, build_initial_orchestration_state
 from src.recipes.loader import RecipeCatalog
 from src.state import WorkflowState
 from src.tools.validator import VALIDATOR_MISSING_MARKER
@@ -77,21 +87,34 @@ def plan_and_compile_workflow(
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
 ) -> WorkflowCompilationResult:
-    """Plan from natural language, then compile the resulting Recipe Tool Plan."""
-    plan_result = create_natural_language_plan(
-        request,
-        model=model,
+    """Plan from natural language through the orchestration graph, then compile."""
+    planner_node = make_natural_language_planner_node(
         llm=llm,
         tool_catalog=tool_catalog,
         recipe_catalog=recipe_catalog,
     )
-    state = _run_compiler(plan_result.plan, check=check)
-    return _result_from_state(
-        state,
-        plan=plan_result.plan,
-        check=check,
-        planner_prompt=plan_result.planner_prompt,
-        planner_raw_response=plan_result.raw_response,
+    graph = build_orchestration_graph(planner_node=planner_node)
+    orchestration_state = cast(
+        OrchestrationState,
+        graph.invoke(
+            build_initial_orchestration_state(
+                request,
+                planner_model=model,
+                check=check,
+            )
+        ),
+    )
+    if orchestration_state["errors"]:
+        _raise_orchestration_error(orchestration_state)
+
+    compiler_result = orchestration_state["compiler_result"]
+    if compiler_result is None:
+        raise RuntimeError("orchestration graph did not produce a compiler result")
+
+    return replace(
+        cast(WorkflowCompilationResult, compiler_result),
+        planner_prompt=orchestration_state["planner_prompt"],
+        planner_raw_response=orchestration_state["planner_raw_response"],
     )
 
 
@@ -221,6 +244,43 @@ def _is_recipe_tool_plan(parsed_json: dict[str, Any]) -> bool:
     if not isinstance(workflow, dict):
         return False
     return "recipe" in workflow and "tool_calls" in workflow
+
+
+def _raise_orchestration_error(state: OrchestrationState) -> None:
+    message = state["errors"][-1] if state["errors"] else "orchestration graph failed"
+    failed_event = _last_failed_event(state)
+    if failed_event and failed_event.get("node") == "compiler_graph":
+        raise RuntimeError(message)
+
+    error_type = _event_error_type(failed_event)
+    exception_type = {
+        "NaturalLanguagePlanningError": NaturalLanguagePlanningError,
+        "PlannerJsonError": PlannerJsonError,
+        "PlannerSchemaError": PlannerSchemaError,
+        "PlannerCatalogError": PlannerCatalogError,
+    }.get(error_type)
+    if exception_type is not None:
+        raise exception_type(message)
+    if error_type:
+        raise RuntimeError(f"{error_type}: {message}")
+    raise NaturalLanguagePlanningError(message)
+
+
+def _last_failed_event(state: OrchestrationState) -> dict[str, Any] | None:
+    for event in reversed(state["events"]):
+        if event.get("type") == "node.failed":
+            return event
+    return None
+
+
+def _event_error_type(event: dict[str, Any] | None) -> str | None:
+    if event is None:
+        return None
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    error_type = payload.get("error_type")
+    return error_type if isinstance(error_type, str) else None
 
 
 def _analyze_with_repair(
