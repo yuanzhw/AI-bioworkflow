@@ -133,7 +133,8 @@ lexical retriever
 - **Reranker**：用于对 top-K 候选做精排，尤其区分功能相近工具。
 
 训练后的实现必须保持与第一版 retriever 相同的外部契约：输出仍包含
-score、matched fields 或可解释 reason、fallback 信息和 trust status。
+`score`、`matched_fields`、`reason`、`fallback_used`、`fallback_reason`
+和 `trust_status`。
 完整 Catalog validation 仍然是准入边界，训练模型不能直接准入未知工具、
 替换镜像或绕过 Analyzer / Renderer / Checker。
 
@@ -246,7 +247,8 @@ User request
       "reason": "Matched differential expression role and tool description."
     }
   ],
-  "fallback_used": false
+  "fallback_used": false,
+  "fallback_reason": null
 }
 ```
 
@@ -283,7 +285,7 @@ User request
 
 - 如果 recipe 召回为空，回退完整 recipe catalog。
 - 如果 tool 召回为空，回退 recipe allowed tools 或完整 tool catalog。
-- fallback 必须记录 `fallback_used: true` 和 reason。
+- fallback 必须记录 `fallback_used: true` 和 `fallback_reason`。
 
 ## Planner 集成
 
