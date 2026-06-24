@@ -84,6 +84,59 @@ Full Catalog validation remains the admission boundary.
 
 这些能力属于后续 `External Retrieval`、`Candidate ToolSpec` 和镜像生命周期路线，不应混入内部 catalog retriever 的 MVP。
 
+## 后期本地训练路线
+
+第一版内部 RAG 不训练模型。当前 catalog 规模仍小，过早引入训练会增加
+依赖、评测和维护成本，也不利于解释检索行为。MVP 的重点应是先实现稳定的
+词法 baseline，并把后续训练所需的数据契约沉淀下来。
+
+推荐演进顺序：
+
+```text
+lexical retriever
+  -> retrieval evaluation set
+  -> BM25 / lightweight embedding baseline
+  -> local bi-encoder retriever
+  -> reranker for top-K candidates
+```
+
+在项目正规化、Catalog 扩大后，可以基于本地数据训练可替换的检索器。可用数据包括：
+
+- 用户自然语言请求。
+- 最终通过验证的 Recipe Tool Plan。
+- request 到 recipe / tool 的成功映射。
+- Architect 或人工标注的 step roles。
+- Retriever 召回候选与最终 Planner 选择之间的差异。
+- 失败 run 中的漏召回、错召回和人工修正记录。
+- Catalog metadata，例如 aliases、description、inputs、outputs 和 recipe steps。
+
+训练前应优先建设评测集，而不是直接训练模型。评测样本建议显式记录：
+
+```json
+{
+  "query": "bulk RNA-seq differential expression",
+  "expected_recipe": "rnaseq_differential_expression",
+  "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+  "expected_roles": {
+    "read_quality_control": ["fastp"],
+    "expression_quantification": ["salmon"],
+    "transcript_to_gene_count_summary": ["tximport"],
+    "differential_expression": ["deseq2"],
+    "quality_control_summary": ["multiqc"]
+  }
+}
+```
+
+当工具数达到几十到上百、并且有足够 validated plans 与人工标注后，再考虑训练：
+
+- **Bi-encoder retriever**：用于快速召回 top-K recipe / tools。
+- **Reranker**：用于对 top-K 候选做精排，尤其区分功能相近工具。
+
+训练后的实现必须保持与第一版 retriever 相同的外部契约：输出仍包含
+score、matched fields 或可解释 reason、fallback 信息和 trust status。
+完整 Catalog validation 仍然是准入边界，训练模型不能直接准入未知工具、
+替换镜像或绕过 Analyzer / Renderer / Checker。
+
 ## 架构位置
 
 目标链路：
