@@ -95,7 +95,7 @@ Web 产品化遵循以下目标：
 
 ## 当前端到端调用链路与编译子图
 
-当前自然语言服务入口已具备 P1 Orchestration Graph 外壳。`plan_and_compile_workflow` 会构造 `OrchestrationState`，运行 `src.orchestration.graph`，先通过 Planner node 生成 Recipe Tool Plan，再由上层 compiler delegate node 调用下层 **Compiler Graph**。`src/graph.py` 仍然是面向结构化输入的 Compiler Graph，结构化调试入口继续绕过自然语言编排层。
+当前自然语言服务入口已具备 P1 Orchestration Graph 外壳。`plan_and_compile_workflow` 会构造 `OrchestrationState`，运行 `src.orchestration.graph`，先通过 Planner node 生成 Recipe Tool Plan，再由上层 compiler delegate node 调用下层 **Compiler Graph**。`src/graph.py` 仍然是面向结构化输入的 Compiler Graph，结构化调试入口继续绕过自然语言编排层。Run service 的自然语言执行入口也通过 `plan_and_compile_workflow` 获取 planner、orchestration 和 compiler 事件，避免在 API run 层重复手写 Planner 到 Compiler 的编排。
 
 ### 当前端到端调用链路
 

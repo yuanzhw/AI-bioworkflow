@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, Mapping, TYPE_CHECKING
 
 from src.orchestration.state import OrchestrationState
 
@@ -11,6 +11,10 @@ if TYPE_CHECKING:
 
 
 StructuredCompiler = Callable[[dict[str, Any], bool], "WorkflowCompilationResult"]
+OrchestrationEventCallback = Callable[
+    [str, str | None, str, Mapping[str, Any] | None, dict[str, Any] | None],
+    None,
+]
 CompilerNode = Callable[[OrchestrationState], dict[str, Any]]
 
 
@@ -21,6 +25,7 @@ def compile_planned_workflow_node(state: OrchestrationState) -> dict[str, Any]:
 
 def make_compile_planned_workflow_node(
     compiler: StructuredCompiler | None = None,
+    event_callback: OrchestrationEventCallback | None = None,
 ) -> CompilerNode:
     """Create a compiler delegation node, optionally injecting the compiler."""
 
@@ -30,10 +35,11 @@ def make_compile_planned_workflow_node(
             "Compiler graph started.",
             {"check": state["check"]},
         )
+        _emit_compiler_event_callback(event_callback, started_event, state)
         plan = state["plan"]
         if plan is None:
             error = "Planner did not produce a Recipe Tool Plan."
-            return {
+            update: dict[str, Any] = {
                 "compiler_result": None,
                 "errors": [error],
                 "events": [
@@ -45,13 +51,15 @@ def make_compile_planned_workflow_node(
                     ),
                 ],
             }
+            _emit_compiler_event_callback(event_callback, update["events"][1], update)
+            return update
 
         try:
             compiler_fn = compiler or _default_structured_compiler
             compiler_result = compiler_fn(plan, state["check"])
         except Exception as exc:
             error = _exception_message(exc)
-            return {
+            update = {
                 "compiler_result": None,
                 "errors": [error],
                 "events": [
@@ -66,6 +74,8 @@ def make_compile_planned_workflow_node(
                     ),
                 ],
             }
+            _emit_compiler_event_callback(event_callback, update["events"][1], update)
+            return update
 
         if compiler_result.succeeded:
             event_type = "node.completed"
@@ -74,13 +84,15 @@ def make_compile_planned_workflow_node(
             event_type = "node.failed"
             summary = "Compiler graph completed with diagnostics."
 
-        return {
+        update = {
             "compiler_result": compiler_result,
             "events": [
                 started_event,
                 _compiler_event(event_type, summary, _compiler_result_payload(compiler_result)),
             ],
         }
+        _emit_compiler_event_callback(event_callback, update["events"][1], update)
+        return update
 
     return node
 
@@ -122,3 +134,19 @@ def _compiler_event(
     if payload is not None:
         event["payload"] = payload
     return event
+
+
+def _emit_compiler_event_callback(
+    event_callback: OrchestrationEventCallback | None,
+    event: dict[str, Any],
+    state: Mapping[str, Any] | None,
+) -> None:
+    if event_callback is None:
+        return
+    event_callback(
+        event["type"],
+        event.get("node"),
+        event["summary"],
+        state,
+        event.get("payload"),
+    )

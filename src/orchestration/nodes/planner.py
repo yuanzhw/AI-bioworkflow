@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from src.catalog.loader import ToolCatalog
 from src.nl_planner import (
@@ -14,6 +14,10 @@ from src.orchestration.state import OrchestrationState
 from src.recipes.loader import RecipeCatalog
 
 
+OrchestrationEventCallback = Callable[
+    [str, str | None, str, Mapping[str, Any] | None, dict[str, Any] | None],
+    None,
+]
 PlannerNode = Callable[[OrchestrationState], dict[str, Any]]
 
 
@@ -27,6 +31,7 @@ def make_natural_language_planner_node(
     llm: PlannerLlm | None = None,
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
+    event_callback: OrchestrationEventCallback | None = None,
 ) -> PlannerNode:
     """Create a planner node, optionally injecting dependencies for tests."""
 
@@ -36,6 +41,7 @@ def make_natural_language_planner_node(
             "Natural-language planner started.",
             {"model": state["planner_model"]},
         )
+        _emit_planner_event(event_callback, started_event, state)
 
         try:
             plan_result = create_natural_language_plan(
@@ -46,7 +52,7 @@ def make_natural_language_planner_node(
                 recipe_catalog=recipe_catalog,
             )
         except NaturalLanguagePlanningError as exc:
-            return {
+            update: dict[str, Any] = {
                 "plan": None,
                 "planner_prompt": None,
                 "planner_raw_response": None,
@@ -63,8 +69,10 @@ def make_natural_language_planner_node(
                     ),
                 ],
             }
+            _emit_planner_events(event_callback, update["events"][1:], update)
+            return update
         except Exception as exc:
-            return {
+            update = {
                 "plan": None,
                 "planner_prompt": None,
                 "planner_raw_response": None,
@@ -81,8 +89,10 @@ def make_natural_language_planner_node(
                     ),
                 ],
             }
+            _emit_planner_events(event_callback, update["events"][1:], update)
+            return update
 
-        return {
+        update = {
             "plan": plan_result.plan,
             "planner_prompt": plan_result.planner_prompt,
             "planner_raw_response": plan_result.raw_response,
@@ -97,6 +107,8 @@ def make_natural_language_planner_node(
                 ),
             ],
         }
+        _emit_planner_events(event_callback, update["events"][1:], update)
+        return update
 
     return node
 
@@ -114,3 +126,28 @@ def _planner_event(
     if payload is not None:
         event["payload"] = payload
     return event
+
+
+def _emit_planner_events(
+    event_callback: OrchestrationEventCallback | None,
+    events: list[dict[str, Any]],
+    state: Mapping[str, Any] | None,
+) -> None:
+    for event in events:
+        _emit_planner_event(event_callback, event, state)
+
+
+def _emit_planner_event(
+    event_callback: OrchestrationEventCallback | None,
+    event: dict[str, Any],
+    state: Mapping[str, Any] | None,
+) -> None:
+    if event_callback is None:
+        return
+    event_callback(
+        event["type"],
+        event.get("node"),
+        event["summary"],
+        state,
+        event.get("payload"),
+    )

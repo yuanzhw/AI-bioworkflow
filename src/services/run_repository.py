@@ -243,6 +243,19 @@ class RunRepository:
             ).fetchall()
         return [_row_to_event(row) for row in rows]
 
+    def has_event_type(self, run_id: str, event_type: RunEventType) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM run_events
+                WHERE run_id = ? AND type = ?
+                LIMIT 1
+                """,
+                (run_id, event_type.value),
+            ).fetchone()
+        return row is not None
+
     def save_artifacts(
         self,
         run_id: str,
@@ -271,6 +284,35 @@ class RunRepository:
                     _to_json(artifacts.plan),
                     _to_json(artifacts.workflow_ir),
                     artifacts.wdl,
+                    planner_prompt,
+                    planner_raw_response,
+                ),
+            )
+
+    def save_plan_artifact(
+        self,
+        run_id: str,
+        plan: dict[str, Any],
+        *,
+        planner_prompt: str | None = None,
+        planner_raw_response: str | None = None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_artifacts (
+                    run_id, plan_json, workflow_ir_json, wdl,
+                    planner_prompt, planner_raw_response
+                )
+                VALUES (?, ?, '{}', '', ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    plan_json = excluded.plan_json,
+                    planner_prompt = excluded.planner_prompt,
+                    planner_raw_response = excluded.planner_raw_response
+                """,
+                (
+                    run_id,
+                    _to_json(plan),
                     planner_prompt,
                     planner_raw_response,
                 ),

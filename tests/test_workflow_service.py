@@ -331,6 +331,51 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertIn("workflow RNASeqDEG", result.wdl)
         self.assertEqual(len(fake_llm.prompts), 1)
 
+    def test_plan_and_compile_workflow_event_callback_covers_planner_and_compiler(self):
+        plan = load_example("rnaseq_deg_recipe_plan.json")
+        fake_llm = FakePlannerLlm(json.dumps(plan))
+        events = []
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "summary": summary,
+                    "state": state,
+                    "payload": payload or {},
+                }
+            )
+
+        result = plan_and_compile_workflow(
+            "Run bulk RNA-seq differential expression.",
+            llm=fake_llm,
+            check=False,
+            event_callback=event_callback,
+        )
+
+        self.assertTrue(result.succeeded, result.analysis_errors)
+        event_keys = [(event["type"], event["node"]) for event in events]
+        self.assertEqual(
+            event_keys[:4],
+            [
+                ("node.started", "planner"),
+                ("node.completed", "planner"),
+                ("artifact.updated", "planner"),
+                ("node.started", "compiler_graph"),
+            ],
+        )
+        self.assertIn(("node.started", "ir_normalizer"), event_keys)
+        artifact_events = [
+            event for event in events if event["type"] == "artifact.updated"
+        ]
+        self.assertIn({"artifact": "workflow_ir"}, [event["payload"] for event in artifact_events])
+        self.assertIn({"artifact": "wdl"}, [event["payload"] for event in artifact_events])
+        self.assertEqual(event_keys[-1], ("node.completed", "compiler_graph"))
+
+        plan_event = next(event for event in artifact_events if event["payload"] == {"artifact": "plan"})
+        self.assertEqual(plan_event["state"]["plan"], plan)
+
     def test_plan_and_compile_workflow_preserves_planner_error_classification(self):
         fake_llm = FakePlannerLlm("not json")
 

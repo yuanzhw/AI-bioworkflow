@@ -65,6 +65,35 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual([event.sequence for event in events], [1, 2])
             self.assertEqual(events[1].node, "ir_normalizer")
 
+    def test_has_event_type_checks_event_existence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="structured_compile",
+                request={},
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+
+            self.assertFalse(repository.has_event_type("run_001", RunEventType.NODE_FAILED))
+
+            repository.append_event(
+                run_id="run_001",
+                event_type=RunEventType.NODE_STARTED,
+                node="compiler",
+                summary="Workflow compiler started.",
+            )
+            self.assertFalse(repository.has_event_type("run_001", RunEventType.NODE_FAILED))
+
+            repository.append_event(
+                run_id="run_001",
+                event_type=RunEventType.NODE_FAILED,
+                node="compiler",
+                summary="Workflow compiler failed.",
+            )
+            self.assertTrue(repository.has_event_type("run_001", RunEventType.NODE_FAILED))
+
     def test_repository_returns_none_for_unknown_run_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")

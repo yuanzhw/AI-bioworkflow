@@ -2,8 +2,8 @@ import asyncio
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from src.api.models import (
@@ -17,6 +17,7 @@ from src.api.models import (
 from src.nl_planner import NaturalLanguagePlanningError
 from src.services.run_repository import RunRepository
 from src.services.run_service import RunService
+from src.services.workflow_service import compile_structured_workflow
 
 
 EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
@@ -24,6 +25,19 @@ EXAMPLES_DIR = Path(__file__).parents[1] / "examples"
 
 def load_example(name: str) -> dict:
     return json.loads((EXAMPLES_DIR / name).read_text(encoding="utf-8"))
+
+
+def natural_language_result(
+    plan: dict,
+    *,
+    planner_prompt: str = "planner prompt",
+    planner_raw_response: str | None = None,
+):
+    return replace(
+        compile_structured_workflow(plan, check=False),
+        planner_prompt=planner_prompt,
+        planner_raw_response=planner_raw_response if planner_raw_response is not None else json.dumps(plan),
+    )
 
 
 class RunServiceTests(unittest.TestCase):
@@ -145,15 +159,19 @@ class RunServiceTests(unittest.TestCase):
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
             plan = load_example("rnaseq_deg_recipe_plan.json")
             request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
-            plan_result = SimpleNamespace(
-                plan=plan,
-                planner_prompt="planner prompt",
-                raw_response=json.dumps(plan),
-            )
+            result = natural_language_result(plan)
 
-            with patch("src.services.run_service.create_natural_language_plan", return_value=plan_result):
+            with patch(
+                "src.services.run_service.workflow_service.plan_and_compile_workflow",
+                return_value=result,
+            ) as plan_and_compile:
                 accepted = service.create_natural_language_run(request)
                 service.execute_natural_language_run(accepted.run_id, request)
+
+            plan_and_compile.assert_called_once()
+            self.assertEqual(plan_and_compile.call_args.args, ("Run RNA-seq DEG.",))
+            self.assertEqual(plan_and_compile.call_args.kwargs["check"], False)
+            self.assertIn("event_callback", plan_and_compile.call_args.kwargs)
 
             snapshot = service.get_snapshot(accepted.run_id)
             self.assertIsNotNone(snapshot)
@@ -167,13 +185,12 @@ class RunServiceTests(unittest.TestCase):
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
             plan = load_example("rnaseq_deg_recipe_plan.json")
             request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
-            plan_result = SimpleNamespace(
-                plan=plan,
-                planner_prompt="",
-                raw_response="",
-            )
+            result = natural_language_result(plan, planner_prompt="", planner_raw_response="")
 
-            with patch("src.services.run_service.create_natural_language_plan", return_value=plan_result):
+            with patch(
+                "src.services.run_service.workflow_service.plan_and_compile_workflow",
+                return_value=result,
+            ):
                 accepted = service.create_natural_language_run(request)
                 service.execute_natural_language_run(accepted.run_id, request)
 
@@ -197,18 +214,25 @@ class RunServiceTests(unittest.TestCase):
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
             plan = load_example("rnaseq_deg_recipe_plan.json")
             request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
-            plan_result = SimpleNamespace(
-                plan=plan,
-                planner_prompt="planner prompt",
-                raw_response=json.dumps(plan),
-            )
 
-            with (
-                patch("src.services.run_service.create_natural_language_plan", return_value=plan_result),
-                patch(
-                    "src.services.run_service.workflow_service.compile_structured_workflow",
-                    side_effect=RuntimeError("compiler exploded"),
-                ),
+            def service_failure(*args, **kwargs):
+                event_callback = kwargs["event_callback"]
+                event_callback(
+                    "artifact.updated",
+                    "planner",
+                    "Recipe Tool Plan artifact updated.",
+                    {
+                        "plan": plan,
+                        "planner_prompt": "planner prompt",
+                        "planner_raw_response": json.dumps(plan),
+                    },
+                    {"artifact": "plan"},
+                )
+                raise RuntimeError("compiler exploded")
+
+            with patch(
+                "src.services.run_service.workflow_service.plan_and_compile_workflow",
+                side_effect=service_failure,
             ):
                 accepted = service.create_natural_language_run(request)
                 service.execute_natural_language_run(accepted.run_id, request)
@@ -236,7 +260,7 @@ class RunServiceTests(unittest.TestCase):
             request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
 
             with patch(
-                "src.services.run_service.create_natural_language_plan",
+                "src.services.run_service.workflow_service.plan_and_compile_workflow",
                 side_effect=NaturalLanguagePlanningError("LLM planner JSON parsing failed"),
             ):
                 accepted = service.create_natural_language_run(request)

@@ -215,17 +215,21 @@ START
 | `plan_and_compile_workflow` | 自然语言输入调用 Orchestration Graph |
 | `compile_workflow` | 兼容旧调用，必要时保留为结构化入口别名 |
 
-建议结果：
+已落地结果：
 
-- 继续使用或扩展 `WorkflowCompilationResult`。
-- 自然语言结果应保留 `planner_prompt` 和 `planner_raw_response`。
-- Planner 失败应映射为明确异常或失败 result，API 层再转换为 run diagnostics。
+- 继续使用 `WorkflowCompilationResult` 作为 CLI、API 和 run service 共享的稳定结果对象。
+- `plan_and_compile_workflow` 接受自然语言请求，构造 Orchestration Graph，并保留 `planner_prompt` 与 `planner_raw_response`。
+- `compile_structured_workflow` 继续作为结构化输入入口，直接进入 Compiler Graph，不触发自然语言 Planner。
+- `compile_workflow` 保留为旧调用兼容别名，返回结构化编译的 `WorkflowState`。
+- `RunService.execute_natural_language_run` 不再手写 Planner 到 Compiler 的线性编排，而是调用 `plan_and_compile_workflow`。
+- `plan_and_compile_workflow` 支持可选 `event_callback`，能够覆盖 Planner、上层 `compiler_graph` delegate 和下层 Compiler Graph 事件。
+- run service 可通过 service event callback 持久化 plan、planner trace、Workflow IR、WDL 和 diagnostics。
 
-验收：
+已满足验收：
 
 - `plan_and_compile_workflow` 内不再手写 Planner 到 Compiler 的线性编排。
 - `compile_structured_workflow` 不需要 `DEEPSEEK_API_KEY`。
-- event callback 能覆盖 Planner 和 Compiler 阶段，或由 run service 统一桥接两层事件。
+- event callback 能覆盖 Planner 和 Compiler 阶段，并由 run service 统一桥接到 run history / SSE 事件。
 
 ### P1.6 CLI 与 API 路由
 
@@ -401,9 +405,9 @@ run.completed
 - [x] 结构化入口在没有 `DEEPSEEK_API_KEY` 时可运行。
 - [x] Planner 失败不会进入 Compiler Graph。
 - [x] Compiler Graph 失败保留 Analyzer/Checker diagnostics。
-- [ ] Planner 事件和 plan artifact 可被 run history 或 SSE 回放。
-- [ ] CLI stdout/stderr 契约保持不变。
-- [ ] API route tests 覆盖 `/api/runs` 和 `/api/compile` 的分层差异。
+- [x] Planner 事件和 plan artifact 可被 run history 或 SSE 回放。
+- [x] CLI stdout/stderr 契约保持不变。
+- [x] API route tests 覆盖 `/api/runs` 和 `/api/compile` 的分层差异。
 - [x] `docs/test-cases.md` 在测试覆盖意图变化时已同步更新。
 - [x] 相关单元测试通过。
 
