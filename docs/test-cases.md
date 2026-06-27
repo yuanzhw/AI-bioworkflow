@@ -1259,6 +1259,102 @@ report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])
 
 - Catalog output tags 可以驱动 MultiQC 输入自动收集。
 
+## `tests/test_catalog_retriever.py`
+
+该文件验证第一版 Approved Catalog Retriever。Retriever 只在本地已批准
+Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 embedding
+服务，也不承担正式 Catalog 准入职责。
+
+### `test_retrieves_rnaseq_recipe_and_key_tools`
+
+输入：
+
+- 自然语言 query：包含 bulk RNA-seq differential expression、FASTQ QC、
+  adapter trimming、transcript quantification、Salmon aggregation、
+  transcript-to-gene counts、DESeq2 DEG 和 workflow summary report。
+- 当前正式 Recipe Catalog。
+- 当前正式 Tool Catalog。
+
+执行：
+
+- 调用 `retrieve_catalog_context(..., top_k_recipes=3, top_k_tools=8)`。
+
+期望输出：
+
+- `strategy == "lexical_v1"`。
+- `fallback_used == False`。
+- top recipe 为 `rnaseq_differential_expression`。
+- tool 召回结果包含 `fastp`、`salmon`、`tximport`、`deseq2` 和 `multiqc`。
+- recipe/tool 结果包含非零 `score`、`matched_terms`、`matched_fields` 和 `reason`。
+- tool 结果包含 `trust_status == "catalog-approved"`。
+
+覆盖点：
+
+- R1 retriever 可以从正式 catalog 中召回 RNA-seq DEG 所需 recipe 和关键工具。
+- 输出契约使用稳定 JSON key，便于后续 Planner、API、SSE 和前端复用。
+
+### `test_tokenizer_supports_rnaseq_variants_and_cjk_ngrams`
+
+输入：
+
+- 文本：`做差异表达 RNAseq`。
+
+执行：
+
+- 调用 `tokenize_for_retrieval(...)`。
+
+期望输出：
+
+- token 包含 `rna`、`seq` 和 `rnaseq`。
+- CJK token 包含单字 token 和重叠 2-gram，例如 `差`、`差异` 和 `表达`。
+
+覆盖点：
+
+- tokenization 在零新增依赖前提下支持常见 RNA-seq 写法和中文 query。
+
+### `test_no_match_fallback_records_reason_and_approved_tools`
+
+输入：
+
+- 无匹配 query：`zzzz qqqq`。
+- 当前正式 Recipe Catalog。
+- 当前正式 Tool Catalog。
+
+执行：
+
+- 调用 `retrieve_catalog_context(..., top_k_recipes=2, top_k_tools=3)`。
+
+期望输出：
+
+- `fallback_used == True`。
+- `fallback_reason` 说明 recipe 和 tool recall 均无匹配。
+- fallback recipe/tool 结果的 `score == 0.0`，`matched_terms == []`。
+- fallback tool 仍包含 `trust_status == "catalog-approved"`。
+
+覆盖点：
+
+- 低置信度召回不会静默返回空结果，会记录可审计 fallback 原因。
+- fallback 结果仍限定在 approved local catalog 内。
+
+### `test_rejects_empty_query`
+
+输入：
+
+- 空白 query：`"  "`。
+
+执行：
+
+- 调用 `retrieve_catalog_context(...)`。
+
+期望输出：
+
+- 抛出 `ValueError`。
+- 错误消息包含 `query must not be empty`。
+
+覆盖点：
+
+- Retriever 在进入 scoring 前拒绝不可分析的空 query。
+
 ## `tests/test_catalog_service.py`
 
 该文件验证 W0 catalog 查询服务。服务层返回 JSON-ready 的 recipe/tool 记录，供 FastAPI 的 catalog 查询端点复用。
@@ -3068,6 +3164,7 @@ npm run test:graph
 - Catalog runtime docker 必填约束。
 - Recipe Tool Plan 到 Workflow IR 的 resolver 主路径。
 - Catalog 查询服务的 recipe/tool JSON-ready 输出。
+- Approved Catalog Retriever 的词法召回、CJK tokenization、fallback 原因和 JSON-ready 输出契约。
 - Analyzer 对引用、optional input、scatter output 类型提升的处理。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。
