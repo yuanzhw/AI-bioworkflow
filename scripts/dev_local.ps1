@@ -18,6 +18,212 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $webRoot = Join-Path $repoRoot "web"
 $script:pythonCommand = @()
+$script:devInvocationId = [Guid]::NewGuid().ToString("N")
+$script:devProcessRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ai-bioworkflow-dev-$PID-$script:devInvocationId"
+$script:devJobObjectHandle = [IntPtr]::Zero
+
+# Windows Job Objects provide kernel-level cleanup when this script exits before finally runs.
+function Initialize-DevJobObjectSupport {
+    if ("AIWorkflowDevJobObject" -as [type]) {
+        return
+    }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+public static class AIWorkflowDevJobObject
+{
+    private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
+    private const uint PROCESS_TERMINATE = 0x0001;
+    private const uint PROCESS_SET_QUOTA = 0x0100;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    {
+        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public UIntPtr ProcessMemoryLimit;
+        public UIntPtr JobMemoryLimit;
+        public UIntPtr PeakProcessMemoryUsed;
+        public UIntPtr PeakJobMemoryUsed;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateJobObject(IntPtr lpJobAttributes, string lpName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetInformationJobObject(
+        IntPtr hJob,
+        int jobObjectInfoClass,
+        IntPtr lpJobObjectInfo,
+        uint cbJobObjectInfoLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    public static IntPtr CreateKillOnCloseJob(string name)
+    {
+        IntPtr job = CreateJobObject(IntPtr.Zero, name);
+        if (job == IntPtr.Zero)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        int length = Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+        IntPtr infoPtr = Marshal.AllocHGlobal(length);
+        try
+        {
+            Marshal.StructureToPtr(info, infoPtr, false);
+            if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, infoPtr, (uint)length))
+            {
+                int error = Marshal.GetLastWin32Error();
+                CloseHandle(job);
+                throw new Win32Exception(error);
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(infoPtr);
+        }
+
+        return job;
+    }
+
+    public static int TryAssignProcessId(IntPtr job, int processId)
+    {
+        IntPtr process = OpenProcess(PROCESS_TERMINATE | PROCESS_SET_QUOTA, false, processId);
+        if (process == IntPtr.Zero)
+        {
+            return Marshal.GetLastWin32Error();
+        }
+
+        try
+        {
+            if (!AssignProcessToJobObject(job, process))
+            {
+                return Marshal.GetLastWin32Error();
+            }
+
+            return 0;
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
+}
+'@
+}
+
+function New-DevProcessRoot {
+    if (-not (Test-Path -LiteralPath $script:devProcessRoot)) {
+        New-Item -ItemType Directory -Path $script:devProcessRoot -Force | Out-Null
+    }
+}
+
+function Remove-DevProcessRoot {
+    Remove-Item -LiteralPath $script:devProcessRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function New-DevJobObject {
+    if ($script:devJobObjectHandle -ne [IntPtr]::Zero) {
+        return
+    }
+
+    Initialize-DevJobObjectSupport
+    $script:devJobObjectHandle = [AIWorkflowDevJobObject]::CreateKillOnCloseJob("AI-bioworkflow-dev-$PID")
+}
+
+function Close-DevJobObject {
+    if ($script:devJobObjectHandle -eq [IntPtr]::Zero) {
+        return
+    }
+
+    [AIWorkflowDevJobObject]::CloseHandle($script:devJobObjectHandle) | Out-Null
+    $script:devJobObjectHandle = [IntPtr]::Zero
+}
+
+function Get-DevJobProcessId {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$PidFile
+    )
+
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $PidFile) {
+            $rawProcessId = Get-Content -LiteralPath $PidFile -TotalCount 1 -ErrorAction SilentlyContinue
+            $processId = 0
+            if ([int]::TryParse($rawProcessId, [ref]$processId)) {
+                if (Get-Process -Id $processId -ErrorAction SilentlyContinue) {
+                    return $processId
+                }
+            }
+        }
+
+        Start-Sleep -Milliseconds 50
+    }
+
+    throw "Timed out waiting for $Name dev job process id."
+}
+
+function Register-DevJobForCleanup {
+    param(
+        [Parameter(Mandatory = $true)][object]$Job,
+        [Parameter(Mandatory = $true)][string]$PidFile,
+        [Parameter(Mandatory = $true)][string]$GateFile
+    )
+
+    New-DevJobObject
+    $processId = Get-DevJobProcessId -Name $Job.Name -PidFile $PidFile
+    $assignError = [AIWorkflowDevJobObject]::TryAssignProcessId($script:devJobObjectHandle, $processId)
+    if ($assignError -eq 5) {
+        Write-Warning "$($Job.Name) dev process ${processId} is already managed by another Windows Job Object; continuing without local job-object cleanup registration."
+    }
+    elseif ($assignError -ne 0) {
+        $errorMessage = (New-Object System.ComponentModel.Win32Exception($assignError)).Message
+        throw "Failed to register $($Job.Name) dev process ${processId} for cleanup: $errorMessage"
+    }
+
+    Set-Content -LiteralPath $GateFile -Value "assigned" -Encoding ascii
+}
 
 function Set-PythonCommand {
     if ($PythonExe) {
@@ -239,10 +445,22 @@ function Start-ApiJob {
         [Parameter(Mandatory = $true)][string]$CorsOrigins
     )
 
-    Start-Job -Name "api" -ScriptBlock {
-        param($RepoRoot, $PythonCommand, $ApiHost, $ApiPort, $CorsOrigins)
+    New-DevProcessRoot
+    $pidFile = Join-Path $script:devProcessRoot "api.pid"
+    $gateFile = Join-Path $script:devProcessRoot "api.assigned"
+    $job = Start-Job -Name "api" -ScriptBlock {
+        param($RepoRoot, $PythonCommand, $ApiHost, $ApiPort, $CorsOrigins, $PidFile, $GateFile)
 
         $ErrorActionPreference = "Stop"
+        Set-Content -LiteralPath $PidFile -Value ([string]$PID) -Encoding ascii
+        $gateDeadline = (Get-Date).AddSeconds(10)
+        while (-not (Test-Path -LiteralPath $GateFile)) {
+            if ((Get-Date) -ge $gateDeadline) {
+                throw "Timed out waiting for api cleanup registration gate."
+            }
+            Start-Sleep -Milliseconds 50
+        }
+
         Set-Location $RepoRoot
         $env:AI_BIOWORKFLOW_API_HOST = $ApiHost
         $env:AI_BIOWORKFLOW_API_PORT = [string]$ApiPort
@@ -259,16 +477,38 @@ function Start-ApiJob {
         if ($LASTEXITCODE -ne 0) {
             throw "API server exited with code $LASTEXITCODE"
         }
-    } -ArgumentList $repoRoot, $PythonCommand, $ApiHost, $ApiPort, $CorsOrigins
+    } -ArgumentList $repoRoot, $PythonCommand, $ApiHost, $ApiPort, $CorsOrigins, $pidFile, $gateFile
+
+    try {
+        Register-DevJobForCleanup -Job $job -PidFile $pidFile -GateFile $gateFile
+        return $job
+    }
+    catch {
+        Stop-Job -Job $job -ErrorAction SilentlyContinue
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        throw
+    }
 }
 
 function Start-WebJob {
     param([Parameter(Mandatory = $true)][string]$ResolvedApiBaseUrl)
 
-    Start-Job -Name "web" -ScriptBlock {
-        param($WebRoot, $WebHost, $WebPort, $ResolvedApiBaseUrl)
+    New-DevProcessRoot
+    $pidFile = Join-Path $script:devProcessRoot "web.pid"
+    $gateFile = Join-Path $script:devProcessRoot "web.assigned"
+    $job = Start-Job -Name "web" -ScriptBlock {
+        param($WebRoot, $WebHost, $WebPort, $ResolvedApiBaseUrl, $PidFile, $GateFile)
 
         $ErrorActionPreference = "Stop"
+        Set-Content -LiteralPath $PidFile -Value ([string]$PID) -Encoding ascii
+        $gateDeadline = (Get-Date).AddSeconds(10)
+        while (-not (Test-Path -LiteralPath $GateFile)) {
+            if ((Get-Date) -ge $gateDeadline) {
+                throw "Timed out waiting for web cleanup registration gate."
+            }
+            Start-Sleep -Milliseconds 50
+        }
+
         Set-Location $WebRoot
         $env:NEXT_PUBLIC_API_BASE_URL = $ResolvedApiBaseUrl
 
@@ -276,7 +516,17 @@ function Start-WebJob {
         if ($LASTEXITCODE -ne 0) {
             throw "Next.js dev server exited with code $LASTEXITCODE"
         }
-    } -ArgumentList $webRoot, $WebHost, $WebPort, $ResolvedApiBaseUrl
+    } -ArgumentList $webRoot, $WebHost, $WebPort, $ResolvedApiBaseUrl, $pidFile, $gateFile
+
+    try {
+        Register-DevJobForCleanup -Job $job -PidFile $pidFile -GateFile $gateFile
+        return $job
+    }
+    catch {
+        Stop-Job -Job $job -ErrorAction SilentlyContinue
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        throw
+    }
 }
 
 function Receive-DevJobs {
@@ -354,8 +604,14 @@ try {
     Receive-DevJobs -Jobs $jobs
 }
 finally {
-    foreach ($job in $jobs) {
-        Stop-Job -Job $job -ErrorAction SilentlyContinue
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    try {
+        foreach ($job in $jobs) {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        }
+    }
+    finally {
+        Close-DevJobObject
+        Remove-DevProcessRoot
     }
 }
