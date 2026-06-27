@@ -276,6 +276,35 @@ class RunRepository:
                 ),
             )
 
+    def save_plan_artifact(
+        self,
+        run_id: str,
+        plan: dict[str, Any],
+        *,
+        planner_prompt: str | None = None,
+        planner_raw_response: str | None = None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_artifacts (
+                    run_id, plan_json, workflow_ir_json, wdl,
+                    planner_prompt, planner_raw_response
+                )
+                VALUES (?, ?, '{}', '', ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    plan_json = excluded.plan_json,
+                    planner_prompt = excluded.planner_prompt,
+                    planner_raw_response = excluded.planner_raw_response
+                """,
+                (
+                    run_id,
+                    _to_json(plan),
+                    planner_prompt,
+                    planner_raw_response,
+                ),
+            )
+
     def save_workflow_ir_artifact(self, run_id: str, workflow_ir: dict[str, Any]) -> None:
         with self._connect() as connection:
             connection.execute(

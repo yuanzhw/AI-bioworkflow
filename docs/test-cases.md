@@ -48,11 +48,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 W2 Run 事件与 P0 文档同步收口后的最近一次完整验证结果：
+当前 P1.5 Service 层入口收口后的最近一次完整验证结果：
 
 ```text
-.venv\Scripts\python.exe -m unittest discover -v
-Ran 161 tests
+.\.venv\Scripts\python.exe -m unittest discover -v
+Ran 170 tests
 OK (skipped=2)
 ```
 
@@ -683,7 +683,7 @@ OK (skipped=2)
 
 ## `tests/test_run_service.py`
 
-该文件验证 persistent run lifecycle service。Service 层连接 API DTO、RunRepository、自然语言 planner 和 deterministic compiler graph，FastAPI routes 只调用 service 方法。
+该文件验证 persistent run lifecycle service。Service 层连接 API DTO、RunRepository 和 workflow service；FastAPI routes 只调用 service 方法。自然语言 run 通过 `workflow_service.plan_and_compile_workflow` 进入 Orchestration Graph，不在 run service 内重复调用 planner 或结构化 compiler。
 
 ### `test_structured_compile_run_succeeds_and_records_events`
 
@@ -710,6 +710,97 @@ OK (skipped=2)
 覆盖点：
 
 - 结构化编译 run 会持久化详情页所需元数据、产物、诊断和事件回放记录。
+
+### `test_natural_language_run_succeeds_after_planning`
+
+输入：
+
+- 自然语言请求：`Run RNA-seq DEG.`
+- mock `workflow_service.plan_and_compile_workflow(...)` 返回成功的 `WorkflowCompilationResult`
+
+执行：
+
+- 通过 `RunService.create_natural_language_run(...)` 创建 run。
+- 调用 `RunService.execute_natural_language_run(...)`。
+- 读取 run snapshot。
+
+期望输出：
+
+- `plan_and_compile_workflow` 被调用一次。
+- 调用参数包含自然语言 request、`check=False` 和 `event_callback`。
+- snapshot `status == "succeeded"`。
+- snapshot artifacts 包含 Recipe Tool Plan 和 WDL。
+
+覆盖点：
+
+- 自然语言 run service 入口只依赖稳定 workflow service，不再手写 Planner 到 Compiler 的线性编排。
+- API run 层通过 callback 接收 service 事件。
+
+### `test_natural_language_run_preserves_empty_planner_observability_fields`
+
+输入：
+
+- 自然语言请求：`Run RNA-seq DEG.`
+- mock `plan_and_compile_workflow(...)` 返回 `planner_prompt == ""` 和 `planner_raw_response == ""`
+
+执行：
+
+- 创建并执行自然语言 run。
+- 直接读取 SQLite `run_artifacts` 表。
+
+期望输出：
+
+- `planner_prompt` 保存为空字符串。
+- `planner_raw_response` 保存为空字符串。
+
+覆盖点：
+
+- 空字符串 trace 与 `None` 语义区分保留，便于后续调试真实 planner 行为。
+
+### `test_natural_language_compile_exception_preserves_planner_artifacts`
+
+输入：
+
+- 自然语言请求：`Run RNA-seq DEG.`
+- mock `plan_and_compile_workflow(...)` 先通过 `event_callback` 发出 plan artifact 更新，再抛出 `RuntimeError("compiler exploded")`
+
+执行：
+
+- 创建并执行自然语言 run。
+- 读取 snapshot 与 events。
+
+期望输出：
+
+- snapshot `status == "failed"`。
+- snapshot artifacts 仍保留 planner 产出的 plan。
+- diagnostics validation message 包含 `compiler exploded`。
+- events 包含 compiler failure，并以 `run.completed` 结束。
+
+覆盖点：
+
+- 即使自然语言 run 在 compiler 阶段失败，已产生的 planner artifact 仍可被历史详情和 SSE 回放读取。
+
+### `test_natural_language_planner_error_is_persisted_as_failed_run`
+
+输入：
+
+- 自然语言请求：`Run RNA-seq DEG.`
+- mock `plan_and_compile_workflow(...)` 抛出 `NaturalLanguagePlanningError`
+
+执行：
+
+- 创建并执行自然语言 run。
+- 读取 snapshot 与 events。
+
+期望输出：
+
+- snapshot `status == "failed"`。
+- diagnostics validation message 包含 planner 错误。
+- events 包含 `node.failed`。
+
+覆盖点：
+
+- Planner 错误由 workflow service 分类并传递给 run service，run service 只负责持久化失败状态与诊断。
 
 ### `test_list_runs_returns_api_summaries`
 
@@ -2078,6 +2169,32 @@ Agent 占位逻辑。
 - 自然语言入口通过 Orchestration Graph 先生成 Recipe Tool Plan，再进入确定性编译链路。
 - LLM 仍不直接生成最终 WDL。
 - planner observability 信息被 service 结果保留。
+
+### `test_plan_and_compile_workflow_event_callback_covers_planner_and_compiler`
+
+输入：
+
+- 用户请求：`Run bulk RNA-seq differential expression.`
+- `FakePlannerLlm` 返回 RNA-seq Recipe Tool Plan JSON。
+- `check=False`
+- 注入 `event_callback` 收集 service 事件。
+
+执行：
+
+- 调用 `plan_and_compile_workflow(..., event_callback=event_callback)`。
+
+期望输出：
+
+- `result.succeeded == True`。
+- 事件以 planner started/completed/plan artifact 开始。
+- 随后进入上层 `compiler_graph` delegate。
+- 事件中包含下层 Compiler Graph 的 `ir_normalizer`、`workflow_ir` artifact、`wdl` artifact 和最终 compiler delegate 完成事件。
+- plan artifact 事件的 state 中包含 planner 生成的 Recipe Tool Plan。
+
+覆盖点：
+
+- 自然语言 service 入口的 event callback 覆盖 Planner、Orchestration Graph delegate 和 Compiler Graph 阶段。
+- run service/API 可以不重复编排节点，只通过 workflow service 事件桥接 run history / SSE。
 
 ### `test_plan_and_compile_workflow_preserves_planner_error_classification`
 

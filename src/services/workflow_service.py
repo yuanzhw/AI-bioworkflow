@@ -19,6 +19,7 @@ from src.nodes.ir_normalizer import ir_normalizer_node
 from src.nodes.renderer import renderer_node
 from src.nodes.repairer import repairer_node
 from src.orchestration.graph import build_orchestration_graph
+from src.orchestration.nodes.compiler import make_compile_planned_workflow_node
 from src.orchestration.nodes.planner import make_natural_language_planner_node
 from src.orchestration.state import OrchestrationState, build_initial_orchestration_state
 from src.recipes.loader import RecipeCatalog
@@ -28,6 +29,10 @@ from src.tools.validator import VALIDATOR_MISSING_MARKER
 
 CompilerEventCallback = Callable[
     [str, str | None, str, WorkflowState, dict[str, Any] | None],
+    None,
+]
+WorkflowEventCallback = Callable[
+    [str, str | None, str, Mapping[str, Any] | None, dict[str, Any] | None],
     None,
 ]
 
@@ -86,14 +91,20 @@ def plan_and_compile_workflow(
     llm: PlannerLlm | None = None,
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
+    event_callback: WorkflowEventCallback | None = None,
 ) -> WorkflowCompilationResult:
     """Plan from natural language through the orchestration graph, then compile."""
     planner_node = make_natural_language_planner_node(
         llm=llm,
         tool_catalog=tool_catalog,
         recipe_catalog=recipe_catalog,
+        event_callback=event_callback,
     )
-    graph = build_orchestration_graph(planner_node=planner_node)
+    compiler_node = make_compile_planned_workflow_node(
+        compiler=_compiler_with_callback(event_callback),
+        event_callback=event_callback,
+    )
+    graph = build_orchestration_graph(planner_node=planner_node, compiler_node=compiler_node)
     orchestration_state = cast(
         OrchestrationState,
         graph.invoke(
@@ -116,6 +127,22 @@ def plan_and_compile_workflow(
         planner_prompt=orchestration_state["planner_prompt"],
         planner_raw_response=orchestration_state["planner_raw_response"],
     )
+
+
+def _compiler_with_callback(
+    event_callback: WorkflowEventCallback | None,
+) -> Callable[[dict[str, Any], bool], WorkflowCompilationResult] | None:
+    if event_callback is None:
+        return None
+
+    def compile_with_events(parsed_json: dict[str, Any], check: bool) -> WorkflowCompilationResult:
+        return compile_structured_workflow(
+            parsed_json,
+            check=check,
+            event_callback=event_callback,
+        )
+
+    return compile_with_events
 
 
 def build_initial_state(

@@ -21,7 +21,7 @@ from src.api.models import (
     WorkflowArtifacts,
     WorkflowRunSnapshotResponse,
 )
-from src.nl_planner import DEFAULT_PLANNER_MODEL, NaturalLanguagePlanningError, create_natural_language_plan
+from src.nl_planner import DEFAULT_PLANNER_MODEL, NaturalLanguagePlanningError
 from src.services import workflow_service
 from src.services.run_repository import RunRepository
 from src.services.workflow_service import WorkflowCompilationResult
@@ -79,75 +79,34 @@ class RunService:
     def execute_natural_language_run(self, run_id: str, request: NaturalLanguageRunRequest) -> None:
         self.repository.update_status(run_id, RunStatus.RUNNING)
         planner_model = request.planner_model or DEFAULT_PLANNER_MODEL
-        self.repository.append_event(
-            run_id=run_id,
-            event_type=RunEventType.NODE_STARTED,
-            node="planner",
-            summary="Natural-language planner started.",
-            payload={"model": planner_model},
-        )
 
         try:
-            plan_result = create_natural_language_plan(request.request, model=planner_model)
+            result = workflow_service.plan_and_compile_workflow(
+                request.request,
+                model=planner_model,
+                check=request.check,
+                event_callback=self._workflow_event_callback(run_id),
+            )
         except NaturalLanguagePlanningError as exc:
-            self.repository.append_event(
-                run_id=run_id,
-                event_type=RunEventType.NODE_FAILED,
+            self._append_failed_event_if_missing(
+                run_id,
                 node="planner",
                 summary="Natural-language planner failed.",
-                payload={"error": str(exc)},
+                exc=exc,
             )
             self._fail_run(run_id, str(exc), check_performed=request.check)
             return
         except Exception as exc:
-            self.repository.append_event(
-                run_id=run_id,
-                event_type=RunEventType.NODE_FAILED,
-                node="planner",
-                summary="Natural-language planner failed unexpectedly.",
-                payload={"error": str(exc)},
+            self._append_failed_event_if_missing(
+                run_id,
+                node="compiler",
+                summary="Workflow compiler failed.",
+                exc=exc,
             )
             self._fail_run(run_id, str(exc), check_performed=request.check)
             return
 
-        self.repository.append_event(
-            run_id=run_id,
-            event_type=RunEventType.NODE_COMPLETED,
-            node="planner",
-            summary="Natural-language planner completed.",
-            payload={"model": planner_model},
-        )
-        self.repository.save_artifacts(
-            run_id,
-            WorkflowArtifacts(plan=plan_result.plan),
-            planner_prompt=plan_result.planner_prompt,
-            planner_raw_response=plan_result.raw_response,
-        )
-        self.repository.append_event(
-            run_id=run_id,
-            event_type=RunEventType.ARTIFACT_UPDATED,
-            node="planner",
-            summary="Recipe Tool Plan artifact updated.",
-            payload={"artifact": "plan"},
-        )
-
-        try:
-            result = workflow_service.compile_structured_workflow(
-                plan_result.plan,
-                check=request.check,
-                event_callback=self._compiler_event_callback(run_id),
-            )
-        except Exception as exc:
-            self._append_compiler_failed_event(run_id, exc)
-            self._fail_run(run_id, str(exc), check_performed=request.check)
-            return
-
-        self._complete_run(
-            run_id,
-            result,
-            planner_prompt=plan_result.planner_prompt,
-            planner_raw_response=plan_result.raw_response,
-        )
+        self._complete_run(run_id, result)
 
     def execute_structured_compile_run(self, run_id: str, request: CompileWorkflowRequest) -> None:
         self.repository.update_status(run_id, RunStatus.RUNNING)
@@ -155,7 +114,7 @@ class RunService:
             result = workflow_service.compile_structured_workflow(
                 request.payload,
                 check=request.check,
-                event_callback=self._compiler_event_callback(run_id),
+                event_callback=self._workflow_event_callback(run_id),
             )
         except Exception as exc:
             self._append_compiler_failed_event(run_id, exc)
@@ -319,6 +278,9 @@ class RunService:
         )
 
     def _compiler_event_callback(self, run_id: str):
+        return self._workflow_event_callback(run_id)
+
+    def _workflow_event_callback(self, run_id: str):
         def callback(event_type: str, node: str | None, summary: str, state, payload):
             self._persist_updated_artifact(run_id, event_type, state, payload)
             self.repository.append_event(
@@ -338,10 +300,42 @@ class RunService:
             return
 
         artifact = payload.get("artifact")
-        if artifact == "workflow_ir":
+        if artifact == "plan":
+            plan = state.get("plan")
+            if isinstance(plan, dict):
+                planner_prompt = state.get("planner_prompt")
+                planner_raw_response = state.get("planner_raw_response")
+                self.repository.save_plan_artifact(
+                    run_id,
+                    plan,
+                    planner_prompt=planner_prompt if isinstance(planner_prompt, str) else None,
+                    planner_raw_response=(
+                        planner_raw_response if isinstance(planner_raw_response, str) else None
+                    ),
+                )
+        elif artifact == "workflow_ir":
             self.repository.save_workflow_ir_artifact(run_id, state.get("workflow_ir") or {})
         elif artifact == "wdl":
             self.repository.save_wdl_artifact(run_id, state.get("current_wdl") or "")
+
+    def _append_failed_event_if_missing(
+        self,
+        run_id: str,
+        *,
+        node: str,
+        summary: str,
+        exc: Exception,
+    ) -> None:
+        events = self.repository.list_events(run_id)
+        if any(event.type == RunEventType.NODE_FAILED for event in events):
+            return
+        self.repository.append_event(
+            run_id=run_id,
+            event_type=RunEventType.NODE_FAILED,
+            node=node,
+            summary=summary,
+            payload={"error": str(exc)},
+        )
 
 
 _default_run_service: RunService | None = None
