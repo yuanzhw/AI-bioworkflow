@@ -27,14 +27,12 @@ from src.state import WorkflowState
 from src.tools.validator import VALIDATOR_MISSING_MARKER
 
 
-CompilerEventCallback = Callable[
-    [str, str | None, str, WorkflowState, dict[str, Any] | None],
-    None,
-]
+WorkflowEventState = Mapping[str, Any] | None
 WorkflowEventCallback = Callable[
-    [str, str | None, str, Mapping[str, Any] | None, dict[str, Any] | None],
+    [str, str | None, str, WorkflowEventState, dict[str, Any] | None],
     None,
 ]
+CompilerEventCallback = WorkflowEventCallback
 
 
 @dataclass(frozen=True)
