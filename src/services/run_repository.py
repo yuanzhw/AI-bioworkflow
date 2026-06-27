@@ -243,6 +243,19 @@ class RunRepository:
             ).fetchall()
         return [_row_to_event(row) for row in rows]
 
+    def has_event_type(self, run_id: str, event_type: RunEventType) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM run_events
+                WHERE run_id = ? AND type = ?
+                LIMIT 1
+                """,
+                (run_id, event_type.value),
+            ).fetchone()
+        return row is not None
+
     def save_artifacts(
         self,
         run_id: str,

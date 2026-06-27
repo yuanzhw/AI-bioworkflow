@@ -326,8 +326,7 @@ class RunService:
         summary: str,
         exc: Exception,
     ) -> None:
-        events = self.repository.list_events(run_id)
-        if any(event.type == RunEventType.NODE_FAILED for event in events):
+        if self.repository.has_event_type(run_id, RunEventType.NODE_FAILED):
             return
         self.repository.append_event(
             run_id=run_id,
