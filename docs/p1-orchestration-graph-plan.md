@@ -256,6 +256,20 @@ API 路由：
 - `/api/compile` 不触发 Planner。
 - `/api/runs` 的历史快照可以看到 Planner plan 和 Compiler artifacts。
 
+已完成内容：
+
+- `--prompt` 与 `--prompt-file` 通过 `plan_and_compile_workflow` 进入 Orchestration Graph。
+- `--input` 通过 `compile_structured_workflow` 直接进入 Compiler Graph，不触发自然语言 Planner。
+- `POST /api/runs` 只创建并执行自然语言 run，后台进入 Orchestration Graph。
+- `POST /api/compile` 只创建并执行结构化 compile run，后台进入 Compiler Graph。
+- `GET /api/runs/{run_id}` 保留 run service 持久化的 Planner plan、Workflow IR、WDL 和 diagnostics。
+
+已满足验收：
+
+- CLI stdout/stderr 契约已由 `tests/test_cli.py` 覆盖。
+- `/api/compile` 与 `/api/runs` 的分层差异已由 `tests/api/test_routes.py` 覆盖。
+- 自然语言 run 的历史快照 artifacts 暴露已由 API route snapshot 测试覆盖。
+
 ### P1.7 事件与 artifacts
 
 目标：让前端和历史详情能够展示自然语言到编译结果的完整链路。

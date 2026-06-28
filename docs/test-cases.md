@@ -48,11 +48,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 P1.5 Service 层入口收口后的最近一次完整验证结果：
+当前 P1.6 CLI/API 路由收口后的最近一次完整验证结果：
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 170 tests
+Ran 172 tests
 OK (skipped=2)
 ```
 
@@ -501,6 +501,7 @@ OK (skipped=2)
 - `examples/rnaseq_deg_recipe_plan.json`
 - mock `run_service.create_structured_compile_run(...)` 返回 `RunAcceptedResponse`。
 - mock `run_service.execute_structured_compile_run(...)` 作为后台任务。
+- mock 自然语言 run service 方法，验证不会被调用。
 - HTTP 请求：`POST /api/compile`
 
 执行：
@@ -512,11 +513,13 @@ OK (skipped=2)
 - HTTP status 为 `202`。
 - response 包含 `run_id`、`status == "created"` 和 `events_url`。
 - route 调用 run 创建 service，并安排结构化编译后台执行。
+- 自然语言 run service 没有被调用。
 
 覆盖点：
 
 - 结构化编译 endpoint 复用 run service。
 - API 层不直接调用 Analyzer / Renderer / Checker。
+- `/api/compile` 保持结构化入口边界，不触发自然语言 Planner 路径。
 
 ### `test_compile_rejects_empty_payload`
 
@@ -543,6 +546,7 @@ OK (skipped=2)
 
 - mock `run_service.create_natural_language_run(...)` 返回 `RunAcceptedResponse`。
 - mock `run_service.execute_natural_language_run(...)` 作为后台任务。
+- mock 结构化 compile run service 方法，验证不会被调用。
 - HTTP 请求：`POST /api/runs`
 - 请求体：`{"request": "Run RNA-seq DEG.", "check": false}`
 
@@ -555,12 +559,14 @@ OK (skipped=2)
 - HTTP status 为 `202`。
 - response 包含 `run_id`、`status == "created"` 和 `events_url`。
 - route 调用 run 创建 service，并安排自然语言 run 后台执行。
+- 结构化 compile run service 没有被调用。
 
 覆盖点：
 
 - 自然语言 run endpoint 复用 run service。
 - FastAPI route 只负责 HTTP 输入输出和后台任务调度。
 - W2 `/api/runs` 是异步 run 创建接口，不直接返回编译结果。
+- `/api/runs` 保持自然语言 Orchestration Graph 入口边界。
 
 ### `test_create_run_passes_requested_planner_model`
 
@@ -612,6 +618,7 @@ OK (skipped=2)
 输入：
 
 - mock `run_service.get_snapshot(...)` 返回 `WorkflowRunSnapshotResponse`。
+- snapshot 包含自然语言 run 的 plan、Workflow IR、WDL 和 diagnostics。
 - HTTP 请求：`GET /api/runs/run_123`
 
 执行：
@@ -622,10 +629,14 @@ OK (skipped=2)
 
 - HTTP status 为 `200`。
 - response `run_id == "run_123"`。
+- response 保留 `kind == "natural_language"`。
+- response artifacts 包含 Planner plan、Compiler Workflow IR 和 WDL。
+- response diagnostics 保留 `succeeded` 与 `check_performed`。
 
 覆盖点：
 
 - run snapshot endpoint 从 run service 读取持久化快照。
+- 自然语言 run history 可通过 API route 暴露 Planner plan 和 Compiler artifacts。
 
 ### `test_stream_run_events`
 
@@ -2518,6 +2529,37 @@ qc.html_report + qc.json_report
 - `--print-plan` 将 plan 输出到 stdout。
 - `--output` 将 WDL 写入文件。
 - `--no-check` 跳过 WDL checker。
+
+### `test_cli_prompt_file_uses_natural_language_service`
+
+输入：
+
+- CLI args：
+
+```text
+--prompt-file examples/rnaseq_deg_request.txt
+--output <tmp>/rnaseq_deg.wdl
+--no-check
+```
+
+- mock `main.plan_and_compile_workflow` 返回合法 RNA-seq plan 的编译结果。
+
+执行：
+
+- 调用 `cli.main(...)`。
+
+期望输出：
+
+- exit code 为 `0`。
+- `plan_and_compile_workflow` 被调用一次，参数为 prompt 文件内容、默认 planner model 和 `check=False`。
+- stdout 为空，因为 WDL 写入了 `--output` 指定文件，且没有请求打印 plan 或 IR。
+- 输出文件 `<tmp>/rnaseq_deg.wdl` 包含 `workflow RNASeqDEG`。
+
+覆盖点：
+
+- `--prompt-file` 和 `--prompt` 一样走自然语言 workflow service。
+- prompt 文件路径不会被误当作结构化 `--input`。
+- 指定 `--output` 时，CLI 不向 stdout 写入非请求 artifact。
 
 ### `test_cli_structured_input_uses_structured_service_without_planner`
 

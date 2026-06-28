@@ -54,6 +54,33 @@ class CliTests(unittest.TestCase):
             self.assertIn('"recipe": "rnaseq_differential_expression"', stdout.getvalue())
             self.assertIn("workflow RNASeqDEG", output_path.read_text(encoding="utf-8"))
 
+    def test_cli_prompt_file_uses_natural_language_service(self):
+        planned = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")
+        result = compile_structured_workflow(planned, check=False)
+        request = (EXAMPLES_DIR / "rnaseq_deg_request.txt").read_text(encoding="utf-8").strip()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "rnaseq_deg.wdl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            with patch("main.plan_and_compile_workflow", return_value=result) as service:
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = cli.main(
+                        [
+                            "--prompt-file",
+                            str(EXAMPLES_DIR / "rnaseq_deg_request.txt"),
+                            "--output",
+                            str(output_path),
+                            "--no-check",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            service.assert_called_once_with(request, model=cli.DEFAULT_PLANNER_MODEL, check=False)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("workflow RNASeqDEG", output_path.read_text(encoding="utf-8"))
+
     def test_cli_structured_input_uses_structured_service_without_planner(self):
         planned = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")
         result = compile_structured_workflow(planned, check=False)
