@@ -6,7 +6,15 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
-from src.api.models import RunAcceptedResponse, RunListResponse, RunStatus, RunSummary, WorkflowRunSnapshotResponse
+from src.api.models import (
+    DiagnosticReport,
+    RunAcceptedResponse,
+    RunListResponse,
+    RunStatus,
+    RunSummary,
+    WorkflowArtifacts,
+    WorkflowRunSnapshotResponse,
+)
 from src.services.catalog_service import get_recipe, get_tool, list_recipes, list_tools
 
 
@@ -107,6 +115,8 @@ class ApiRouteTests(unittest.TestCase):
         with (
             patch("src.api.routes.workflows.run_service.create_structured_compile_run", return_value=accepted) as create_run,
             patch("src.api.routes.workflows.run_service.execute_structured_compile_run") as execute_run,
+            patch("src.api.routes.workflows.run_service.create_natural_language_run") as create_natural_language_run,
+            patch("src.api.routes.workflows.run_service.execute_natural_language_run") as execute_natural_language_run,
         ):
             response = self.client.post(
                 "/api/compile",
@@ -116,6 +126,8 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         create_run.assert_called_once()
         execute_run.assert_called_once()
+        create_natural_language_run.assert_not_called()
+        execute_natural_language_run.assert_not_called()
         body = response.json()
         self.assertEqual(body["run_id"], "run_123")
         self.assertEqual(body["status"], "created")
@@ -139,6 +151,8 @@ class ApiRouteTests(unittest.TestCase):
         with (
             patch("src.api.routes.workflows.run_service.create_natural_language_run", return_value=accepted) as create_run,
             patch("src.api.routes.workflows.run_service.execute_natural_language_run") as execute_run,
+            patch("src.api.routes.workflows.run_service.create_structured_compile_run") as create_structured_run,
+            patch("src.api.routes.workflows.run_service.execute_structured_compile_run") as execute_structured_run,
         ):
             response = self.client.post(
                 "/api/runs",
@@ -148,6 +162,8 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         create_run.assert_called_once()
         execute_run.assert_called_once()
+        create_structured_run.assert_not_called()
+        execute_structured_run.assert_not_called()
         self.assertEqual(response.json()["run_id"], "run_456")
 
     def test_create_run_passes_requested_planner_model(self):
@@ -210,11 +226,24 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(body["total"], 42)
 
     def test_get_run_returns_snapshot(self):
+        plan = load_example("rnaseq_deg_recipe_plan.json")
         snapshot = WorkflowRunSnapshotResponse(
             run_id="run_123",
             status=RunStatus.SUCCEEDED,
+            kind="natural_language",
             request="Run RNA-seq DEG.",
             events_url="/api/runs/run_123/events",
+            artifacts=WorkflowArtifacts(
+                plan=plan,
+                workflow_ir={"workflow": {"name": "RNASeqDEG"}},
+                wdl="version 1.0\nworkflow RNASeqDEG {}",
+            ),
+            diagnostics=DiagnosticReport(
+                validation_message="WDL syntax validation skipped (--no-check).",
+                is_valid=False,
+                succeeded=True,
+                check_performed=False,
+            ),
         )
 
         with patch("src.api.routes.workflows.run_service.get_snapshot", return_value=snapshot) as get_snapshot:
@@ -222,7 +251,14 @@ class ApiRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         get_snapshot.assert_called_once_with("run_123")
-        self.assertEqual(response.json()["run_id"], "run_123")
+        body = response.json()
+        self.assertEqual(body["run_id"], "run_123")
+        self.assertEqual(body["kind"], "natural_language")
+        self.assertEqual(body["artifacts"]["plan"]["workflow"]["recipe"], "rnaseq_differential_expression")
+        self.assertEqual(body["artifacts"]["workflow_ir"]["workflow"]["name"], "RNASeqDEG")
+        self.assertIn("workflow RNASeqDEG", body["artifacts"]["wdl"])
+        self.assertTrue(body["diagnostics"]["succeeded"])
+        self.assertFalse(body["diagnostics"]["check_performed"])
 
     def test_get_run_not_found(self):
         with patch("src.api.routes.workflows.run_service.get_snapshot", return_value=None):
