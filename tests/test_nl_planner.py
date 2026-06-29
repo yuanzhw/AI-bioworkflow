@@ -1,6 +1,7 @@
 import json
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from src.catalog import load_tool_catalog
 from src.nl_planner import (
@@ -139,6 +140,10 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
         self.assertIn("fastp", prompt)
         self.assertIn("per_sample", prompt)
         self.assertIn("tximport", prompt)
+        self.assertIn("Retrieved approved catalog context", prompt)
+        self.assertIn("validation_boundary", prompt)
+        self.assertIn("matched_terms", prompt)
+        self.assertIn("trust_status", prompt)
         self.assertIn("Run RNA-seq differential expression.", prompt)
 
     def test_plan_from_natural_language_validates_llm_plan(self):
@@ -162,7 +167,55 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
 
         self.assertEqual(result.plan["workflow"]["recipe"], "rnaseq_differential_expression")
         self.assertIn("Catalog:", result.planner_prompt)
+        self.assertEqual(result.catalog_retrieval["strategy"], "lexical_v1")
+        self.assertEqual(
+            result.catalog_retrieval["recipes"][0]["id"],
+            "rnaseq_differential_expression",
+        )
+        self.assertIn(
+            "deseq2",
+            {tool["id"] for tool in result.catalog_retrieval["tools"]},
+        )
         self.assertIn("RNASeqDEG", result.raw_response)
+
+    def test_plan_validation_uses_complete_catalog_after_retrieval(self):
+        fake_llm = FakePlannerLlm(json.dumps(sample_rnaseq_tool_plan()))
+        sparse_retrieval = {
+            "query": "Run RNA-seq differential expression.",
+            "strategy": "lexical_v1",
+            "recipes": [
+                {
+                    "id": "rnaseq_differential_expression",
+                    "score": 1.0,
+                    "matched_terms": ["rna"],
+                    "matched_fields": ["description"],
+                    "reason": "Matched approved catalog recipe fields.",
+                }
+            ],
+            "tools": [
+                {
+                    "id": "fastp",
+                    "version": "1.3.3",
+                    "score": 1.0,
+                    "matched_terms": ["quality"],
+                    "matched_fields": ["description"],
+                    "trust_status": "catalog-approved",
+                    "reason": "Matched approved catalog tool fields.",
+                }
+            ],
+            "fallback_used": False,
+            "fallback_reason": None,
+        }
+
+        with patch("src.nl_planner.retrieve_catalog_context", return_value=sparse_retrieval):
+            result = create_natural_language_plan(
+                "Run RNA-seq differential expression.",
+                llm=fake_llm,
+            )
+
+        self.assertEqual(result.catalog_retrieval, sparse_retrieval)
+        self.assertEqual(result.plan["workflow"]["recipe"], "rnaseq_differential_expression")
+        self.assertIn("validation_boundary", result.planner_prompt)
 
     def test_plan_from_natural_language_reports_schema_error(self):
         fake_llm = FakePlannerLlm(json.dumps({"workflow": {"name": "RNASeqDEG"}}))

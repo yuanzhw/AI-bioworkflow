@@ -2406,11 +2406,16 @@ I would run fastp first.
   - `fastp`
   - `per_sample`
   - `tximport`
+  - `Retrieved approved catalog context`
+  - `validation_boundary`
+  - `matched_terms`
+  - `trust_status`
   - 用户原始请求
 
 覆盖点：
 
-- Planner prompt 会包含 recipe、tool、scatter metadata 和用户请求。
+- Planner prompt 会包含 retriever 筛选后的 approved recipe/tool context、检索解释字段、完整 Catalog 校验边界说明和用户请求。
+- Planner prompt 仍保留生成合法 Recipe Tool Plan 所需的 recipe steps、scatter metadata 和 tool schema。
 
 ### `test_plan_from_natural_language_validates_llm_plan`
 
@@ -2447,11 +2452,38 @@ I would run fastp first.
 
 - `result.plan.workflow.recipe == "rnaseq_differential_expression"`。
 - `result.planner_prompt` 包含 `Catalog:`。
+- `result.catalog_retrieval.strategy == "lexical_v1"`。
+- `result.catalog_retrieval.recipes[0].id == "rnaseq_differential_expression"`。
+- `result.catalog_retrieval.tools` 包含 `deseq2`。
 - `result.raw_response` 包含 `RNASeqDEG`。
 
 覆盖点：
 
-- Planner 返回可观测性信息：结构化 plan、实际 prompt、原始模型响应。
+- Planner 返回可观测性信息：结构化 plan、实际 prompt、原始模型响应和 catalog retrieval artifact。
+- 自然语言 planner 成功路径会先通过 Approved Catalog Retriever 缩小 prompt context。
+
+### `test_plan_validation_uses_complete_catalog_after_retrieval`
+
+输入：
+
+- 用户请求：`Run RNA-seq differential expression.`
+- mock `retrieve_catalog_context(...)` 返回稀疏结果：只包含 RNA-seq recipe 和 `fastp` tool。
+- `FakePlannerLlm` 返回完整合法 RNA-seq Recipe Tool Plan JSON，包含 `salmon`、`tximport`、`deseq2` 和 `multiqc`。
+
+执行：
+
+- 调用 `create_natural_language_plan(...)`。
+
+期望输出：
+
+- `result.catalog_retrieval` 等于 mock 的稀疏 retrieval artifact。
+- 返回 plan 的 `workflow.recipe == "rnaseq_differential_expression"`。
+- `result.planner_prompt` 包含 `validation_boundary`。
+
+覆盖点：
+
+- Retriever 缩小的是 Planner prompt context，不是最终准入边界。
+- LLM 输出的 Recipe Tool Plan 仍然使用完整 Recipe / Tool Catalog 做 schema、resolver 和 Analyzer 校验。
 
 ### `test_plan_from_natural_language_reports_schema_error`
 
