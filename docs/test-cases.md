@@ -2407,15 +2407,18 @@ I would run fastp first.
   - `per_sample`
   - `tximport`
   - `Retrieved approved catalog context`
+  - `primary recipe/tool candidates`
   - `validation_boundary`
   - `matched_terms`
   - `trust_status`
   - 用户原始请求
+- prompt 文本不包含旧的 `Use only tools and versions listed in the retrieved` 硬门禁措辞。
 
 覆盖点：
 
 - Planner prompt 会包含 retriever 筛选后的 approved recipe/tool context、检索解释字段、完整 Catalog 校验边界说明和用户请求。
 - Planner prompt 仍保留生成合法 Recipe Tool Plan 所需的 recipe steps、scatter metadata 和 tool schema。
+- Retriever 结果作为 Planner 的首选候选上下文，不被表述为最终准入门禁。
 
 ### `test_plan_from_natural_language_validates_llm_plan`
 
