@@ -48,11 +48,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 P1.6 CLI/API 路由收口后的最近一次完整验证结果：
+当前 P1.7 事件与 artifacts 收口后的最近一次完整验证结果：
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 172 tests
+Ran 178 tests
 OK (skipped=2)
 ```
 
@@ -717,10 +717,37 @@ OK (skipped=2)
 - Workflow IR 名称为 `RNASeqDEG`。
 - WDL 包含 `workflow RNASeqDEG`。
 - events 包含 `run.created`、`artifact.updated`，最后一条为 `run.completed`。
+- 倒数第二条事件为 `artifact.updated` diagnostics，并包含 `artifact == "diagnostics"` 与 `succeeded == true`。
 
 覆盖点：
 
 - 结构化编译 run 会持久化详情页所需元数据、产物、诊断和事件回放记录。
+- diagnostics 保存后会通过结构化 artifact 事件通知历史/SSE 消费方刷新。
+
+### `test_structured_compile_run_replays_repair_artifact_before_repair_event`
+
+输入：
+
+- 从 `examples/rnaseq_workflow_ir.json` 读取 Workflow IR，并反转 calls 形成 forward reference。
+- `check=False`
+
+执行：
+
+- 创建并执行结构化 compile run。
+- 读取 snapshot 与 events。
+
+期望输出：
+
+- snapshot `status == "succeeded"`。
+- diagnostics 包含 repair actions。
+- snapshot Workflow IR calls 被修复为 `["qc", "align"]`。
+- `artifact.updated` workflow_ir 事件在 `repair.applied` 事件前出现。
+- `repair.applied` payload 包含结构化 `repair_actions`。
+
+覆盖点：
+
+- 修复发生时，历史事件先通知 Workflow IR artifact 更新，再记录 repair action。
+- 前端和 SSE 消费方不需要根据 summary 文案推断 repair 后的 artifact 类型。
 
 ### `test_natural_language_run_succeeds_after_planning`
 
@@ -747,6 +774,32 @@ OK (skipped=2)
 - 自然语言 run service 入口只依赖稳定 workflow service，不再手写 Planner 到 Compiler 的线性编排。
 - API run 层通过 callback 接收 service 事件。
 
+### `test_natural_language_run_replays_key_events_and_artifacts`
+
+输入：
+
+- 自然语言请求：`Run RNA-seq DEG.`
+- mock `plan_and_compile_workflow(...)` 通过 `event_callback` 发出 planner、compiler delegate、Compiler Graph、artifact 和 validation 事件，并返回成功结果。
+
+执行：
+
+- 创建并执行自然语言 run。
+- 读取 run snapshot 与 events。
+
+期望输出：
+
+- snapshot artifacts 包含 Planner plan、Workflow IR 和 WDL。
+- snapshot diagnostics 表示 run 成功。
+- event history 以 `run.created` 开始，并依次包含 planner started/completed、plan artifact、compiler_graph started、Compiler Graph 节点事件、WDL artifact、validation completed。
+- 倒数第二条为 diagnostics artifact 更新，最后一条为 `run.completed`。
+- artifact 顺序为 `plan`、`workflow_ir`、`wdl`、`diagnostics`。
+- diagnostics artifact payload 包含错误数、修复数、`check_performed` 和 `succeeded` 等结构化字段。
+
+覆盖点：
+
+- 成功自然语言 run 可以被前端和历史详情按关键阶段回放。
+- artifact 事件 payload 使用结构化字段，不依赖前端解析 summary 文案。
+
 ### `test_natural_language_run_preserves_empty_planner_observability_fields`
 
 输入：
@@ -768,12 +821,12 @@ OK (skipped=2)
 
 - 空字符串 trace 与 `None` 语义区分保留，便于后续调试真实 planner 行为。
 
-### `test_natural_language_compile_exception_preserves_planner_artifacts`
+### `test_natural_language_compile_exception_preserves_partial_artifacts`
 
 输入：
 
 - 自然语言请求：`Run RNA-seq DEG.`
-- mock `plan_and_compile_workflow(...)` 先通过 `event_callback` 发出 plan artifact 更新，再抛出 `RuntimeError("compiler exploded")`
+- mock `plan_and_compile_workflow(...)` 先通过 `event_callback` 发出 plan 和 Workflow IR artifact 更新，再抛出 `RuntimeError("compiler exploded")`
 
 执行：
 
@@ -783,13 +836,16 @@ OK (skipped=2)
 期望输出：
 
 - snapshot `status == "failed"`。
-- snapshot artifacts 仍保留 planner 产出的 plan。
+- snapshot artifacts 仍保留 planner 产出的 plan 和 compiler 已产出的 Workflow IR。
+- snapshot WDL 仍为空字符串。
 - diagnostics validation message 包含 `compiler exploded`。
 - events 包含 compiler failure，并以 `run.completed` 结束。
+- artifact 顺序为 `plan`、`workflow_ir`、`diagnostics`。
 
 覆盖点：
 
-- 即使自然语言 run 在 compiler 阶段失败，已产生的 planner artifact 仍可被历史详情和 SSE 回放读取。
+- 即使自然语言 run 在 compiler 阶段失败，已产生的 partial artifacts 仍可被历史详情和 SSE 回放读取。
+- 失败 run 也会在完成前发出 diagnostics artifact 更新事件。
 
 ### `test_natural_language_planner_error_is_persisted_as_failed_run`
 
@@ -806,12 +862,15 @@ OK (skipped=2)
 期望输出：
 
 - snapshot `status == "failed"`。
+- snapshot 不包含 plan、Workflow IR 或 WDL artifact。
 - diagnostics validation message 包含 planner 错误。
 - events 包含 `node.failed`。
+- artifact 顺序只包含 `diagnostics`。
 
 覆盖点：
 
 - Planner 错误由 workflow service 分类并传递给 run service，run service 只负责持久化失败状态与诊断。
+- Planner 失败不会误写 Compiler artifacts。
 
 ### `test_list_runs_returns_api_summaries`
 

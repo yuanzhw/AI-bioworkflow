@@ -300,6 +300,7 @@ node.completed renderer
 artifact.updated wdl
 node.started checker
 validation.completed
+artifact.updated diagnostics
 run.completed
 ```
 
@@ -308,6 +309,20 @@ run.completed
 - 成功 run 和失败 run 都能回放关键阶段。
 - 修复发生时，`workflow_ir` artifact 更新先于 `repair.applied` 事件。
 - 事件 payload 使用结构化字段，不依赖前端拼装业务语义。
+
+已完成内容：
+
+- run service 在 diagnostics 保存后、`run.completed` 前发出 `artifact.updated` diagnostics 事件。
+- diagnostics 事件 payload 使用结构化字段记录 artifact 名称、错误/警告/修复计数、校验状态和成功状态。
+- 成功自然语言 run 的 planner、compiler delegate、Compiler Graph、artifact 和 diagnostics 事件可按历史顺序回放。
+- Planner 失败不会写入 plan、Workflow IR 或 WDL artifacts，只会记录失败 diagnostics。
+- Compiler 失败时可保留已发出的 plan / Workflow IR partial artifacts，并记录最终 diagnostics。
+
+已满足验收：
+
+- 成功 run 和失败 run 的关键阶段回放已由 `tests/test_run_service.py` 覆盖。
+- `workflow_ir` artifact 更新先于 `repair.applied` 的持久化顺序已由 run service repair 测试覆盖。
+- artifact 与 diagnostics 事件 payload 结构化字段已由 run service 测试覆盖。
 
 ### P1.8 测试与文档
 
