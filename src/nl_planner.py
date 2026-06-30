@@ -9,8 +9,9 @@ from pydantic import SecretStr
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog.loader import ToolCatalog, load_tool_catalog
-from src.catalog.retriever import retrieve_catalog_context
+from src.catalog.retriever import CATALOG_APPROVED_TRUST_STATUS, retrieve_catalog_context
 from src.catalog.resolver import ToolCallPlan, resolve_tool_plan
+from src.catalog.schema import ToolSpec
 from src.prompts import render_natural_language_planner_prompt
 from src.recipes.loader import RecipeCatalog, load_recipe_catalog
 
@@ -155,10 +156,11 @@ def _build_retrieved_catalog_context(
             _recipe_prompt_context(recipe_result, recipe_catalog)
             for recipe_result in catalog_retrieval.get("recipes", [])
         ],
-        "tools": [
-            _tool_prompt_context(tool_result, tool_catalog)
-            for tool_result in catalog_retrieval.get("tools", [])
-        ],
+        "tools": _tool_prompt_contexts(
+            catalog_retrieval,
+            tool_catalog,
+            recipe_catalog,
+        ),
     }
 
 
@@ -194,11 +196,63 @@ def _tool_prompt_context(
     tool_catalog: ToolCatalog,
 ) -> dict[str, Any]:
     tool = tool_catalog.get(str(tool_result["id"]), str(tool_result["version"]))
-    return {
+    return _tool_spec_prompt_context(
+        tool,
+        context_source="retriever_match",
+        retrieval=tool_result,
+    )
+
+
+def _tool_prompt_contexts(
+    catalog_retrieval: dict[str, Any],
+    tool_catalog: ToolCatalog,
+    recipe_catalog: RecipeCatalog,
+) -> list[dict[str, Any]]:
+    contexts: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for tool_result in catalog_retrieval.get("tools", []):
+        context = _tool_prompt_context(tool_result, tool_catalog)
+        seen.add((context["id"], context["version"]))
+        contexts.append(context)
+
+    for recipe_result in catalog_retrieval.get("recipes", []):
+        recipe = recipe_catalog.get(str(recipe_result["id"]))
+        for step in recipe.steps:
+            for tool_id in step.allowed_tools:
+                for version in tool_catalog.versions(tool_id):
+                    tool = tool_catalog.get(tool_id, version)
+                    key = (tool.id, tool.version)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    contexts.append(
+                        _tool_spec_prompt_context(
+                            tool,
+                            context_source="retrieved_recipe_allowed_tool",
+                            inclusion_reason=(
+                                f"Included because retrieved recipe '{recipe.id}' "
+                                f"step '{step.id}' allows this tool."
+                            ),
+                        )
+                    )
+
+    return contexts
+
+
+def _tool_spec_prompt_context(
+    tool: ToolSpec,
+    *,
+    context_source: str,
+    retrieval: dict[str, Any] | None = None,
+    inclusion_reason: str | None = None,
+) -> dict[str, Any]:
+    context = {
+        "context_source": context_source,
         "id": tool.id,
         "version": tool.version,
         "description": tool.description,
-        "retrieval": tool_result,
+        "trust_status": CATALOG_APPROVED_TRUST_STATUS,
         "inputs": {
             input_name: spec.model_dump(exclude_none=True)
             for input_name, spec in tool.inputs.items()
@@ -212,6 +266,11 @@ def _tool_prompt_context(
             for output_name, spec in tool.outputs.items()
         },
     }
+    if retrieval is not None:
+        context["retrieval"] = retrieval
+    if inclusion_reason is not None:
+        context["inclusion_reason"] = inclusion_reason
+    return context
 
 
 def parse_json_object(text: str) -> dict[str, Any]:

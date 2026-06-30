@@ -2482,10 +2482,15 @@ I would run fastp first.
 - `result.catalog_retrieval` 等于 mock 的稀疏 retrieval artifact。
 - 返回 plan 的 `workflow.recipe == "rnaseq_differential_expression"`。
 - `result.planner_prompt` 包含 `validation_boundary`。
+- `result.planner_prompt` 包含 `context_source: retriever_match`。
+- `result.planner_prompt` 包含 `context_source: retrieved_recipe_allowed_tool`。
+- `result.planner_prompt` 包含从 retrieved recipe allowed tools 补齐的 `deseq2` 和 `multiqc` schema。
 
 覆盖点：
 
 - Retriever 缩小的是 Planner prompt context，不是最终准入边界。
+- Prompt tool context 会补齐 retrieved recipes 的 allowed tools，避免 Planner 因缺少版本或 schema 被迫猜测。
+- `catalog_retrieval` artifact 保留原始 retriever 输出，不混入 prompt-only 补齐工具。
 - LLM 输出的 Recipe Tool Plan 仍然使用完整 Recipe / Tool Catalog 做 schema、resolver 和 Analyzer 校验。
 
 ### `test_plan_from_natural_language_reports_schema_error`

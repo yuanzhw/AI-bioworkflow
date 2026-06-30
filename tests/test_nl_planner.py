@@ -218,6 +218,11 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
         self.assertEqual(result.catalog_retrieval, sparse_retrieval)
         self.assertEqual(result.plan["workflow"]["recipe"], "rnaseq_differential_expression")
         self.assertIn("validation_boundary", result.planner_prompt)
+        self.assertIn('"context_source": "retriever_match"', result.planner_prompt)
+        self.assertIn('"context_source": "retrieved_recipe_allowed_tool"', result.planner_prompt)
+        self.assertIn('"id": "deseq2"', result.planner_prompt)
+        self.assertIn('"id": "multiqc"', result.planner_prompt)
+        self.assertIn("Included because retrieved recipe", result.planner_prompt)
 
     def test_plan_from_natural_language_reports_schema_error(self):
         fake_llm = FakePlannerLlm(json.dumps({"workflow": {"name": "RNASeqDEG"}}))
