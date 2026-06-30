@@ -231,19 +231,18 @@ class RunService:
             planner_prompt=planner_prompt if planner_prompt is not None else result.planner_prompt,
             planner_raw_response=planner_raw_response if planner_raw_response is not None else result.planner_raw_response,
         )
-        self.repository.save_diagnostics(
-            run_id,
-            DiagnosticReport(
-                analysis_errors=result.analysis_errors,
-                analysis_warnings=result.analysis_warnings,
-                repair_actions=result.repair_actions,
-                validation_message=result.validation_message,
-                is_valid=result.is_valid,
-                succeeded=result.succeeded,
-                check_performed=result.check_performed,
-            ),
+        diagnostics = DiagnosticReport(
+            analysis_errors=result.analysis_errors,
+            analysis_warnings=result.analysis_warnings,
+            repair_actions=result.repair_actions,
+            validation_message=result.validation_message,
+            is_valid=result.is_valid,
+            succeeded=result.succeeded,
+            check_performed=result.check_performed,
         )
+        self.repository.save_diagnostics(run_id, diagnostics)
         final_status = RunStatus.SUCCEEDED if result.succeeded else RunStatus.FAILED
+        self._append_diagnostics_artifact_event(run_id, diagnostics)
         self.repository.complete_run(
             run_id=run_id,
             status=final_status,
@@ -252,15 +251,14 @@ class RunService:
         )
 
     def _fail_run(self, run_id: str, message: str, *, check_performed: bool) -> None:
-        self.repository.save_diagnostics(
-            run_id,
-            DiagnosticReport(
-                analysis_errors=[message],
-                validation_message=message,
-                succeeded=False,
-                check_performed=check_performed,
-            ),
+        diagnostics = DiagnosticReport(
+            analysis_errors=[message],
+            validation_message=message,
+            succeeded=False,
+            check_performed=check_performed,
         )
+        self.repository.save_diagnostics(run_id, diagnostics)
+        self._append_diagnostics_artifact_event(run_id, diagnostics)
         self.repository.complete_run(
             run_id=run_id,
             status=RunStatus.FAILED,
@@ -275,6 +273,23 @@ class RunService:
             node="compiler",
             summary="Workflow compiler failed.",
             payload={"error": str(exc)},
+        )
+
+    def _append_diagnostics_artifact_event(self, run_id: str, diagnostics: DiagnosticReport) -> None:
+        self.repository.append_event(
+            run_id=run_id,
+            event_type=RunEventType.ARTIFACT_UPDATED,
+            node="diagnostics",
+            summary="Diagnostics artifact updated.",
+            payload={
+                "artifact": "diagnostics",
+                "analysis_error_count": len(diagnostics.analysis_errors),
+                "analysis_warning_count": len(diagnostics.analysis_warnings),
+                "repair_action_count": len(diagnostics.repair_actions),
+                "check_performed": diagnostics.check_performed,
+                "is_valid": diagnostics.is_valid,
+                "succeeded": diagnostics.succeeded,
+            },
         )
 
     def _compiler_event_callback(self, run_id: str):
