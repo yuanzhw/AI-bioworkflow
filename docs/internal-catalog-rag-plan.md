@@ -439,11 +439,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 
 ## 验收清单
 
-- [ ] 检索范围只包含 approved local catalog。
-- [ ] 检索结果包含 `score`、`matched_terms`、`matched_fields` 和 `reason`。
-- [ ] Planner prompt 使用 retrieved context。
-- [ ] 完整 Catalog validation 仍然执行。
-- [ ] 结构化入口不依赖 retriever。
+- [x] 检索范围只包含 approved local catalog。
+- [x] 检索结果包含 `score`、`matched_terms`、`matched_fields` 和 `reason`。
+- [x] Planner prompt 使用 retrieved context。
+- [x] 完整 Catalog validation 仍然执行。
+- [x] 结构化入口不依赖 retriever。
 - [ ] 自然语言 run 记录 retriever 事件。
 - [ ] Run snapshot 暴露 retrieval artifact。
 - [ ] 前端能展示候选 recipe/tools 和 `trust_status`。

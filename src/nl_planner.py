@@ -9,7 +9,9 @@ from pydantic import SecretStr
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog.loader import ToolCatalog, load_tool_catalog
+from src.catalog.retriever import CATALOG_APPROVED_TRUST_STATUS, retrieve_catalog_context
 from src.catalog.resolver import ToolCallPlan, resolve_tool_plan
+from src.catalog.schema import ToolSpec
 from src.prompts import render_natural_language_planner_prompt
 from src.recipes.loader import RecipeCatalog, load_recipe_catalog
 
@@ -44,6 +46,7 @@ class NaturalLanguagePlanResult:
     plan: dict[str, Any]
     planner_prompt: str
     raw_response: str
+    catalog_retrieval: dict[str, Any]
 
 
 def plan_from_natural_language(
@@ -80,7 +83,13 @@ def create_natural_language_plan(
     recipe_catalog = recipe_catalog or load_recipe_catalog(tool_catalog=tool_catalog)
     planner_llm = llm if llm is not None else _make_planner_llm(model)
 
-    prompt = build_planner_prompt(request, tool_catalog, recipe_catalog)
+    catalog_retrieval = retrieve_catalog_context(request, tool_catalog, recipe_catalog)
+    prompt = build_planner_prompt(
+        request,
+        tool_catalog,
+        recipe_catalog,
+        catalog_retrieval=catalog_retrieval,
+    )
     response = planner_llm.invoke(prompt)
     raw_content = str(getattr(response, "content", response))
     plan = parse_json_object(raw_content)
@@ -103,6 +112,7 @@ def create_natural_language_plan(
         plan=plan,
         planner_prompt=prompt,
         raw_response=raw_content,
+        catalog_retrieval=catalog_retrieval,
     )
 
 
@@ -110,51 +120,17 @@ def build_planner_prompt(
     request: str,
     tool_catalog: ToolCatalog,
     recipe_catalog: RecipeCatalog,
+    *,
+    catalog_retrieval: dict[str, Any] | None = None,
 ) -> str:
-    catalog_context = {
-        "recipes": [
-            {
-                "id": recipe.id,
-                "name": recipe.name,
-                "description": recipe.description,
-                "required_inputs": {
-                    input_name: spec.model_dump(exclude_none=True)
-                    for input_name, spec in recipe.required_inputs.items()
-                },
-                "steps": [
-                    {
-                        "id": step.id,
-                        "role": step.role,
-                        "optional": step.optional,
-                        "scatter": step.scatter.model_dump(exclude_none=True) if step.scatter else None,
-                        "allowed_tools": step.allowed_tools,
-                    }
-                    for step in recipe.steps
-                ],
-            }
-            for recipe in recipe_catalog.all()
-        ],
-        "tools": [
-            {
-                "id": tool.id,
-                "version": tool.version,
-                "description": tool.description,
-                "inputs": {
-                    input_name: spec.model_dump(exclude_none=True)
-                    for input_name, spec in tool.inputs.items()
-                },
-                "params": {
-                    param_name: spec.model_dump(exclude_none=True)
-                    for param_name, spec in tool.params.items()
-                },
-                "outputs": {
-                    output_name: spec.model_dump(exclude_none=True)
-                    for output_name, spec in tool.outputs.items()
-                },
-            }
-            for tool in tool_catalog.all()
-        ],
-    }
+    if catalog_retrieval is None:
+        catalog_retrieval = retrieve_catalog_context(request, tool_catalog, recipe_catalog)
+
+    catalog_context = _build_retrieved_catalog_context(
+        catalog_retrieval,
+        tool_catalog,
+        recipe_catalog,
+    )
 
     return render_natural_language_planner_prompt(request, catalog_context)
 
@@ -163,6 +139,138 @@ def build_default_planner_prompt(request: str) -> str:
     tool_catalog = load_tool_catalog()
     recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)
     return build_planner_prompt(request, tool_catalog, recipe_catalog)
+
+
+def _build_retrieved_catalog_context(
+    catalog_retrieval: dict[str, Any],
+    tool_catalog: ToolCatalog,
+    recipe_catalog: RecipeCatalog,
+) -> dict[str, Any]:
+    return {
+        "retrieval": catalog_retrieval,
+        "validation_boundary": (
+            "Planner context is narrowed by Approved Catalog Retriever; final "
+            "recipe/tool validation uses the complete approved Catalog."
+        ),
+        "recipes": [
+            _recipe_prompt_context(recipe_result, recipe_catalog)
+            for recipe_result in catalog_retrieval.get("recipes", [])
+        ],
+        "tools": _tool_prompt_contexts(
+            catalog_retrieval,
+            tool_catalog,
+            recipe_catalog,
+        ),
+    }
+
+
+def _recipe_prompt_context(
+    recipe_result: dict[str, Any],
+    recipe_catalog: RecipeCatalog,
+) -> dict[str, Any]:
+    recipe = recipe_catalog.get(str(recipe_result["id"]))
+    return {
+        "id": recipe.id,
+        "name": recipe.name,
+        "description": recipe.description,
+        "retrieval": recipe_result,
+        "required_inputs": {
+            input_name: spec.model_dump(exclude_none=True)
+            for input_name, spec in recipe.required_inputs.items()
+        },
+        "steps": [
+            {
+                "id": step.id,
+                "role": step.role,
+                "optional": step.optional,
+                "scatter": step.scatter.model_dump(exclude_none=True) if step.scatter else None,
+                "allowed_tools": step.allowed_tools,
+            }
+            for step in recipe.steps
+        ],
+    }
+
+
+def _tool_prompt_context(
+    tool_result: dict[str, Any],
+    tool_catalog: ToolCatalog,
+) -> dict[str, Any]:
+    tool = tool_catalog.get(str(tool_result["id"]), str(tool_result["version"]))
+    return _tool_spec_prompt_context(
+        tool,
+        context_source="retriever_match",
+        retrieval=tool_result,
+    )
+
+
+def _tool_prompt_contexts(
+    catalog_retrieval: dict[str, Any],
+    tool_catalog: ToolCatalog,
+    recipe_catalog: RecipeCatalog,
+) -> list[dict[str, Any]]:
+    contexts: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for tool_result in catalog_retrieval.get("tools", []):
+        context = _tool_prompt_context(tool_result, tool_catalog)
+        seen.add((context["id"], context["version"]))
+        contexts.append(context)
+
+    for recipe_result in catalog_retrieval.get("recipes", []):
+        recipe = recipe_catalog.get(str(recipe_result["id"]))
+        for step in recipe.steps:
+            for tool_id in step.allowed_tools:
+                for version in tool_catalog.versions(tool_id):
+                    tool = tool_catalog.get(tool_id, version)
+                    key = (tool.id, tool.version)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    contexts.append(
+                        _tool_spec_prompt_context(
+                            tool,
+                            context_source="retrieved_recipe_allowed_tool",
+                            inclusion_reason=(
+                                f"Included because retrieved recipe '{recipe.id}' "
+                                f"step '{step.id}' allows this tool."
+                            ),
+                        )
+                    )
+
+    return contexts
+
+
+def _tool_spec_prompt_context(
+    tool: ToolSpec,
+    *,
+    context_source: str,
+    retrieval: dict[str, Any] | None = None,
+    inclusion_reason: str | None = None,
+) -> dict[str, Any]:
+    context = {
+        "context_source": context_source,
+        "id": tool.id,
+        "version": tool.version,
+        "description": tool.description,
+        "trust_status": CATALOG_APPROVED_TRUST_STATUS,
+        "inputs": {
+            input_name: spec.model_dump(exclude_none=True)
+            for input_name, spec in tool.inputs.items()
+        },
+        "params": {
+            param_name: spec.model_dump(exclude_none=True)
+            for param_name, spec in tool.params.items()
+        },
+        "outputs": {
+            output_name: spec.model_dump(exclude_none=True)
+            for output_name, spec in tool.outputs.items()
+        },
+    }
+    if retrieval is not None:
+        context["retrieval"] = retrieval
+    if inclusion_reason is not None:
+        context["inclusion_reason"] = inclusion_reason
+    return context
 
 
 def parse_json_object(text: str) -> dict[str, Any]:

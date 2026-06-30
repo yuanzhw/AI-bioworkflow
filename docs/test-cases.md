@@ -2476,11 +2476,19 @@ I would run fastp first.
   - `fastp`
   - `per_sample`
   - `tximport`
+  - `Retrieved approved catalog context`
+  - `primary recipe/tool candidates`
+  - `validation_boundary`
+  - `matched_terms`
+  - `trust_status`
   - 用户原始请求
+- prompt 文本不包含旧的 `Use only tools and versions listed in the retrieved` 硬门禁措辞。
 
 覆盖点：
 
-- Planner prompt 会包含 recipe、tool、scatter metadata 和用户请求。
+- Planner prompt 会包含 retriever 筛选后的 approved recipe/tool context、检索解释字段、完整 Catalog 校验边界说明和用户请求。
+- Planner prompt 仍保留生成合法 Recipe Tool Plan 所需的 recipe steps、scatter metadata 和 tool schema。
+- Retriever 结果作为 Planner 的首选候选上下文，不被表述为最终准入门禁。
 
 ### `test_plan_from_natural_language_validates_llm_plan`
 
@@ -2517,11 +2525,43 @@ I would run fastp first.
 
 - `result.plan.workflow.recipe == "rnaseq_differential_expression"`。
 - `result.planner_prompt` 包含 `Catalog:`。
+- `result.catalog_retrieval.strategy == "lexical_v1"`。
+- `result.catalog_retrieval.recipes[0].id == "rnaseq_differential_expression"`。
+- `result.catalog_retrieval.tools` 包含 `deseq2`。
 - `result.raw_response` 包含 `RNASeqDEG`。
 
 覆盖点：
 
-- Planner 返回可观测性信息：结构化 plan、实际 prompt、原始模型响应。
+- Planner 返回可观测性信息：结构化 plan、实际 prompt、原始模型响应和 catalog retrieval artifact。
+- 自然语言 planner 成功路径会先通过 Approved Catalog Retriever 缩小 prompt context。
+
+### `test_plan_validation_uses_complete_catalog_after_retrieval`
+
+输入：
+
+- 用户请求：`Run RNA-seq differential expression.`
+- mock `retrieve_catalog_context(...)` 返回稀疏结果：只包含 RNA-seq recipe 和 `fastp` tool。
+- `FakePlannerLlm` 返回完整合法 RNA-seq Recipe Tool Plan JSON，包含 `salmon`、`tximport`、`deseq2` 和 `multiqc`。
+
+执行：
+
+- 调用 `create_natural_language_plan(...)`。
+
+期望输出：
+
+- `result.catalog_retrieval` 等于 mock 的稀疏 retrieval artifact。
+- 返回 plan 的 `workflow.recipe == "rnaseq_differential_expression"`。
+- `result.planner_prompt` 包含 `validation_boundary`。
+- `result.planner_prompt` 包含 `context_source: retriever_match`。
+- `result.planner_prompt` 包含 `context_source: retrieved_recipe_allowed_tool`。
+- `result.planner_prompt` 包含从 retrieved recipe allowed tools 补齐的 `deseq2` 和 `multiqc` schema。
+
+覆盖点：
+
+- Retriever 缩小的是 Planner prompt context，不是最终准入边界。
+- Prompt tool context 会补齐 retrieved recipes 的 allowed tools，避免 Planner 因缺少版本或 schema 被迫猜测。
+- `catalog_retrieval` artifact 保留原始 retriever 输出，不混入 prompt-only 补齐工具。
+- LLM 输出的 Recipe Tool Plan 仍然使用完整 Recipe / Tool Catalog 做 schema、resolver 和 Analyzer 校验。
 
 ### `test_plan_from_natural_language_reports_schema_error`
 

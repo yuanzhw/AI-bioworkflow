@@ -106,7 +106,7 @@ main.py -> workflow_service.plan_and_compile_workflow
   ↓
 Orchestration Graph
   ↓
-natural_language_planner       # 生成 Recipe Tool Plan 和 planner trace
+natural_language_planner       # Approved Catalog Retriever 缩小 prompt context，再生成 Recipe Tool Plan 和 planner trace
   ↓
 Recipe Tool Plan
   ↓
@@ -183,7 +183,7 @@ P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流
 1. **Reviewer LLM 只能修改 IR**：Reviewer 可以读取当前 IR、分析错误、WOMtool stderr 和历史修复记录，并输出结构化 IR patch 或候选 IR；不能直接改写最终 WDL、绕过验证或引入未经准入的正式工具。
 2. **Bioinfo Reviewer 只告警与建议**：科学性审查节点负责指出缺失步骤、方法学风险和推荐调整，但最终流程方案始终由 Architect Agent 决定。
 3. **Resource Agent 只处理资源字段**：该节点仅建议或覆盖 `cpu`、`memory`、`disks` 等资源字段，记录修改理由；不负责镜像选择、工具选择或分析方法选择。
-4. **Catalog 内检索优先**：Planner 不必永久读取全量正式工具库；未来由 Tool Retriever 从 approved Catalog 中高召回筛选候选工具，再由完整 Catalog 做最终校验。
+4. **Catalog 内检索优先**：Planner 不必永久读取全量正式工具库；当前自然语言 Planner 已先由 Approved Catalog Retriever 从 approved Catalog 中筛选候选 recipe / tools，再由完整 Catalog 做最终校验。
 5. **未知工具先形成 Candidate ToolSpec**：外部检索发现的新工具必须先生成带来源、版本依据、未确认字段和测试状态的候选定义，才能进入镜像构建环节。
 6. **临时镜像可服务当前任务**：自动构建并通过最小验证的临时镜像允许在隔离环境内用于当前探索任务，前端必须以文字提示可信等级和风险。
 7. **正式 Catalog 只引用已验证 digest**：可复用的正式工具镜像应固定为经过验证的 digest，而不是依赖可变 tag。
