@@ -25,6 +25,7 @@ from src.api.models.workflows import (
     RunListResponse,
     RunSummary,
     RunStatus,
+    WorkflowArtifactSummary,
     WorkflowArtifacts,
     WorkflowRunSnapshotResponse,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "ToolOutputDto",
     "ToolParamDto",
     "TrustStatus",
+    "WorkflowArtifactSummary",
     "WorkflowArtifacts",
     "WorkflowRunSnapshotResponse",
 ]

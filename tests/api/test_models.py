@@ -16,6 +16,8 @@ from src.api.models import (
     RunListResponse,
     RunStatus,
     RunSummary,
+    WorkflowArtifactSummary,
+    WorkflowArtifacts,
     ToolListResponse,
     WorkflowRunSnapshotResponse,
 )
@@ -107,6 +109,28 @@ class WorkflowDtoTests(unittest.TestCase):
         self.assertIsNone(response.created_at)
         self.assertIsNone(response.updated_at)
         self.assertIsNone(response.completed_at)
+
+    def test_workflow_artifacts_expose_manifest_and_extra_artifacts(self):
+        updated_at = datetime(2026, 6, 16, tzinfo=UTC)
+        artifacts = WorkflowArtifacts(
+            extras={
+                "catalog_retrieval": {
+                    "strategy": "lexical_v1",
+                    "recipes": [{"id": "rnaseq_differential_expression"}],
+                }
+            },
+            manifest=[
+                WorkflowArtifactSummary(
+                    name="catalog_retrieval",
+                    content_type="application/json",
+                    updated_at=updated_at,
+                )
+            ],
+        )
+
+        self.assertEqual(artifacts.extras["catalog_retrieval"]["strategy"], "lexical_v1")
+        self.assertEqual(artifacts.manifest[0].name, "catalog_retrieval")
+        self.assertEqual(artifacts.manifest[0].content_type, "application/json")
 
     def test_run_list_response_accepts_history_summaries(self):
         created_at = datetime(2026, 6, 16, tzinfo=UTC)

@@ -84,6 +84,12 @@ export type RunAcceptedResponse = {
   events_url: string;
 };
 
+export type WorkflowArtifactSummary = {
+  name: string;
+  content_type: string;
+  updated_at: string;
+};
+
 export type RunDiagnosticSummary = {
   analysis_error_count: number;
   analysis_warning_count: number;
@@ -115,6 +121,8 @@ export type WorkflowArtifacts = {
   plan: JsonObject | null;
   workflow_ir: JsonObject;
   wdl: string;
+  extras: Record<string, JsonValue>;
+  manifest: WorkflowArtifactSummary[];
 };
 
 export type DiagnosticReport = {

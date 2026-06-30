@@ -68,6 +68,16 @@ class RunAcceptedResponse(BaseModel):
     events_url: str
 
 
+class WorkflowArtifactSummary(BaseModel):
+    """Small manifest entry for persisted run artifacts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    content_type: str
+    updated_at: datetime
+
+
 class WorkflowArtifacts(BaseModel):
     """Compiled artifacts exposed to the web UI."""
 
@@ -77,6 +87,8 @@ class WorkflowArtifacts(BaseModel):
     plan: JsonObject | None = None
     workflow_ir: JsonObject = Field(default_factory=dict)
     wdl: str = ""
+    extras: dict[str, Any] = Field(default_factory=dict)
+    manifest: list[WorkflowArtifactSummary] = Field(default_factory=list)
 
 
 class DiagnosticReport(BaseModel):

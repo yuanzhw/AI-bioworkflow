@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -11,13 +12,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from src.api.models import DiagnosticReport, RunEvent, RunEventType, RunStatus, WorkflowArtifacts
+from src.api.models import (
+    DiagnosticReport,
+    RunEvent,
+    RunEventType,
+    RunStatus,
+    WorkflowArtifactSummary,
+    WorkflowArtifacts,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / ".cache" / "ai-bioworkflow.sqlite3"
 SQLITE_CONNECT_TIMEOUT_SECONDS = 30.0
 SQLITE_BUSY_TIMEOUT_MS = 30_000
+ARTIFACT_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+JSON_CONTENT_TYPE = "application/json"
+TEXT_CONTENT_TYPE = "text/plain"
+CORE_ARTIFACT_NAMES = {"plan", "workflow_ir", "wdl", "diagnostics"}
 
 
 @dataclass(frozen=True)
@@ -39,6 +51,15 @@ class RunSnapshotRecord:
     run: RunRecord
     artifacts: WorkflowArtifacts
     diagnostics: DiagnosticReport
+
+
+@dataclass(frozen=True)
+class RunArtifactRecord:
+    run_id: str
+    name: str
+    content_type: str
+    content: Any
+    updated_at: datetime
 
 
 @dataclass(frozen=True)
@@ -290,6 +311,38 @@ class RunRepository:
                     planner_raw_response,
                 ),
             )
+            if artifacts.catalog_retrieval is not None:
+                self._save_artifact_record(
+                    connection,
+                    run_id=run_id,
+                    name="catalog_retrieval",
+                    content=artifacts.catalog_retrieval,
+                    content_type=JSON_CONTENT_TYPE,
+                )
+            if artifacts.plan is not None:
+                self._save_artifact_record(
+                    connection,
+                    run_id=run_id,
+                    name="plan",
+                    content=artifacts.plan,
+                    content_type=JSON_CONTENT_TYPE,
+                )
+            if artifacts.workflow_ir:
+                self._save_artifact_record(
+                    connection,
+                    run_id=run_id,
+                    name="workflow_ir",
+                    content=artifacts.workflow_ir,
+                    content_type=JSON_CONTENT_TYPE,
+                )
+            if artifacts.wdl:
+                self._save_artifact_record(
+                    connection,
+                    run_id=run_id,
+                    name="wdl",
+                    content=artifacts.wdl,
+                    content_type=TEXT_CONTENT_TYPE,
+                )
 
     def save_catalog_retrieval_artifact(
         self,
@@ -308,6 +361,13 @@ class RunRepository:
                     catalog_retrieval_json = excluded.catalog_retrieval_json
                 """,
                 (run_id, _to_json(catalog_retrieval)),
+            )
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name="catalog_retrieval",
+                content=catalog_retrieval,
+                content_type=JSON_CONTENT_TYPE,
             )
 
     def save_plan_artifact(
@@ -338,6 +398,13 @@ class RunRepository:
                     planner_raw_response,
                 ),
             )
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name="plan",
+                content=plan,
+                content_type=JSON_CONTENT_TYPE,
+            )
 
     def save_workflow_ir_artifact(self, run_id: str, workflow_ir: dict[str, Any]) -> None:
         with self._connect() as connection:
@@ -353,6 +420,13 @@ class RunRepository:
                 """,
                 (run_id, _to_json(workflow_ir)),
             )
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name="workflow_ir",
+                content=workflow_ir,
+                content_type=JSON_CONTENT_TYPE,
+            )
 
     def save_wdl_artifact(self, run_id: str, wdl: str) -> None:
         with self._connect() as connection:
@@ -367,6 +441,13 @@ class RunRepository:
                     wdl = excluded.wdl
                 """,
                 (run_id, wdl),
+            )
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name="wdl",
+                content=wdl,
+                content_type=TEXT_CONTENT_TYPE,
             )
 
     def save_diagnostics(self, run_id: str, diagnostics: DiagnosticReport) -> None:
@@ -399,6 +480,48 @@ class RunRepository:
                     int(diagnostics.check_performed),
                 ),
             )
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name="diagnostics",
+                content=diagnostics.model_dump(mode="json"),
+                content_type=JSON_CONTENT_TYPE,
+            )
+
+    def save_json_artifact(self, run_id: str, name: str, content: Any) -> None:
+        """Persist a named JSON artifact for future orchestration stages."""
+        with self._connect() as connection:
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name=name,
+                content=content,
+                content_type=JSON_CONTENT_TYPE,
+            )
+
+    def save_text_artifact(self, run_id: str, name: str, content: str) -> None:
+        """Persist a named text artifact for future orchestration stages."""
+        with self._connect() as connection:
+            self._save_artifact_record(
+                connection,
+                run_id=run_id,
+                name=name,
+                content=content,
+                content_type=TEXT_CONTENT_TYPE,
+            )
+
+    def list_artifact_records(self, run_id: str) -> list[RunArtifactRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM run_artifact_records
+                WHERE run_id = ?
+                ORDER BY name ASC
+                """,
+                (run_id,),
+            ).fetchall()
+        return [_row_to_artifact_record(row) for row in rows]
 
     def get_snapshot(self, run_id: str) -> RunSnapshotRecord | None:
         run = self.get_run(run_id)
@@ -415,9 +538,11 @@ class RunRepository:
                 (run_id,),
             ).fetchone()
 
+        artifact_records = self.list_artifact_records(run_id)
+
         return RunSnapshotRecord(
             run=run,
-            artifacts=_row_to_artifacts(artifact_row),
+            artifacts=_row_to_artifacts(artifact_row, artifact_records),
             diagnostics=_row_to_diagnostics(diagnostic_row, check_performed=run.check_performed),
         )
 
@@ -473,9 +598,21 @@ class RunRepository:
                     check_performed INTEGER NOT NULL,
                     FOREIGN KEY(run_id) REFERENCES runs(run_id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS run_artifact_records (
+                    run_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    content_type TEXT NOT NULL,
+                    content_json TEXT,
+                    content_text TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(run_id, name),
+                    FOREIGN KEY(run_id) REFERENCES runs(run_id) ON DELETE CASCADE
+                );
                 """
             )
             _ensure_column(connection, "run_artifacts", "catalog_retrieval_json", "TEXT")
+            self._backfill_artifact_records(connection)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -544,6 +681,147 @@ class RunRepository:
         )
         return event
 
+    def _save_artifact_record(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        name: str,
+        content: Any,
+        content_type: str,
+        updated_at: datetime | None = None,
+        replace_existing: bool = True,
+    ) -> None:
+        _validate_artifact_name(name)
+        if content_type not in {JSON_CONTENT_TYPE, TEXT_CONTENT_TYPE}:
+            raise ValueError(f"unsupported artifact content type: {content_type}")
+
+        timestamp = updated_at or _utc_now()
+        content_json = _to_json(content) if content_type == JSON_CONTENT_TYPE else None
+        content_text = str(content) if content_type == TEXT_CONTENT_TYPE else None
+        if replace_existing:
+            connection.execute(
+                """
+                INSERT INTO run_artifact_records (
+                    run_id, name, content_type, content_json, content_text, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, name) DO UPDATE SET
+                    content_type = excluded.content_type,
+                    content_json = excluded.content_json,
+                    content_text = excluded.content_text,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    run_id,
+                    name,
+                    content_type,
+                    content_json,
+                    content_text,
+                    _dt_to_text(timestamp),
+                ),
+            )
+            return
+
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO run_artifact_records (
+                run_id, name, content_type, content_json, content_text, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                name,
+                content_type,
+                content_json,
+                content_text,
+                _dt_to_text(timestamp),
+            ),
+        )
+
+    def _backfill_artifact_records(self, connection: sqlite3.Connection) -> None:
+        artifact_rows = connection.execute(
+            """
+            SELECT run_artifacts.*, runs.updated_at AS artifact_updated_at
+            FROM run_artifacts
+            JOIN runs ON runs.run_id = run_artifacts.run_id
+            """
+        ).fetchall()
+        for row in artifact_rows:
+            updated_at = _dt_from_text(row["artifact_updated_at"])
+            catalog_retrieval = _from_json(row["catalog_retrieval_json"])
+            plan = _from_json(row["plan_json"])
+            workflow_ir = _from_json(row["workflow_ir_json"]) or {}
+            wdl = row["wdl"] or ""
+            if catalog_retrieval is not None:
+                self._save_artifact_record(
+                    connection,
+                    run_id=row["run_id"],
+                    name="catalog_retrieval",
+                    content=catalog_retrieval,
+                    content_type=JSON_CONTENT_TYPE,
+                    updated_at=updated_at,
+                    replace_existing=False,
+                )
+            if plan is not None:
+                self._save_artifact_record(
+                    connection,
+                    run_id=row["run_id"],
+                    name="plan",
+                    content=plan,
+                    content_type=JSON_CONTENT_TYPE,
+                    updated_at=updated_at,
+                    replace_existing=False,
+                )
+            if workflow_ir:
+                self._save_artifact_record(
+                    connection,
+                    run_id=row["run_id"],
+                    name="workflow_ir",
+                    content=workflow_ir,
+                    content_type=JSON_CONTENT_TYPE,
+                    updated_at=updated_at,
+                    replace_existing=False,
+                )
+            if wdl:
+                self._save_artifact_record(
+                    connection,
+                    run_id=row["run_id"],
+                    name="wdl",
+                    content=wdl,
+                    content_type=TEXT_CONTENT_TYPE,
+                    updated_at=updated_at,
+                    replace_existing=False,
+                )
+
+        diagnostic_rows = connection.execute(
+            """
+            SELECT run_diagnostics.*, runs.updated_at AS artifact_updated_at
+            FROM run_diagnostics
+            JOIN runs ON runs.run_id = run_diagnostics.run_id
+            """
+        ).fetchall()
+        for row in diagnostic_rows:
+            diagnostics = DiagnosticReport(
+                analysis_errors=_from_json(row["analysis_errors_json"]) or [],
+                analysis_warnings=_from_json(row["analysis_warnings_json"]) or [],
+                repair_actions=_from_json(row["repair_actions_json"]) or [],
+                validation_message=row["validation_message"] or "",
+                is_valid=bool(row["is_valid"]),
+                succeeded=bool(row["succeeded"]),
+                check_performed=bool(row["check_performed"]),
+            )
+            self._save_artifact_record(
+                connection,
+                run_id=row["run_id"],
+                name="diagnostics",
+                content=diagnostics.model_dump(mode="json"),
+                content_type=JSON_CONTENT_TYPE,
+                updated_at=_dt_from_text(row["artifact_updated_at"]),
+                replace_existing=False,
+            )
+
 
 def default_db_path() -> Path:
     configured = os.environ.get("AI_BIOWORKFLOW_DB_PATH")
@@ -595,15 +873,67 @@ def _row_to_event(row: sqlite3.Row) -> RunEvent:
     )
 
 
-def _row_to_artifacts(row: sqlite3.Row | None) -> WorkflowArtifacts:
-    if row is None:
-        return WorkflowArtifacts()
-    return WorkflowArtifacts(
-        catalog_retrieval=_from_json(row["catalog_retrieval_json"]),
-        plan=_from_json(row["plan_json"]),
-        workflow_ir=_from_json(row["workflow_ir_json"]) or {},
-        wdl=row["wdl"] or "",
+def _row_to_artifact_record(row: sqlite3.Row) -> RunArtifactRecord:
+    content_type = row["content_type"]
+    if content_type == JSON_CONTENT_TYPE:
+        content = _from_json(row["content_json"])
+    elif content_type == TEXT_CONTENT_TYPE:
+        content = row["content_text"] or ""
+    else:
+        content = row["content_text"] or row["content_json"] or ""
+
+    return RunArtifactRecord(
+        run_id=row["run_id"],
+        name=row["name"],
+        content_type=content_type,
+        content=content,
+        updated_at=_dt_from_text(row["updated_at"]),
     )
+
+
+def _row_to_artifacts(
+    row: sqlite3.Row | None,
+    artifact_records: list[RunArtifactRecord],
+) -> WorkflowArtifacts:
+    record_by_name = {record.name: record for record in artifact_records}
+    catalog_retrieval = _artifact_record_content(record_by_name, "catalog_retrieval")
+    plan = _artifact_record_content(record_by_name, "plan")
+    workflow_ir = _artifact_record_content(record_by_name, "workflow_ir") or {}
+    wdl = _artifact_record_content(record_by_name, "wdl") or ""
+
+    if row is not None:
+        catalog_retrieval = _from_json(row["catalog_retrieval_json"])
+        plan = _from_json(row["plan_json"])
+        workflow_ir = _from_json(row["workflow_ir_json"]) or {}
+        wdl = row["wdl"] or ""
+
+    return WorkflowArtifacts(
+        catalog_retrieval=catalog_retrieval if isinstance(catalog_retrieval, dict) else None,
+        plan=plan if isinstance(plan, dict) else None,
+        workflow_ir=workflow_ir if isinstance(workflow_ir, dict) else {},
+        wdl=wdl if isinstance(wdl, str) else "",
+        extras={
+            record.name: record.content
+            for record in artifact_records
+            if record.name not in CORE_ARTIFACT_NAMES
+        },
+        manifest=[
+            WorkflowArtifactSummary(
+                name=record.name,
+                content_type=record.content_type,
+                updated_at=record.updated_at,
+            )
+            for record in artifact_records
+        ],
+    )
+
+
+def _artifact_record_content(
+    record_by_name: dict[str, RunArtifactRecord],
+    name: str,
+) -> Any:
+    record = record_by_name.get(name)
+    return record.content if record is not None else None
 
 
 def _row_to_diagnostics(row: sqlite3.Row | None, *, check_performed: bool) -> DiagnosticReport:
@@ -649,6 +979,14 @@ def _ensure_column(
 def _json_list_length(value: str | None) -> int:
     parsed = _from_json(value)
     return len(parsed) if isinstance(parsed, list) else 0
+
+
+def _validate_artifact_name(name: str) -> None:
+    if not ARTIFACT_NAME_PATTERN.fullmatch(name):
+        raise ValueError(
+            "artifact name must start with a lowercase letter and contain only "
+            "lowercase letters, numbers, and underscores"
+        )
 
 
 def _utc_now() -> datetime:

@@ -90,11 +90,20 @@ class RunServiceTests(unittest.TestCase):
             event_types = [event.type for event in events]
             self.assertIn(RunEventType.RUN_CREATED, event_types)
             self.assertIn(RunEventType.ARTIFACT_UPDATED, event_types)
+            self.assertEqual(events[0].payload["stage"], "run")
+            self.assertEqual(events[0].payload["status"], "created")
+            self.assertEqual(events[0].payload["kind"], "structured_compile")
             self.assertEqual(events[-2].type, RunEventType.ARTIFACT_UPDATED)
             self.assertEqual(events[-2].node, "diagnostics")
             self.assertEqual(events[-2].payload["artifact"], "diagnostics")
+            self.assertEqual(events[-2].payload["artifact_name"], "diagnostics")
+            self.assertEqual(events[-2].payload["artifact_content_type"], "application/json")
+            self.assertEqual(events[-2].payload["stage"], "diagnostics")
+            self.assertEqual(events[-2].payload["status"], "updated")
             self.assertTrue(events[-2].payload["succeeded"])
             self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+            self.assertEqual(events[-1].payload["stage"], "run")
+            self.assertEqual(events[-1].payload["status"], "succeeded")
 
     def test_structured_compile_run_replays_repair_artifact_before_repair_event(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -162,6 +171,8 @@ class RunServiceTests(unittest.TestCase):
             ]
             self.assertEqual(len(validation_events), 1)
             self.assertEqual(validation_events[0].node, "checker")
+            self.assertEqual(validation_events[0].payload["stage"], "compilation")
+            self.assertEqual(validation_events[0].payload["status"], "completed")
             self.assertEqual(validation_events[0].payload["check_performed"], True)
             self.assertEqual(validation_events[0].payload["is_valid"], True)
             self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
@@ -213,6 +224,9 @@ class RunServiceTests(unittest.TestCase):
             ]
             self.assertEqual(len(compiler_failures), 1)
             self.assertEqual(compiler_failures[0].payload["error"], "compiler exploded")
+            self.assertEqual(compiler_failures[0].payload["error_type"], "RuntimeError")
+            self.assertEqual(compiler_failures[0].payload["stage"], "compilation")
+            self.assertEqual(compiler_failures[0].payload["status"], "failed")
             self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
 
     def test_natural_language_run_succeeds_after_planning(self):
@@ -415,6 +429,10 @@ class RunServiceTests(unittest.TestCase):
                     ("node.started", "compiler_graph"),
                 ],
             )
+            self.assertEqual(events[1].payload["stage"], "planning")
+            self.assertEqual(events[1].payload["status"], "started")
+            self.assertEqual(events[4].payload["stage"], "orchestration")
+            self.assertEqual(events[4].payload["status"], "started")
             self.assertIn(("node.started", "ir_normalizer"), event_keys)
             self.assertIn(("node.completed", "analyzer"), event_keys)
             self.assertIn(("artifact.updated", "renderer"), event_keys)
@@ -435,6 +453,11 @@ class RunServiceTests(unittest.TestCase):
                     ("diagnostics", "diagnostics"),
                 ],
             )
+            artifact_events = [event for event in events if event.type == RunEventType.ARTIFACT_UPDATED]
+            self.assertEqual(artifact_events[0].payload["artifact_name"], "plan")
+            self.assertEqual(artifact_events[0].payload["artifact_content_type"], "application/json")
+            self.assertEqual(artifact_events[2].payload["artifact_name"], "wdl")
+            self.assertEqual(artifact_events[2].payload["artifact_content_type"], "text/plain")
             diagnostics_event = events[-2]
             self.assertEqual(diagnostics_event.payload["analysis_error_count"], 0)
             self.assertEqual(diagnostics_event.payload["repair_action_count"], 0)

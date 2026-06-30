@@ -456,7 +456,30 @@ W2 当前接口：
   "artifacts": {
     "plan": {},
     "workflow_ir": {},
-    "wdl": "version 1.0\n..."
+    "wdl": "version 1.0\n...",
+    "extras": {},
+    "manifest": [
+      {
+        "name": "diagnostics",
+        "content_type": "application/json",
+        "updated_at": "2026-06-16T00:00:02Z"
+      },
+      {
+        "name": "plan",
+        "content_type": "application/json",
+        "updated_at": "2026-06-16T00:00:01Z"
+      },
+      {
+        "name": "workflow_ir",
+        "content_type": "application/json",
+        "updated_at": "2026-06-16T00:00:01Z"
+      },
+      {
+        "name": "wdl",
+        "content_type": "text/plain",
+        "updated_at": "2026-06-16T00:00:02Z"
+      }
+    ]
   },
   "diagnostics": {
     "analysis_errors": [],
@@ -481,15 +504,19 @@ W2 当前接口：
   "node": "analyzer",
   "timestamp": "2026-05-28T12:00:00Z",
   "summary": "Workflow IR static analysis passed.",
-  "payload": {}
+  "payload": {
+    "stage": "compilation",
+    "status": "completed",
+    "node": "analyzer"
+  }
 }
 ```
 
-第一版事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、`artifact.updated`、`repair.applied`、`validation.completed` 和 `run.completed`。事件中不保存 API key、原始模型鉴权信息或其他秘密环境变量。
+第一版事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、`artifact.updated`、`repair.applied`、`validation.completed` 和 `run.completed`。Run service 会为事件 payload 补充稳定的 observability 字段，例如 `stage`、`status`、`node`、`artifact_name`、`artifact_content_type` 和 `error_type`。这些字段用于前端时间线、DAG 状态映射和历史回放；事件中不保存 API key、原始模型鉴权信息或其他秘密环境变量。
 
 ### 持久化与部署边界
 
-- 本地展示和开发第一版使用 SQLite，保存 run、event、artifact 与 diagnostic 等必要信息，减少环境安装成本。
+- 本地展示和开发第一版使用 SQLite，保存 run、event、artifact 与 diagnostic 等必要信息，减少环境安装成本。`run_artifacts` 保留 Plan / Workflow IR / WDL 的固定兼容列；`run_artifact_records` 保存按名称索引的通用 artifact manifest 和内容，用于后续 `catalog_retrieval`、planner trace 摘要或 execution result 等新增产物，不再为每个新增 artifact 扩展固定列。
 - 公开部署并需要并发或长期保存历史记录时，迁移到 PostgreSQL；持久化 schema 不应绑定到 SQLite 特有行为。
 - Agent 调用与 WDL 生成可以先作为 API 进程内任务运行；真正接入耗时 WDL 执行或容器构建后，再引入任务队列或专门 worker。
 - 前端与 API 可以独立部署，但必须基于同一公开 API contract；仓库仍保留为 monorepo，保证演示迭代效率。
