@@ -13,11 +13,11 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RunArtifactsPanel } from "@/components/run/run-artifacts-panel";
+import { RunEventsTimeline } from "@/components/run/run-events-timeline";
 import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
 import { getRunSnapshot } from "@/lib/api";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
-import { RunArtifactsPanel } from "./run-artifacts-panel";
-import { RunEventsTimeline } from "./run-events-timeline";
 
 export const dynamic = "force-dynamic";
 

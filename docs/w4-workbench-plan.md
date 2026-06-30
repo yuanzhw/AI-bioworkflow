@@ -27,11 +27,13 @@
   - `repair.applied`
   - `validation.completed`
   - `run.completed`
-- 前端已有 `/workspace` 页面和初版 run launcher：
-  - “运行示例”会使用内置 RNA-seq Recipe Tool Plan 调用 `POST /api/compile`。
+- 前端已有 `/workspace` 真实工作台：
+  - 结构化示例模式使用内置 RNA-seq Recipe Tool Plan 调用 `POST /api/compile`。
+  - 自然语言模式调用 `POST /api/runs`，planner 失败时展示后端持久化的失败诊断。
   - 前端会轮询 `GET /api/runs/{run_id}`，展示 run 状态、WDL 摘要、校验信息和诊断计数。
+  - 前端会订阅 `GET /api/runs/{run_id}/events` SSE 事件流，展示 run 时间线。
+  - Plan / Workflow IR / WDL / Diagnostics tabs 来自真实 run snapshot。
   - 默认本地 API base URL 为 `http://127.0.0.1:8010`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
-- Timeline、完整 artifact tabs、SSE 连接状态和自然语言输入仍是后续 W4 切片。
 
 ## 产品行为
 
@@ -137,7 +139,7 @@ SSE 断开但 run 未终态时，页面应显示连接状态，并允许自动�
 
 ### 7. 文案与导航更新
 
-W4 初版已把工作台顶部、运行按钮和产物区说明更新为真实 run 接入表述。后续切片继续替换时间线、artifact tabs 和失败态中的静态占位文案。
+W4 已把工作台顶部、运行模式、时间线、artifact tabs 和失败态更新为真实 run 接入表述。
 
 项目介绍页可以继续强调：
 
@@ -161,20 +163,19 @@ W4 初版已把工作台顶部、运行按钮和产物区说明更新为真实 r
 
 1. **W4 API client and types**：补齐前端 run DTO、API client、SSE URL helper。已完成。
 2. **W4 workbench structured run launcher**：实现结构化示例提交、run 状态和 snapshot 轮询。已完成。
-3. **W4 SSE timeline**：实现 EventSource 订阅、断线恢复和时间线状态映射。
-4. **W4 artifacts tabs**：实现 Plan / IR / WDL / Diagnostics tabs 和空状态。
-5. **W4 failure states and polish**：补齐错误状态、占位文案替换、响应式细节和自然语言运行入口。
-6. **W4 docs and verification**：持续更新 README / DEVELOPMENT 中的阶段状态说明，并记录验证结果。
+3. **W4 SSE timeline**：实现 EventSource 订阅、断线恢复和时间线状态映射。已完成。
+4. **W4 artifacts tabs**：实现 Plan / IR / WDL / Diagnostics tabs 和空状态。已完成。
+5. **W4 failure states and polish**：补齐错误状态、占位文案替换、响应式细节和自然语言运行入口。已完成。
+6. **W4 docs and verification**：持续更新 README / DEVELOPMENT 中的阶段状态说明，并记录验证结果。已完成。
 
 ## 验收标准
 
 功能验收：
 
-- 已落地初版：
+- 已落地：
   - 启动 FastAPI 与 Next.js 后，访问 `/workspace?example=rnaseq-deg` 可以提交一次结构化 RNA-seq 示例 run。
   - 页面能从 accepted run 轮询到 `created` / `running` / `succeeded` / `failed` snapshot。
   - 运行卡片展示 run id、状态、WDL 摘要、校验信息、analysis error 计数和 repair action 计数。
-- 后续完整 W4：
   - Timeline 能实时显示 Compiler Graph 节点进度。
   - Plan、Workflow IR、WDL 和 Diagnostics 来自真实 run snapshot tabs。
   - 自然语言模式在 planner 环境可用时能走 `POST /api/runs`；环境不可用时显示明确失败诊断。

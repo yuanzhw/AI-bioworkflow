@@ -379,8 +379,10 @@ FastAPI 默认允许本地 Next.js 开发来源 `http://127.0.0.1:3000` 和
 `http://localhost:3000` 访问 API。当前端开发服务改用其他端口时，可通过
 `AI_BIOWORKFLOW_CORS_ORIGINS` 配置逗号分隔的 allowed origins；配置值会去除首尾空白和末尾 `/`，避免常见本地 URL 写法导致 CORS 不匹配。
 
-W4 初版工作台已接入结构化 RNA-seq 示例 run：`/workspace?example=rnaseq-deg`
-会调用 `POST /api/compile` 并轮询 `GET /api/runs/{run_id}` 展示状态、WDL 摘要和诊断摘要。SSE 时间线、完整 Plan / IR / WDL / Diagnostics tabs，以及自然语言输入交互仍按 W4 后续切片推进。
+W4 工作台已接入真实 run 生命周期：`/workspace?example=rnaseq-deg`
+默认提交结构化 RNA-seq Recipe Tool Plan 到 `POST /api/compile`，也可切换到自然语言模式调用
+`POST /api/runs`。页面会订阅 `GET /api/runs/{run_id}/events` 的 SSE 事件流，轮询
+`GET /api/runs/{run_id}` snapshot，并展示同一次 run 的 Plan、Workflow IR、WDL 和 diagnostics。
 
 W2 当前接口：
 
@@ -502,7 +504,7 @@ Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经
 | W1 | FastAPI API 基础 | `POST /api/runs`、`POST /api/compile`、catalog 查询与 API 测试 | W0 |
 | W2 | Run 事件与展示级持久化 | SQLite 数据模型、SSE 事件流、成功/失败历史快照 | W1 |
 | W3 | Next.js 产品外壳与项目介绍页 | TypeScript/Tailwind/shadcn UI 基础、介绍页、案例入口 | W1 |
-| W4 | Workflow 生成工作台 | 已落地结构化示例 run launcher 与 snapshot 摘要；继续推进 SSE 时间线、Plan/IR/WDL/诊断 tabs | W2, W3 |
+| W4 | Workflow 生成工作台 | 结构化示例 / 自然语言 run、SSE 时间线、snapshot 轮询、Plan/IR/WDL/诊断 tabs 与失败态展示 | W2, W3 |
 | W5 | DAG 与历史详情 | React Flow 工作流图、run 历史详情和失败/修复回放 | W4 |
 | W6 | 部署与作品集打磨 | 在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航 | W5 |
 

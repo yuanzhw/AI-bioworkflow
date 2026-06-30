@@ -20,6 +20,7 @@ import {
   runEventTypes,
 } from "@/lib/run-events";
 import type { RunEvent, RunStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const eventDateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
   month: "2-digit",
@@ -51,17 +52,29 @@ function formatDateTime(value: string): string {
 }
 
 export function RunEventsTimeline({
+  className,
+  description = "事件来自持久化 SSE envelope，可用于回放 run 的关键阶段。",
+  emptyMessage = "暂无事件回放。",
   eventsUrl,
   status,
+  title = "事件时间线",
 }: {
+  className?: string;
+  description?: string;
+  emptyMessage?: string;
   eventsUrl: string | null;
   status: RunStatus;
+  title?: string;
 }) {
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    setEvents([]);
+    setStreamError(null);
+    setIsConnected(false);
+
     if (!eventsUrl) {
       return undefined;
     }
@@ -106,19 +119,21 @@ export function RunEventsTimeline({
   }, [eventsUrl, status]);
 
   return (
-    <section className="mt-6 rounded-md border bg-white p-5">
+    <section className={cn("mt-6 rounded-md border bg-white p-5", className)}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold">事件时间线</h2>
+            <h2 className="font-semibold">{title}</h2>
             <Badge variant="outline">{events.length} 条事件</Badge>
           </div>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            事件来自持久化 SSE envelope，可用于回放 run 的关键阶段。
-          </p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
         <Badge variant={isConnected ? "secondary" : "outline"} className="gap-1.5">
-          {isConnected ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock3 className="h-3.5 w-3.5" />}
+          {isConnected ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Clock3 className="h-3.5 w-3.5" />
+          )}
           {isConnected ? "读取事件" : isTerminalRunStatus(status) ? "已完成" : "等待连接"}
         </Badge>
       </div>
@@ -133,7 +148,10 @@ export function RunEventsTimeline({
       {events.length ? (
         <div className="mt-5 grid gap-3">
           {events.map((event) => (
-            <div key={event.event_id} className="grid gap-3 rounded-md border bg-background p-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start">
+            <div
+              key={event.event_id}
+              className="grid gap-3 rounded-md border bg-background p-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start"
+            >
               <div className="mt-0.5">{getEventIcon(event)}</div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +171,7 @@ export function RunEventsTimeline({
         </div>
       ) : (
         <div className="mt-5 rounded-md border bg-background p-5 text-sm leading-6 text-muted-foreground">
-          暂无事件回放。
+          {emptyMessage}
         </div>
       )}
     </section>
