@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
+from typing import Any
 from uuid import uuid4
 
 from src.api.models import (
@@ -329,7 +330,7 @@ class RunService:
 
     def _workflow_event_callback(self, run_id: str):
         def callback(event_type: str, node: str | None, summary: str, state, payload):
-            normalized_payload = _event_payload(event_type, node, payload)
+            normalized_payload = _event_payload(event_type, node, payload, state=state)
             self._persist_updated_artifact(run_id, event_type, state, normalized_payload)
             self.repository.append_event(
                 run_id=run_id,
@@ -371,9 +372,12 @@ class RunService:
             self.repository.save_wdl_artifact(run_id, state.get("current_wdl") or "")
         elif isinstance(artifact, str) and artifact in state:
             content = state.get(artifact)
-            if isinstance(content, str):
-                self.repository.save_text_artifact(run_id, artifact, content)
-            elif content is not None:
+            if content is None:
+                return
+            content_type = payload.get("artifact_content_type")
+            if content_type == TEXT_CONTENT_TYPE:
+                self.repository.save_text_artifact(run_id, artifact, str(content))
+            else:
                 self.repository.save_json_artifact(run_id, artifact, content)
 
     def _append_failed_event_if_missing(
@@ -455,6 +459,8 @@ def _event_payload(
     event_type: RunEventType | str,
     node: str | None,
     payload: dict | None,
+    *,
+    state: Mapping[str, Any] | None = None,
 ) -> dict:
     event_value = event_type.value if isinstance(event_type, RunEventType) else event_type
     normalized = dict(payload or {})
@@ -466,7 +472,7 @@ def _event_payload(
     artifact = normalized.get("artifact")
     if isinstance(artifact, str):
         normalized.setdefault("artifact_name", artifact)
-        normalized.setdefault("artifact_content_type", _artifact_content_type(artifact))
+        normalized.setdefault("artifact_content_type", _artifact_content_type(artifact, state=state))
     return normalized
 
 
@@ -500,11 +506,17 @@ def _event_status(event_type: str, payload: dict) -> str:
     }.get(event_type, "unknown")
 
 
-def _artifact_content_type(artifact: str) -> str:
+def _artifact_content_type(
+    artifact: str,
+    *,
+    state: Mapping[str, Any] | None = None,
+) -> str:
     if artifact in TEXT_ARTIFACTS:
         return TEXT_CONTENT_TYPE
     if artifact in JSON_ARTIFACTS:
         return JSON_CONTENT_TYPE
+    if state is not None and artifact in state:
+        return TEXT_CONTENT_TYPE if isinstance(state.get(artifact), str) else JSON_CONTENT_TYPE
     return JSON_CONTENT_TYPE
 
 

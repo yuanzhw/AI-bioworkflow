@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 182 tests
+Ran 183 tests
 OK (skipped=2)
 ```
 
@@ -788,11 +788,13 @@ OK (skipped=2)
 - 新表 `run_artifact_records` 被创建。
 - 旧固定列被回填为 `plan`、`workflow_ir`、`wdl` 和 `diagnostics` 四条 named artifact records。
 - snapshot artifacts 仍可读取旧的 Workflow IR 和 manifest。
+- 回填完成后再次初始化 repository 不再触发全量 backfill。
 
 覆盖点：
 
 - 本地 `.cache` 中已有展示数据库可以随 schema 演进自动补齐 manifest，不需要手动删除旧 DB。
 - 新增通用 artifact 存储保持向后兼容。
+- Backfill 只在缺失 legacy artifact records 时运行，避免每次 repository 初始化都扫描旧 artifact 表。
 
 ## `tests/test_run_service.py`
 
@@ -909,6 +911,30 @@ OK (skipped=2)
 
 - 成功自然语言 run 可以被前端和历史详情按关键阶段回放。
 - artifact 事件 payload 使用结构化字段，不依赖前端解析 summary 文案。
+
+### `test_extra_text_artifact_event_matches_persisted_content_type`
+
+输入：
+
+- 一个已创建的 natural-language run。
+- 额外命名 artifact：`planner_trace`，state 中内容为字符串。
+
+执行：
+
+- 通过 workflow event callback 发出 `artifact.updated` 事件。
+- 读取事件历史和 run snapshot。
+
+期望输出：
+
+- 事件 payload 中 `artifact_name == "planner_trace"`。
+- 事件 payload 中 `artifact_content_type == "text/plain"`。
+- snapshot `extras.planner_trace` 保留文本内容。
+- manifest 中 `planner_trace` 的 content type 同样为 `text/plain`。
+
+覆盖点：
+
+- 未预注册的 text artifact 会按实际 state 内容推断 content type。
+- 事件 payload 与 repository 持久化记录保持一致，不会出现事件声称 JSON、DB 保存 text 的契约分叉。
 
 ### `test_natural_language_run_preserves_empty_planner_observability_fields`
 

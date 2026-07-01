@@ -612,7 +612,8 @@ class RunRepository:
                 """
             )
             _ensure_column(connection, "run_artifacts", "catalog_retrieval_json", "TEXT")
-            self._backfill_artifact_records(connection)
+            if self._artifact_backfill_needed(connection):
+                self._backfill_artifact_records(connection)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -741,6 +742,9 @@ class RunRepository:
         )
 
     def _backfill_artifact_records(self, connection: sqlite3.Connection) -> None:
+        if not self._artifact_backfill_needed(connection):
+            return
+
         artifact_rows = connection.execute(
             """
             SELECT run_artifacts.*, runs.updated_at AS artifact_updated_at
@@ -821,6 +825,72 @@ class RunRepository:
                 updated_at=_dt_from_text(row["artifact_updated_at"]),
                 replace_existing=False,
             )
+
+    def _artifact_backfill_needed(self, connection: sqlite3.Connection) -> bool:
+        row = connection.execute(
+            """
+            SELECT 1
+            WHERE EXISTS (
+                SELECT 1
+                FROM run_artifacts AS legacy
+                WHERE legacy.catalog_retrieval_json IS NOT NULL
+                  AND legacy.catalog_retrieval_json NOT IN ('', 'null')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM run_artifact_records AS records
+                      WHERE records.run_id = legacy.run_id
+                        AND records.name = 'catalog_retrieval'
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM run_artifacts AS legacy
+                WHERE legacy.plan_json IS NOT NULL
+                  AND legacy.plan_json NOT IN ('', 'null')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM run_artifact_records AS records
+                      WHERE records.run_id = legacy.run_id
+                        AND records.name = 'plan'
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM run_artifacts AS legacy
+                WHERE legacy.workflow_ir_json IS NOT NULL
+                  AND legacy.workflow_ir_json NOT IN ('', '{}', 'null')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM run_artifact_records AS records
+                      WHERE records.run_id = legacy.run_id
+                        AND records.name = 'workflow_ir'
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM run_artifacts AS legacy
+                WHERE legacy.wdl != ''
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM run_artifact_records AS records
+                      WHERE records.run_id = legacy.run_id
+                        AND records.name = 'wdl'
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM run_diagnostics AS legacy
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM run_artifact_records AS records
+                    WHERE records.run_id = legacy.run_id
+                      AND records.name = 'diagnostics'
+                )
+            )
+            LIMIT 1
+            """
+        ).fetchone()
+        return row is not None
 
 
 def default_db_path() -> Path:

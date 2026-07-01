@@ -464,6 +464,35 @@ class RunServiceTests(unittest.TestCase):
             self.assertFalse(diagnostics_event.payload["check_performed"])
             self.assertTrue(diagnostics_event.payload["succeeded"])
 
+    def test_extra_text_artifact_event_matches_persisted_content_type(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
+            request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
+            accepted = service.create_natural_language_run(request)
+            callback = service._workflow_event_callback(accepted.run_id)
+
+            callback(
+                RunEventType.ARTIFACT_UPDATED.value,
+                "planner",
+                "Planner trace artifact updated.",
+                {"planner_trace": "rendered planner trace"},
+                {"artifact": "planner_trace"},
+            )
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            event = events[-1]
+            self.assertEqual(event.payload["artifact_name"], "planner_trace")
+            self.assertEqual(event.payload["artifact_content_type"], "text/plain")
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.extras["planner_trace"], "rendered planner trace")
+            manifest = {artifact.name: artifact for artifact in snapshot.artifacts.manifest}
+            self.assertEqual(manifest["planner_trace"].content_type, "text/plain")
+
     def test_natural_language_run_preserves_empty_planner_observability_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))

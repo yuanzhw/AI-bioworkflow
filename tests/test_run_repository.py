@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from src.api.models import DiagnosticReport, RunEventType, RunStatus, WorkflowArtifacts
 from src.services.run_repository import SQLITE_BUSY_TIMEOUT_MS, RunRepository
@@ -294,6 +295,10 @@ class RunRepositoryTests(unittest.TestCase):
             assert snapshot is not None
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
             self.assertEqual(len(snapshot.artifacts.manifest), 4)
+
+            with patch.object(RunRepository, "_backfill_artifact_records") as backfill:
+                RunRepository(db_path)
+            backfill.assert_not_called()
 
     def test_catalog_retrieval_artifact_update_preserves_later_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
