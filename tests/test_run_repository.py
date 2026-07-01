@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,6 +39,7 @@ class RunRepositoryTests(unittest.TestCase):
             repository.save_artifacts(
                 "run_001",
                 WorkflowArtifacts(
+                    catalog_retrieval={"strategy": "lexical_v1"},
                     plan={"workflow": {"recipe": "demo"}},
                     workflow_ir={"workflow": {"name": "Demo"}},
                     wdl="version 1.0\nworkflow Demo {}",
@@ -57,6 +59,7 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertIsNotNone(snapshot)
             assert snapshot is not None
             self.assertEqual(snapshot.run.status, RunStatus.SUCCEEDED)
+            self.assertEqual(snapshot.artifacts.catalog_retrieval, {"strategy": "lexical_v1"})
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
             self.assertTrue(snapshot.diagnostics.succeeded)
             self.assertFalse(snapshot.diagnostics.check_performed)
@@ -113,6 +116,7 @@ class RunRepositoryTests(unittest.TestCase):
             repository.save_artifacts(
                 "run_001",
                 WorkflowArtifacts(
+                    catalog_retrieval={"strategy": "lexical_v1"},
                     plan={"workflow": {"recipe": "demo"}},
                     workflow_ir={"workflow": {"name": "OldDemo"}},
                     wdl="version 1.0\nworkflow OldDemo {}",
@@ -125,9 +129,64 @@ class RunRepositoryTests(unittest.TestCase):
             snapshot = repository.get_snapshot("run_001")
             self.assertIsNotNone(snapshot)
             assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.catalog_retrieval, {"strategy": "lexical_v1"})
             self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
             self.assertIn("workflow Demo", snapshot.artifacts.wdl)
+
+    def test_catalog_retrieval_artifact_update_preserves_later_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="natural_language",
+                request="Run demo.",
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+
+            repository.save_catalog_retrieval_artifact(
+                "run_001",
+                {"strategy": "lexical_v1", "recipes": [{"id": "demo"}]},
+            )
+            repository.save_plan_artifact("run_001", {"workflow": {"recipe": "demo"}})
+
+            snapshot = repository.get_snapshot("run_001")
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.catalog_retrieval["strategy"], "lexical_v1")
+            self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
+
+    def test_schema_migration_adds_catalog_retrieval_column(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "runs.sqlite3"
+            connection = sqlite3.connect(db_path)
+            try:
+                connection.execute(
+                    """
+                    CREATE TABLE run_artifacts (
+                        run_id TEXT PRIMARY KEY,
+                        plan_json TEXT,
+                        workflow_ir_json TEXT NOT NULL,
+                        wdl TEXT NOT NULL,
+                        planner_prompt TEXT,
+                        planner_raw_response TEXT
+                    )
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            repository = RunRepository(db_path)
+
+            with repository._connect() as connection:
+                columns = {
+                    row["name"]
+                    for row in connection.execute("PRAGMA table_info(run_artifacts)").fetchall()
+                }
+
+            self.assertIn("catalog_retrieval_json", columns)
 
     def test_complete_run_persists_terminal_event_and_status_together(self):
         with tempfile.TemporaryDirectory() as temp_dir:

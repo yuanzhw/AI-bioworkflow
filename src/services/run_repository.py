@@ -268,11 +268,12 @@ class RunRepository:
             connection.execute(
                 """
                 INSERT INTO run_artifacts (
-                    run_id, plan_json, workflow_ir_json, wdl,
+                    run_id, catalog_retrieval_json, plan_json, workflow_ir_json, wdl,
                     planner_prompt, planner_raw_response
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
+                    catalog_retrieval_json = excluded.catalog_retrieval_json,
                     plan_json = excluded.plan_json,
                     workflow_ir_json = excluded.workflow_ir_json,
                     wdl = excluded.wdl,
@@ -281,12 +282,32 @@ class RunRepository:
                 """,
                 (
                     run_id,
+                    _to_json(artifacts.catalog_retrieval),
                     _to_json(artifacts.plan),
                     _to_json(artifacts.workflow_ir),
                     artifacts.wdl,
                     planner_prompt,
                     planner_raw_response,
                 ),
+            )
+
+    def save_catalog_retrieval_artifact(
+        self,
+        run_id: str,
+        catalog_retrieval: dict[str, Any],
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO run_artifacts (
+                    run_id, catalog_retrieval_json, plan_json, workflow_ir_json, wdl,
+                    planner_prompt, planner_raw_response
+                )
+                VALUES (?, ?, NULL, '{}', '', NULL, NULL)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    catalog_retrieval_json = excluded.catalog_retrieval_json
+                """,
+                (run_id, _to_json(catalog_retrieval)),
             )
 
     def save_plan_artifact(
@@ -432,6 +453,7 @@ class RunRepository:
 
                 CREATE TABLE IF NOT EXISTS run_artifacts (
                     run_id TEXT PRIMARY KEY,
+                    catalog_retrieval_json TEXT,
                     plan_json TEXT,
                     workflow_ir_json TEXT NOT NULL,
                     wdl TEXT NOT NULL,
@@ -453,6 +475,7 @@ class RunRepository:
                 );
                 """
             )
+            _ensure_column(connection, "run_artifacts", "catalog_retrieval_json", "TEXT")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -576,6 +599,7 @@ def _row_to_artifacts(row: sqlite3.Row | None) -> WorkflowArtifacts:
     if row is None:
         return WorkflowArtifacts()
     return WorkflowArtifacts(
+        catalog_retrieval=_from_json(row["catalog_retrieval_json"]),
         plan=_from_json(row["plan_json"]),
         workflow_ir=_from_json(row["workflow_ir_json"]) or {},
         wdl=row["wdl"] or "",
@@ -606,6 +630,20 @@ def _from_json(value: str | None) -> Any:
     if value is None:
         return None
     return json.loads(value)
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    column_type: str,
+) -> None:
+    columns = {
+        row["name"]
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
 
 def _json_list_length(value: str | None) -> int:

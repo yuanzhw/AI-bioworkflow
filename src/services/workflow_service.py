@@ -50,11 +50,13 @@ class WorkflowCompilationResult:
     succeeded: bool
     check_performed: bool
     state: WorkflowState
+    catalog_retrieval: dict[str, Any] | None = None
     planner_prompt: str | None = None
     planner_raw_response: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "catalog_retrieval": self.catalog_retrieval,
             "plan": self.plan,
             "workflow_ir": self.workflow_ir,
             "wdl": self.wdl,
@@ -122,6 +124,7 @@ def plan_and_compile_workflow(
 
     return replace(
         cast(WorkflowCompilationResult, compiler_result),
+        catalog_retrieval=orchestration_state["catalog_retrieval"],
         planner_prompt=orchestration_state["planner_prompt"],
         planner_raw_response=orchestration_state["planner_raw_response"],
     )
@@ -244,6 +247,7 @@ def _result_from_state(
     *,
     plan: dict[str, Any] | None,
     check: bool,
+    catalog_retrieval: dict[str, Any] | None = None,
     planner_prompt: str | None = None,
     planner_raw_response: str | None = None,
 ) -> WorkflowCompilationResult:
@@ -259,6 +263,7 @@ def _result_from_state(
         succeeded=workflow_succeeded(state, check=check),
         check_performed=check,
         state=state,
+        catalog_retrieval=catalog_retrieval,
         planner_prompt=planner_prompt,
         planner_raw_response=planner_raw_response,
     )

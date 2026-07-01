@@ -27,14 +27,27 @@ def load_example(name: str) -> dict:
     return json.loads((EXAMPLES_DIR / name).read_text(encoding="utf-8"))
 
 
+def sample_catalog_retrieval() -> dict:
+    return {
+        "query": "Run RNA-seq DEG.",
+        "strategy": "lexical_v1",
+        "recipes": [{"id": "rnaseq_differential_expression"}],
+        "tools": [{"id": "fastp", "trust_status": "catalog-approved"}],
+        "fallback_used": False,
+        "fallback_reason": None,
+    }
+
+
 def natural_language_result(
     plan: dict,
     *,
+    catalog_retrieval: dict | None = None,
     planner_prompt: str = "planner prompt",
     planner_raw_response: str | None = None,
 ):
     return replace(
         compile_structured_workflow(plan, check=False),
+        catalog_retrieval=catalog_retrieval if catalog_retrieval is not None else sample_catalog_retrieval(),
         planner_prompt=planner_prompt,
         planner_raw_response=planner_raw_response if planner_raw_response is not None else json.dumps(plan),
     )
@@ -66,6 +79,7 @@ class RunServiceTests(unittest.TestCase):
             self.assertIsNotNone(snapshot.created_at)
             self.assertIsNotNone(snapshot.updated_at)
             self.assertIsNotNone(snapshot.completed_at)
+            self.assertIsNone(snapshot.artifacts.catalog_retrieval)
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
             self.assertIn("workflow RNASeqDEG", snapshot.artifacts.wdl)
             self.assertTrue(snapshot.diagnostics.succeeded)
@@ -225,6 +239,7 @@ class RunServiceTests(unittest.TestCase):
             assert snapshot is not None
             self.assertEqual(snapshot.status, RunStatus.SUCCEEDED)
             self.assertEqual(snapshot.artifacts.plan, plan)
+            self.assertEqual(snapshot.artifacts.catalog_retrieval["strategy"], "lexical_v1")
             self.assertIn("workflow RNASeqDEG", snapshot.artifacts.wdl)
 
     def test_natural_language_run_replays_key_events_and_artifacts(self):
@@ -233,9 +248,36 @@ class RunServiceTests(unittest.TestCase):
             plan = load_example("rnaseq_deg_recipe_plan.json")
             request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
             result = natural_language_result(plan)
+            catalog_retrieval = result.catalog_retrieval
 
             def service_success(*args, **kwargs):
                 event_callback = kwargs["event_callback"]
+                event_callback(
+                    RunEventType.NODE_STARTED.value,
+                    "catalog_retriever",
+                    "Catalog retriever started.",
+                    {"request": "Run RNA-seq DEG."},
+                    {},
+                )
+                event_callback(
+                    RunEventType.NODE_COMPLETED.value,
+                    "catalog_retriever",
+                    "Catalog retriever completed.",
+                    {"catalog_retrieval": catalog_retrieval},
+                    {
+                        "strategy": "lexical_v1",
+                        "recipe_count": 1,
+                        "tool_count": 1,
+                        "fallback_used": False,
+                    },
+                )
+                event_callback(
+                    RunEventType.ARTIFACT_UPDATED.value,
+                    "catalog_retriever",
+                    "Catalog retrieval artifact updated.",
+                    {"catalog_retrieval": catalog_retrieval},
+                    {"artifact": "catalog_retrieval"},
+                )
                 event_callback(
                     RunEventType.NODE_STARTED.value,
                     "planner",
@@ -350,6 +392,7 @@ class RunServiceTests(unittest.TestCase):
             snapshot = service.get_snapshot(accepted.run_id)
             self.assertIsNotNone(snapshot)
             assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.catalog_retrieval, catalog_retrieval)
             self.assertEqual(snapshot.artifacts.plan, plan)
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
             self.assertIn("workflow RNASeqDEG", snapshot.artifacts.wdl)
@@ -360,9 +403,12 @@ class RunServiceTests(unittest.TestCase):
             assert events is not None
             event_keys = [(event.type.value, event.node) for event in events]
             self.assertEqual(
-                event_keys[:5],
+                event_keys[:8],
                 [
                     ("run.created", None),
+                    ("node.started", "catalog_retriever"),
+                    ("node.completed", "catalog_retriever"),
+                    ("artifact.updated", "catalog_retriever"),
                     ("node.started", "planner"),
                     ("node.completed", "planner"),
                     ("artifact.updated", "planner"),
@@ -382,6 +428,7 @@ class RunServiceTests(unittest.TestCase):
             self.assertEqual(
                 artifact_order,
                 [
+                    ("catalog_retrieval", "catalog_retriever"),
                     ("plan", "planner"),
                     ("workflow_ir", "ir_normalizer"),
                     ("wdl", "renderer"),
@@ -429,9 +476,17 @@ class RunServiceTests(unittest.TestCase):
             plan = load_example("rnaseq_deg_recipe_plan.json")
             workflow_ir = compile_structured_workflow(plan, check=False).workflow_ir
             request = NaturalLanguageRunRequest(request="Run RNA-seq DEG.", check=False)
+            catalog_retrieval = sample_catalog_retrieval()
 
             def service_failure(*args, **kwargs):
                 event_callback = kwargs["event_callback"]
+                event_callback(
+                    "artifact.updated",
+                    "catalog_retriever",
+                    "Catalog retrieval artifact updated.",
+                    {"catalog_retrieval": catalog_retrieval},
+                    {"artifact": "catalog_retrieval"},
+                )
                 event_callback(
                     "artifact.updated",
                     "planner",
@@ -463,6 +518,7 @@ class RunServiceTests(unittest.TestCase):
             self.assertIsNotNone(snapshot)
             assert snapshot is not None
             self.assertEqual(snapshot.status, RunStatus.FAILED)
+            self.assertEqual(snapshot.artifacts.catalog_retrieval, catalog_retrieval)
             self.assertEqual(snapshot.artifacts.plan, plan)
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
             self.assertEqual(snapshot.artifacts.wdl, "")
@@ -481,7 +537,7 @@ class RunServiceTests(unittest.TestCase):
                 for event in events
                 if event.type == RunEventType.ARTIFACT_UPDATED
             ]
-            self.assertEqual(artifact_order, ["plan", "workflow_ir", "diagnostics"])
+            self.assertEqual(artifact_order, ["catalog_retrieval", "plan", "workflow_ir", "diagnostics"])
             self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
 
     def test_natural_language_planner_error_is_persisted_as_failed_run(self):

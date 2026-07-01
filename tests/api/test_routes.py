@@ -234,6 +234,7 @@ class ApiRouteTests(unittest.TestCase):
             request="Run RNA-seq DEG.",
             events_url="/api/runs/run_123/events",
             artifacts=WorkflowArtifacts(
+                catalog_retrieval={"strategy": "lexical_v1"},
                 plan=plan,
                 workflow_ir={"workflow": {"name": "RNASeqDEG"}},
                 wdl="version 1.0\nworkflow RNASeqDEG {}",
@@ -254,6 +255,7 @@ class ApiRouteTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["run_id"], "run_123")
         self.assertEqual(body["kind"], "natural_language")
+        self.assertEqual(body["artifacts"]["catalog_retrieval"]["strategy"], "lexical_v1")
         self.assertEqual(body["artifacts"]["plan"]["workflow"]["recipe"], "rnaseq_differential_expression")
         self.assertEqual(body["artifacts"]["workflow_ir"]["workflow"]["name"], "RNASeqDEG")
         self.assertIn("workflow RNASeqDEG", body["artifacts"]["wdl"])

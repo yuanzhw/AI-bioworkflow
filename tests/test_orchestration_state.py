@@ -21,6 +21,7 @@ class OrchestrationStateTests(unittest.TestCase):
         self.assertEqual(state["request"], "Run bulk RNA-seq differential expression.")
         self.assertEqual(state["planner_model"], DEFAULT_PLANNER_MODEL)
         self.assertFalse(state["check"])
+        self.assertIsNone(state["catalog_retrieval"])
         self.assertIsNone(state["plan"])
         self.assertIsNone(state["planner_prompt"])
         self.assertIsNone(state["planner_raw_response"])
@@ -45,6 +46,7 @@ class OrchestrationStateTests(unittest.TestCase):
             "request",
             "planner_model",
             "check",
+            "catalog_retrieval",
             "plan",
             "planner_prompt",
             "planner_raw_response",

@@ -114,6 +114,7 @@ class WorkflowServiceTests(unittest.TestCase):
 
         self.assertTrue(result.succeeded, result.analysis_errors)
         self.assertIs(result.plan, plan)
+        self.assertIsNone(result.catalog_retrieval)
         self.assertEqual(result.workflow_ir["workflow"]["name"], "RNASeqDEG")
         self.assertIn("workflow RNASeqDEG", result.wdl)
         self.assertEqual(result.validation_message, "WDL syntax validation skipped (--no-check).")
@@ -126,6 +127,7 @@ class WorkflowServiceTests(unittest.TestCase):
 
         self.assertTrue(result.succeeded, result.analysis_errors)
         self.assertIsNone(result.plan)
+        self.assertIsNone(result.catalog_retrieval)
         self.assertEqual(result.workflow_ir["workflow"]["name"], "RNASeqPipeline")
         self.assertIn("workflow RNASeqPipeline", result.wdl)
 
@@ -326,6 +328,8 @@ class WorkflowServiceTests(unittest.TestCase):
 
         self.assertTrue(result.succeeded, result.analysis_errors)
         self.assertEqual(result.plan, plan)
+        self.assertEqual(result.catalog_retrieval["strategy"], "lexical_v1")
+        self.assertEqual(result.catalog_retrieval["recipes"][0]["id"], "rnaseq_differential_expression")
         self.assertIn("Catalog:", result.planner_prompt or "")
         self.assertIn("RNASeqDEG", result.planner_raw_response or "")
         self.assertIn("workflow RNASeqDEG", result.wdl)
@@ -357,8 +361,11 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertTrue(result.succeeded, result.analysis_errors)
         event_keys = [(event["type"], event["node"]) for event in events]
         self.assertEqual(
-            event_keys[:4],
+            event_keys[:7],
             [
+                ("node.started", "catalog_retriever"),
+                ("node.completed", "catalog_retriever"),
+                ("artifact.updated", "catalog_retriever"),
                 ("node.started", "planner"),
                 ("node.completed", "planner"),
                 ("artifact.updated", "planner"),
@@ -369,10 +376,15 @@ class WorkflowServiceTests(unittest.TestCase):
         artifact_events = [
             event for event in events if event["type"] == "artifact.updated"
         ]
+        self.assertIn({"artifact": "catalog_retrieval"}, [event["payload"] for event in artifact_events])
         self.assertIn({"artifact": "workflow_ir"}, [event["payload"] for event in artifact_events])
         self.assertIn({"artifact": "wdl"}, [event["payload"] for event in artifact_events])
         self.assertEqual(event_keys[-1], ("node.completed", "compiler_graph"))
 
+        catalog_event = next(
+            event for event in artifact_events if event["payload"] == {"artifact": "catalog_retrieval"}
+        )
+        self.assertEqual(catalog_event["state"]["catalog_retrieval"]["strategy"], "lexical_v1")
         plan_event = next(event for event in artifact_events if event["payload"] == {"artifact": "plan"})
         self.assertEqual(plan_event["state"]["plan"], plan)
 
@@ -410,6 +422,7 @@ class WorkflowServiceTests(unittest.TestCase):
         result = compile_structured_workflow(plan, check=False).to_dict()
 
         self.assertEqual(result["plan"], plan)
+        self.assertIsNone(result["catalog_retrieval"])
         self.assertIn("workflow", result["workflow_ir"])
         self.assertIn("workflow RNASeqDEG", result["wdl"])
         self.assertEqual(result["analysis_errors"], [])
