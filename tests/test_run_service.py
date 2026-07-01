@@ -431,8 +431,10 @@ class RunServiceTests(unittest.TestCase):
             )
             self.assertEqual(events[1].payload["stage"], "planning")
             self.assertEqual(events[1].payload["status"], "started")
-            self.assertEqual(events[4].payload["stage"], "orchestration")
+            self.assertEqual(events[4].payload["stage"], "planning")
             self.assertEqual(events[4].payload["status"], "started")
+            self.assertEqual(events[7].payload["stage"], "orchestration")
+            self.assertEqual(events[7].payload["status"], "started")
             self.assertIn(("node.started", "ir_normalizer"), event_keys)
             self.assertIn(("node.completed", "analyzer"), event_keys)
             self.assertIn(("artifact.updated", "renderer"), event_keys)
@@ -454,10 +456,12 @@ class RunServiceTests(unittest.TestCase):
                 ],
             )
             artifact_events = [event for event in events if event.type == RunEventType.ARTIFACT_UPDATED]
-            self.assertEqual(artifact_events[0].payload["artifact_name"], "plan")
+            self.assertEqual(artifact_events[0].payload["artifact_name"], "catalog_retrieval")
             self.assertEqual(artifact_events[0].payload["artifact_content_type"], "application/json")
-            self.assertEqual(artifact_events[2].payload["artifact_name"], "wdl")
-            self.assertEqual(artifact_events[2].payload["artifact_content_type"], "text/plain")
+            self.assertEqual(artifact_events[1].payload["artifact_name"], "plan")
+            self.assertEqual(artifact_events[1].payload["artifact_content_type"], "application/json")
+            self.assertEqual(artifact_events[3].payload["artifact_name"], "wdl")
+            self.assertEqual(artifact_events[3].payload["artifact_content_type"], "text/plain")
             diagnostics_event = events[-2]
             self.assertEqual(diagnostics_event.payload["analysis_error_count"], 0)
             self.assertEqual(diagnostics_event.payload["repair_action_count"], 0)

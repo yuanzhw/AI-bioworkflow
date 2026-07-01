@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 183 tests
+Ran 185 tests
 OK (skipped=2)
 ```
 

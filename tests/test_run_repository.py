@@ -65,6 +65,7 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(snapshot.artifacts.catalog_retrieval, {"strategy": "lexical_v1"})
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
             manifest = {artifact.name: artifact for artifact in snapshot.artifacts.manifest}
+            self.assertEqual(manifest["catalog_retrieval"].content_type, "application/json")
             self.assertEqual(manifest["plan"].content_type, "application/json")
             self.assertEqual(manifest["workflow_ir"].content_type, "application/json")
             self.assertEqual(manifest["wdl"].content_type, "text/plain")
@@ -79,7 +80,7 @@ class RunRepositoryTests(unittest.TestCase):
             artifact_records = repository.list_artifact_records("run_001")
             self.assertEqual(
                 {record.name for record in artifact_records},
-                {"diagnostics", "plan", "wdl", "workflow_ir"},
+                {"catalog_retrieval", "diagnostics", "plan", "wdl", "workflow_ir"},
             )
             wdl_record = next(record for record in artifact_records if record.name == "wdl")
             self.assertIn("workflow Demo", wdl_record.content)
