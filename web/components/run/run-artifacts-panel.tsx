@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DiagnosticReport, JsonObject, WorkflowArtifacts } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 type ArtifactTabId = "plan" | "ir" | "wdl" | "diagnostics";
 
@@ -114,10 +115,16 @@ function DiagnosticsView({ diagnostics }: { diagnostics: DiagnosticReport }) {
 
 export function RunArtifactsPanel({
   artifacts,
+  className,
+  description = "Plan、Workflow IR、WDL 与诊断来自持久化 run snapshot。",
   diagnostics,
+  title = "结构化产物",
 }: {
   artifacts: WorkflowArtifacts;
+  className?: string;
+  description?: string;
   diagnostics: DiagnosticReport;
+  title?: string;
 }) {
   const [activeTab, setActiveTab] = useState<ArtifactTabId>("plan");
   const content = useMemo(
@@ -132,16 +139,14 @@ export function RunArtifactsPanel({
   const active = artifactTabs.find((tab) => tab.id === activeTab) ?? artifactTabs[0];
 
   return (
-    <section className="mt-6 rounded-md border bg-white p-5">
+    <section className={cn("mt-6 rounded-md border bg-white p-5", className)}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-semibold">结构化产物</h2>
+            <h2 className="font-semibold">{title}</h2>
             <Badge variant="outline">{active.description}</Badge>
           </div>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Plan、Workflow IR、WDL 与诊断来自持久化 run snapshot。
-          </p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Run artifacts">
           {artifactTabs.map((tab) => (
