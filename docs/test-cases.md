@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 185 tests
+Ran 186 tests
 OK (skipped=2)
 ```
 
@@ -770,6 +770,28 @@ OK (skipped=2)
 
 - 后续 Catalog Retriever、planner trace 摘要和 execution result 可以作为命名 artifact 保存，不需要为每类产物新增 SQLite 固定列。
 - Artifact 名称有稳定约束，避免 UI 和 API 消费方收到不可预测的 key。
+
+### `test_snapshot_reads_artifact_records_without_public_list_helper`
+
+输入：
+
+- 一个 natural-language run。
+- 额外命名 JSON artifact：`catalog_retrieval`。
+
+执行：
+
+- patch 当前 repository 实例的 `list_artifact_records(...)`，使其一旦被调用就抛错。
+- 调用 `repository.get_snapshot(...)`。
+
+期望输出：
+
+- snapshot 仍然成功返回。
+- `snapshot.artifacts.extras.catalog_retrieval.strategy == "lexical_v1"`。
+
+覆盖点：
+
+- `get_snapshot()` 在同一个 DB connection 内读取 run、固定 artifact、named artifact records 和 diagnostics。
+- snapshot 不再通过 `list_artifact_records()` 打开第二个连接，避免同一次 snapshot 内部读取到不同时间点的数据。
 
 ### `test_schema_backfills_named_artifacts_from_legacy_fixed_columns`
 

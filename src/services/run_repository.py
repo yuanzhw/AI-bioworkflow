@@ -524,21 +524,29 @@ class RunRepository:
         return [_row_to_artifact_record(row) for row in rows]
 
     def get_snapshot(self, run_id: str) -> RunSnapshotRecord | None:
-        run = self.get_run(run_id)
-        if run is None:
-            return None
-
         with self._connect() as connection:
+            run_row = connection.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            if run_row is None:
+                return None
+            run = _row_to_run(run_row)
             artifact_row = connection.execute(
                 "SELECT * FROM run_artifacts WHERE run_id = ?",
                 (run_id,),
             ).fetchone()
+            artifact_record_rows = connection.execute(
+                """
+                SELECT *
+                FROM run_artifact_records
+                WHERE run_id = ?
+                ORDER BY name ASC
+                """,
+                (run_id,),
+            ).fetchall()
             diagnostic_row = connection.execute(
                 "SELECT * FROM run_diagnostics WHERE run_id = ?",
                 (run_id,),
             ).fetchone()
-
-        artifact_records = self.list_artifact_records(run_id)
+            artifact_records = [_row_to_artifact_record(row) for row in artifact_record_rows]
 
         return RunSnapshotRecord(
             run=run,

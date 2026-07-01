@@ -120,6 +120,29 @@ class RunRepositoryTests(unittest.TestCase):
 
             self.assertIsNone(repository.get_snapshot("missing"))
 
+    def test_snapshot_reads_artifact_records_without_public_list_helper(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="natural_language",
+                request="Run demo.",
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+            repository.save_json_artifact("run_001", "catalog_retrieval", {"strategy": "lexical_v1"})
+
+            with patch.object(
+                repository,
+                "list_artifact_records",
+                side_effect=AssertionError("snapshot should read artifact records in its own connection"),
+            ):
+                snapshot = repository.get_snapshot("run_001")
+
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.extras["catalog_retrieval"]["strategy"], "lexical_v1")
+
     def test_partial_artifact_updates_preserve_existing_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
