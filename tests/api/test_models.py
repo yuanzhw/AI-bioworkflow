@@ -64,6 +64,7 @@ class WorkflowDtoTests(unittest.TestCase):
         self.assertTrue(response.diagnostics.succeeded)
         self.assertFalse(response.diagnostics.check_performed)
         self.assertEqual(response.diagnostics.analysis_errors, [])
+        self.assertIsNone(response.artifacts.catalog_retrieval)
         self.assertEqual(response.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
         self.assertIn("workflow RNASeqDEG", response.artifacts.wdl)
 
@@ -99,6 +100,7 @@ class WorkflowDtoTests(unittest.TestCase):
         )
 
         self.assertEqual(response.artifacts.workflow_ir, {})
+        self.assertIsNone(response.artifacts.catalog_retrieval)
         self.assertEqual(response.artifacts.wdl, "")
         self.assertFalse(response.diagnostics.succeeded)
         self.assertIsNone(response.kind)

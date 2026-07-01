@@ -240,6 +240,7 @@ OK (skipped=2)
 期望输出：
 
 - artifacts 默认为空 Workflow IR 与空 WDL。
+- `catalog_retrieval` 默认为 `None`，结构化或尚未检索的 run 不伪造 retrieval artifact。
 - diagnostics 默认不是 succeeded。
 - `kind`、`created_at`、`updated_at` 和 `completed_at` 默认为 `None`。
 
@@ -618,7 +619,7 @@ OK (skipped=2)
 输入：
 
 - mock `run_service.get_snapshot(...)` 返回 `WorkflowRunSnapshotResponse`。
-- snapshot 包含自然语言 run 的 plan、Workflow IR、WDL 和 diagnostics。
+- snapshot 包含自然语言 run 的 catalog retrieval、plan、Workflow IR、WDL 和 diagnostics。
 - HTTP 请求：`GET /api/runs/run_123`
 
 执行：
@@ -630,13 +631,13 @@ OK (skipped=2)
 - HTTP status 为 `200`。
 - response `run_id == "run_123"`。
 - response 保留 `kind == "natural_language"`。
-- response artifacts 包含 Planner plan、Compiler Workflow IR 和 WDL。
+- response artifacts 包含 Catalog retrieval、Planner plan、Compiler Workflow IR 和 WDL。
 - response diagnostics 保留 `succeeded` 与 `check_performed`。
 
 覆盖点：
 
 - run snapshot endpoint 从 run service 读取持久化快照。
-- 自然语言 run history 可通过 API route 暴露 Planner plan 和 Compiler artifacts。
+- 自然语言 run history 可通过 API route 暴露 Catalog retrieval、Planner plan 和 Compiler artifacts。
 
 ### `test_stream_run_events`
 
@@ -661,6 +662,12 @@ OK (skipped=2)
 ## `tests/test_run_repository.py`
 
 该文件验证 SQLite-backed run repository。Repository 负责持久化 run、event、artifact 和 diagnostic 数据，并提供面向 service 层的查询能力；它不调用 planner、compiler 或 FastAPI route。
+
+新增 catalog retrieval artifact 覆盖：
+
+- 完整 `save_artifacts(...)` 会保存并读回 `catalog_retrieval`。
+- `save_catalog_retrieval_artifact(...)` 可先保存 retrieval artifact，后续 plan、Workflow IR、WDL 增量更新不会覆盖该字段。
+- 既有 SQLite `run_artifacts` 表会通过 schema migration 补齐 `catalog_retrieval_json` 列。
 
 ### `test_list_runs_returns_paginated_summaries_with_status_filter`
 
@@ -714,6 +721,7 @@ OK (skipped=2)
 - snapshot `status == "succeeded"`。
 - snapshot `kind == "structured_compile"`。
 - snapshot 包含 `created_at`、`updated_at` 和 `completed_at`。
+- structured compile snapshot 中 `catalog_retrieval == None`。
 - Workflow IR 名称为 `RNASeqDEG`。
 - WDL 包含 `workflow RNASeqDEG`。
 - events 包含 `run.created`、`artifact.updated`，最后一条为 `run.completed`。
@@ -767,7 +775,7 @@ OK (skipped=2)
 - `plan_and_compile_workflow` 被调用一次。
 - 调用参数包含自然语言 request、`check=False` 和 `event_callback`。
 - snapshot `status == "succeeded"`。
-- snapshot artifacts 包含 Recipe Tool Plan 和 WDL。
+- snapshot artifacts 包含 catalog retrieval、Recipe Tool Plan 和 WDL。
 
 覆盖点：
 
@@ -779,7 +787,7 @@ OK (skipped=2)
 输入：
 
 - 自然语言请求：`Run RNA-seq DEG.`
-- mock `plan_and_compile_workflow(...)` 通过 `event_callback` 发出 planner、compiler delegate、Compiler Graph、artifact 和 validation 事件，并返回成功结果。
+- mock `plan_and_compile_workflow(...)` 通过 `event_callback` 发出 catalog retriever、planner、compiler delegate、Compiler Graph、artifact 和 validation 事件，并返回成功结果。
 
 执行：
 
@@ -788,11 +796,11 @@ OK (skipped=2)
 
 期望输出：
 
-- snapshot artifacts 包含 Planner plan、Workflow IR 和 WDL。
+- snapshot artifacts 包含 Catalog retrieval、Planner plan、Workflow IR 和 WDL。
 - snapshot diagnostics 表示 run 成功。
-- event history 以 `run.created` 开始，并依次包含 planner started/completed、plan artifact、compiler_graph started、Compiler Graph 节点事件、WDL artifact、validation completed。
+- event history 以 `run.created` 开始，并依次包含 catalog_retriever started/completed、catalog_retrieval artifact、planner started/completed、plan artifact、compiler_graph started、Compiler Graph 节点事件、WDL artifact、validation completed。
 - 倒数第二条为 diagnostics artifact 更新，最后一条为 `run.completed`。
-- artifact 顺序为 `plan`、`workflow_ir`、`wdl`、`diagnostics`。
+- artifact 顺序为 `catalog_retrieval`、`plan`、`workflow_ir`、`wdl`、`diagnostics`。
 - diagnostics artifact payload 包含错误数、修复数、`check_performed` 和 `succeeded` 等结构化字段。
 
 覆盖点：
@@ -826,7 +834,7 @@ OK (skipped=2)
 输入：
 
 - 自然语言请求：`Run RNA-seq DEG.`
-- mock `plan_and_compile_workflow(...)` 先通过 `event_callback` 发出 plan 和 Workflow IR artifact 更新，再抛出 `RuntimeError("compiler exploded")`
+- mock `plan_and_compile_workflow(...)` 先通过 `event_callback` 发出 catalog retrieval、plan 和 Workflow IR artifact 更新，再抛出 `RuntimeError("compiler exploded")`
 
 执行：
 
@@ -836,11 +844,11 @@ OK (skipped=2)
 期望输出：
 
 - snapshot `status == "failed"`。
-- snapshot artifacts 仍保留 planner 产出的 plan 和 compiler 已产出的 Workflow IR。
+- snapshot artifacts 仍保留 retriever 产出的 catalog retrieval、planner 产出的 plan 和 compiler 已产出的 Workflow IR。
 - snapshot WDL 仍为空字符串。
 - diagnostics validation message 包含 `compiler exploded`。
 - events 包含 compiler failure，并以 `run.completed` 结束。
-- artifact 顺序为 `plan`、`workflow_ir`、`diagnostics`。
+- artifact 顺序为 `catalog_retrieval`、`plan`、`workflow_ir`、`diagnostics`。
 
 覆盖点：
 
@@ -2325,6 +2333,7 @@ Agent 占位逻辑。
 
 - `result.succeeded == True`。
 - `result.plan` 等于 mock LLM 返回的 plan。
+- `result.catalog_retrieval.strategy == "lexical_v1"`。
 - `result.planner_prompt` 包含 `Catalog:`。
 - `result.planner_raw_response` 包含 `RNASeqDEG`。
 - `result.wdl` 包含 `workflow RNASeqDEG`。
@@ -2334,7 +2343,7 @@ Agent 占位逻辑。
 
 - 自然语言入口通过 Orchestration Graph 先生成 Recipe Tool Plan，再进入确定性编译链路。
 - LLM 仍不直接生成最终 WDL。
-- planner observability 信息被 service 结果保留。
+- planner observability 信息和 raw catalog retrieval artifact 被 service 结果保留。
 
 ### `test_plan_and_compile_workflow_event_callback_covers_planner_and_compiler`
 
@@ -2352,9 +2361,10 @@ Agent 占位逻辑。
 期望输出：
 
 - `result.succeeded == True`。
-- 事件以 planner started/completed/plan artifact 开始。
+- 事件以 catalog_retriever started/completed/catalog_retrieval artifact 开始，然后进入 planner started/completed/plan artifact。
 - 随后进入上层 `compiler_graph` delegate。
 - 事件中包含下层 Compiler Graph 的 `ir_normalizer`、`workflow_ir` artifact、`wdl` artifact 和最终 compiler delegate 完成事件。
+- catalog retrieval artifact 事件的 state 中包含 `catalog_retrieval`。
 - plan artifact 事件的 state 中包含 planner 生成的 Recipe Tool Plan。
 
 覆盖点：
@@ -3306,6 +3316,7 @@ npm run test:graph
 - Recipe Tool Plan 到 Workflow IR 的 resolver 主路径。
 - Catalog 查询服务的 recipe/tool JSON-ready 输出。
 - Approved Catalog Retriever 的词法召回、CJK tokenization、fallback 原因和 JSON-ready 输出契约。
+- 自然语言 run 对 catalog retrieval artifact 的持久化、snapshot 暴露和 SSE 事件回放顺序。
 - Analyzer 对引用、optional input、scatter output 类型提升的处理。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。

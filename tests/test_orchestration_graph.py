@@ -21,6 +21,17 @@ def sample_plan() -> dict:
     }
 
 
+def sample_catalog_retrieval() -> dict:
+    return {
+        "query": "Run RNA-seq DEG.",
+        "strategy": "lexical_v1",
+        "recipes": [{"id": "rnaseq_differential_expression"}],
+        "tools": [{"id": "fastp", "trust_status": "catalog-approved"}],
+        "fallback_used": False,
+        "fallback_reason": None,
+    }
+
+
 def compilation_result(
     plan: dict,
     *,
@@ -54,11 +65,20 @@ def compilation_result(
 def planner_success_node(plan: dict):
     def node(state):
         return {
+            "catalog_retrieval": sample_catalog_retrieval(),
             "plan": plan,
             "planner_prompt": "planner prompt",
             "planner_raw_response": "{}",
             "errors": [],
             "events": [
+                {"type": "node.started", "node": "catalog_retriever", "summary": "Catalog retriever started."},
+                {"type": "node.completed", "node": "catalog_retriever", "summary": "Catalog retriever completed."},
+                {
+                    "type": "artifact.updated",
+                    "node": "catalog_retriever",
+                    "summary": "Catalog retrieval artifact updated.",
+                    "payload": {"artifact": "catalog_retrieval"},
+                },
                 {"type": "node.started", "node": "planner", "summary": "Planner started."},
                 {"type": "node.completed", "node": "planner", "summary": "Planner completed."},
                 {
@@ -99,6 +119,7 @@ class OrchestrationGraphTests(unittest.TestCase):
 
         self.assertEqual(compiler_calls, [{"parsed_json": plan, "check": False}])
         self.assertEqual(final_state["plan"], plan)
+        self.assertEqual(final_state["catalog_retrieval"]["strategy"], "lexical_v1")
         self.assertEqual(final_state["planner_prompt"], "planner prompt")
         self.assertIsNotNone(final_state["compiler_result"])
         self.assertTrue(final_state["compiler_result"].succeeded)
@@ -107,6 +128,9 @@ class OrchestrationGraphTests(unittest.TestCase):
         self.assertEqual(
             [event["type"] for event in final_state["events"]],
             [
+                "node.started",
+                "node.completed",
+                "artifact.updated",
                 "node.started",
                 "node.completed",
                 "artifact.updated",

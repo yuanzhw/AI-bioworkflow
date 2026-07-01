@@ -23,6 +23,7 @@ class OrchestrationState(TypedDict):
     request: str
     planner_model: str
     check: bool
+    catalog_retrieval: dict[str, Any] | None
     plan: dict[str, Any] | None
     planner_prompt: str | None
     planner_raw_response: str | None
@@ -42,6 +43,7 @@ def build_initial_orchestration_state(
         "request": request,
         "planner_model": planner_model,
         "check": check,
+        "catalog_retrieval": None,
         "plan": None,
         "planner_prompt": None,
         "planner_raw_response": None,

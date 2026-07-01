@@ -128,11 +128,22 @@ class OrchestrationPlannerNodeTests(unittest.TestCase):
         self.assertNotIn("compiler_result", update)
         self.assertNotIn("workflow_ir", update)
         self.assertNotIn("wdl", update)
+        self.assertEqual(update["catalog_retrieval"]["strategy"], "lexical_v1")
+        self.assertEqual(update["catalog_retrieval"]["recipes"][0]["id"], "rnaseq_differential_expression")
         self.assertEqual(
-            [event["type"] for event in update["events"]],
-            ["node.started", "node.completed", "artifact.updated"],
+            [(event["type"], event["node"]) for event in update["events"]],
+            [
+                ("node.started", "catalog_retriever"),
+                ("node.completed", "catalog_retriever"),
+                ("artifact.updated", "catalog_retriever"),
+                ("node.started", "planner"),
+                ("node.completed", "planner"),
+                ("artifact.updated", "planner"),
+            ],
         )
-        self.assertEqual(update["events"][0]["payload"], {"model": DEFAULT_PLANNER_MODEL})
+        self.assertEqual(update["events"][1]["payload"]["strategy"], "lexical_v1")
+        self.assertEqual(update["events"][2]["payload"], {"artifact": "catalog_retrieval"})
+        self.assertEqual(update["events"][3]["payload"], {"model": DEFAULT_PLANNER_MODEL})
         self.assertEqual(update["events"][-1]["payload"], {"artifact": "plan"})
         self.assertEqual(len(fake_llm.prompts), 1)
 
@@ -152,9 +163,16 @@ class OrchestrationPlannerNodeTests(unittest.TestCase):
         self.assertIsNone(update["plan"])
         self.assertIsNone(update["planner_prompt"])
         self.assertIsNone(update["planner_raw_response"])
+        self.assertEqual(update["catalog_retrieval"]["strategy"], "lexical_v1")
         self.assertEqual(
-            [event["type"] for event in update["events"]],
-            ["node.started", "node.failed"],
+            [(event["type"], event["node"]) for event in update["events"]],
+            [
+                ("node.started", "catalog_retriever"),
+                ("node.completed", "catalog_retriever"),
+                ("artifact.updated", "catalog_retriever"),
+                ("node.started", "planner"),
+                ("node.failed", "planner"),
+            ],
         )
         failure_payload = update["events"][-1]["payload"]
         self.assertEqual(failure_payload["error_type"], "PlannerJsonError")
@@ -173,9 +191,16 @@ class OrchestrationPlannerNodeTests(unittest.TestCase):
         self.assertIsNone(update["plan"])
         self.assertIsNone(update["planner_prompt"])
         self.assertIsNone(update["planner_raw_response"])
+        self.assertEqual(update["catalog_retrieval"]["strategy"], "lexical_v1")
         self.assertEqual(
-            [event["type"] for event in update["events"]],
-            ["node.started", "node.failed"],
+            [(event["type"], event["node"]) for event in update["events"]],
+            [
+                ("node.started", "catalog_retriever"),
+                ("node.completed", "catalog_retriever"),
+                ("artifact.updated", "catalog_retriever"),
+                ("node.started", "planner"),
+                ("node.failed", "planner"),
+            ],
         )
         failure_payload = update["events"][-1]["payload"]
         self.assertEqual(failure_payload["error_type"], "RuntimeError")

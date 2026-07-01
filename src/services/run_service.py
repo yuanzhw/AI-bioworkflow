@@ -224,6 +224,7 @@ class RunService:
         self.repository.save_artifacts(
             run_id,
             WorkflowArtifacts(
+                catalog_retrieval=result.catalog_retrieval,
                 plan=result.plan,
                 workflow_ir=result.workflow_ir,
                 wdl=result.wdl,
@@ -315,7 +316,11 @@ class RunService:
             return
 
         artifact = payload.get("artifact")
-        if artifact == "plan":
+        if artifact == "catalog_retrieval":
+            catalog_retrieval = state.get("catalog_retrieval")
+            if isinstance(catalog_retrieval, dict):
+                self.repository.save_catalog_retrieval_artifact(run_id, catalog_retrieval)
+        elif artifact == "plan":
             plan = state.get("plan")
             if isinstance(plan, dict):
                 planner_prompt = state.get("planner_prompt")

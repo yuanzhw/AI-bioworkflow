@@ -73,6 +73,7 @@ class WorkflowArtifacts(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    catalog_retrieval: JsonObject | None = None
     plan: JsonObject | None = None
     workflow_ir: JsonObject = Field(default_factory=dict)
     wdl: str = ""
@@ -147,6 +148,7 @@ class CompilationResultResponse(BaseModel):
         return cls(
             status=RunStatus.SUCCEEDED if result.succeeded else RunStatus.FAILED,
             artifacts=WorkflowArtifacts(
+                catalog_retrieval=result.catalog_retrieval,
                 plan=result.plan,
                 workflow_ir=result.workflow_ir,
                 wdl=result.wdl,

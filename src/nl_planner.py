@@ -74,6 +74,7 @@ def create_natural_language_plan(
     llm: PlannerLlm | None = None,
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
+    catalog_retrieval: dict[str, Any] | None = None,
 ) -> NaturalLanguagePlanResult:
     """Convert a natural-language request and retain planner observability details."""
     if not request.strip():
@@ -83,7 +84,8 @@ def create_natural_language_plan(
     recipe_catalog = recipe_catalog or load_recipe_catalog(tool_catalog=tool_catalog)
     planner_llm = llm if llm is not None else _make_planner_llm(model)
 
-    catalog_retrieval = retrieve_catalog_context(request, tool_catalog, recipe_catalog)
+    if catalog_retrieval is None:
+        catalog_retrieval = retrieve_catalog_context(request, tool_catalog, recipe_catalog)
     prompt = build_planner_prompt(
         request,
         tool_catalog,
