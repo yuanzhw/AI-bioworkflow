@@ -41,6 +41,8 @@ const emptyArtifacts: WorkflowArtifacts = {
   plan: null,
   workflow_ir: {},
   wdl: "",
+  extras: {},
+  manifest: [],
 };
 
 const emptyDiagnostics: DiagnosticReport = {

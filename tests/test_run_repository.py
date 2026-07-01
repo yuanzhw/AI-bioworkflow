@@ -1,7 +1,10 @@
+import json
 import sqlite3
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from src.api.models import DiagnosticReport, RunEventType, RunStatus, WorkflowArtifacts
 from src.services.run_repository import SQLITE_BUSY_TIMEOUT_MS, RunRepository
@@ -61,12 +64,26 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(snapshot.run.status, RunStatus.SUCCEEDED)
             self.assertEqual(snapshot.artifacts.catalog_retrieval, {"strategy": "lexical_v1"})
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
+            manifest = {artifact.name: artifact for artifact in snapshot.artifacts.manifest}
+            self.assertEqual(manifest["catalog_retrieval"].content_type, "application/json")
+            self.assertEqual(manifest["plan"].content_type, "application/json")
+            self.assertEqual(manifest["workflow_ir"].content_type, "application/json")
+            self.assertEqual(manifest["wdl"].content_type, "text/plain")
+            self.assertEqual(manifest["diagnostics"].content_type, "application/json")
             self.assertTrue(snapshot.diagnostics.succeeded)
             self.assertFalse(snapshot.diagnostics.check_performed)
 
             events = repository.list_events("run_001")
             self.assertEqual([event.sequence for event in events], [1, 2])
             self.assertEqual(events[1].node, "ir_normalizer")
+
+            artifact_records = repository.list_artifact_records("run_001")
+            self.assertEqual(
+                {record.name for record in artifact_records},
+                {"catalog_retrieval", "diagnostics", "plan", "wdl", "workflow_ir"},
+            )
+            wdl_record = next(record for record in artifact_records if record.name == "wdl")
+            self.assertIn("workflow Demo", wdl_record.content)
 
     def test_has_event_type_checks_event_existence(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -103,6 +120,29 @@ class RunRepositoryTests(unittest.TestCase):
 
             self.assertIsNone(repository.get_snapshot("missing"))
 
+    def test_snapshot_reads_artifact_records_without_public_list_helper(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="natural_language",
+                request="Run demo.",
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+            repository.save_json_artifact("run_001", "catalog_retrieval", {"strategy": "lexical_v1"})
+
+            with patch.object(
+                repository,
+                "list_artifact_records",
+                side_effect=AssertionError("snapshot should read artifact records in its own connection"),
+            ):
+                snapshot = repository.get_snapshot("run_001")
+
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.extras["catalog_retrieval"]["strategy"], "lexical_v1")
+
     def test_partial_artifact_updates_preserve_existing_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
@@ -133,6 +173,156 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "demo"}})
             self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
             self.assertIn("workflow Demo", snapshot.artifacts.wdl)
+            self.assertIn("workflow_ir", {artifact.name for artifact in snapshot.artifacts.manifest})
+            self.assertIn("wdl", {artifact.name for artifact in snapshot.artifacts.manifest})
+
+    def test_named_extra_artifacts_are_exposed_in_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="natural_language",
+                request="Run demo.",
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+
+            retrieval = {
+                "strategy": "lexical_v1",
+                "recipes": [{"id": "rnaseq_differential_expression"}],
+            }
+            repository.save_json_artifact("run_001", "catalog_retrieval", retrieval)
+
+            snapshot = repository.get_snapshot("run_001")
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.extras["catalog_retrieval"], retrieval)
+            manifest = {artifact.name: artifact for artifact in snapshot.artifacts.manifest}
+            self.assertEqual(manifest["catalog_retrieval"].content_type, "application/json")
+
+            with self.assertRaisesRegex(ValueError, "artifact name"):
+                repository.save_json_artifact("run_001", "Bad-Name", {})
+
+    def test_schema_backfills_named_artifacts_from_legacy_fixed_columns(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "runs.sqlite3"
+            timestamp = datetime(2026, 6, 16, tzinfo=UTC).isoformat()
+            connection = sqlite3.connect(db_path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE runs (
+                        run_id TEXT PRIMARY KEY,
+                        kind TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        request_json TEXT,
+                        check_performed INTEGER NOT NULL,
+                        events_url TEXT NOT NULL,
+                        planner_model TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        completed_at TEXT
+                    );
+
+                    CREATE TABLE run_events (
+                        event_id TEXT PRIMARY KEY,
+                        run_id TEXT NOT NULL,
+                        sequence INTEGER NOT NULL,
+                        type TEXT NOT NULL,
+                        node TEXT,
+                        timestamp TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        payload_json TEXT NOT NULL,
+                        UNIQUE(run_id, sequence)
+                    );
+
+                    CREATE TABLE run_artifacts (
+                        run_id TEXT PRIMARY KEY,
+                        plan_json TEXT,
+                        workflow_ir_json TEXT NOT NULL,
+                        wdl TEXT NOT NULL,
+                        planner_prompt TEXT,
+                        planner_raw_response TEXT
+                    );
+
+                    CREATE TABLE run_diagnostics (
+                        run_id TEXT PRIMARY KEY,
+                        analysis_errors_json TEXT NOT NULL,
+                        analysis_warnings_json TEXT NOT NULL,
+                        repair_actions_json TEXT NOT NULL,
+                        validation_message TEXT NOT NULL,
+                        is_valid INTEGER NOT NULL,
+                        succeeded INTEGER NOT NULL,
+                        check_performed INTEGER NOT NULL
+                    );
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO runs (
+                        run_id, kind, status, request_json, check_performed,
+                        events_url, planner_model, created_at, updated_at, completed_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+                    """,
+                    (
+                        "run_legacy",
+                        "structured_compile",
+                        "succeeded",
+                        json.dumps({"workflow": {"recipe": "demo"}}),
+                        0,
+                        "/api/runs/run_legacy/events",
+                        timestamp,
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO run_artifacts (
+                        run_id, plan_json, workflow_ir_json, wdl,
+                        planner_prompt, planner_raw_response
+                    )
+                    VALUES (?, ?, ?, ?, NULL, NULL)
+                    """,
+                    (
+                        "run_legacy",
+                        json.dumps({"workflow": {"recipe": "demo"}}),
+                        json.dumps({"workflow": {"name": "Demo"}}),
+                        "version 1.0\nworkflow Demo {}",
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO run_diagnostics (
+                        run_id, analysis_errors_json, analysis_warnings_json,
+                        repair_actions_json, validation_message, is_valid,
+                        succeeded, check_performed
+                    )
+                    VALUES (?, '[]', '[]', '[]', ?, 0, 1, 0)
+                    """,
+                    ("run_legacy", "WDL syntax validation skipped (--no-check)."),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            repository = RunRepository(db_path)
+            records = repository.list_artifact_records("run_legacy")
+
+            self.assertEqual(
+                {record.name for record in records},
+                {"diagnostics", "plan", "wdl", "workflow_ir"},
+            )
+            snapshot = repository.get_snapshot("run_legacy")
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.workflow_ir["workflow"]["name"], "Demo")
+            self.assertEqual(len(snapshot.artifacts.manifest), 4)
+
+            with patch.object(RunRepository, "_backfill_artifact_records") as backfill:
+                RunRepository(db_path)
+            backfill.assert_not_called()
 
     def test_catalog_retrieval_artifact_update_preserves_later_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:

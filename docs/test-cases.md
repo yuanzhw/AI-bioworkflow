@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 178 tests
+Ran 186 tests
 OK (skipped=2)
 ```
 
@@ -247,6 +247,28 @@ OK (skipped=2)
 覆盖点：
 
 - run 详情页依赖的 snapshot metadata 默认契约保持显式、稳定。
+
+### `test_workflow_artifacts_expose_manifest_and_extra_artifacts`
+
+输入：
+
+- `WorkflowArtifacts`，包含：
+  - `extras.catalog_retrieval.strategy == "lexical_v1"`
+  - 一条 `WorkflowArtifactSummary(name="catalog_retrieval", content_type="application/json")`
+
+执行：
+
+- 直接构造 `WorkflowArtifacts(...)`。
+
+期望输出：
+
+- `extras` 保留额外 artifact 的 JSON-ready 内容。
+- `manifest` 保留 artifact 名称、content type 和更新时间。
+
+覆盖点：
+
+- Run snapshot 可以在固定 `plan` / `workflow_ir` / `wdl` 字段之外，暴露后续 orchestration 阶段新增的命名 artifact。
+- 前端和历史详情可以通过 manifest 判断哪些 artifact 已经持久化，而不依赖固定列枚举。
 
 ### `test_run_list_response_accepts_history_summaries`
 
@@ -669,6 +691,32 @@ OK (skipped=2)
 - `save_catalog_retrieval_artifact(...)` 可先保存 retrieval artifact，后续 plan、Workflow IR、WDL 增量更新不会覆盖该字段。
 - 既有 SQLite `run_artifacts` 表会通过 schema migration 补齐 `catalog_retrieval_json` 列。
 
+### `test_repository_persists_run_events_artifacts_and_diagnostics`
+
+输入：
+
+- 一个 structured compile run。
+- 两个 run events：`run.created` 与 `node.started`。
+- `WorkflowArtifacts`，包含 plan、Workflow IR 和 WDL。
+- `DiagnosticReport`，表示跳过 WDL syntax validation 且 run 成功。
+
+执行：
+
+- 调用 repository 创建 run、追加 events、保存 artifacts、保存 diagnostics、更新 terminal status。
+- 读取 snapshot、events 和 named artifact records。
+
+期望输出：
+
+- snapshot run status 为 `succeeded`。
+- snapshot artifacts 保留 Workflow IR、WDL 和 manifest。
+- manifest 中包含 `plan`、`workflow_ir`、`wdl` 和 `diagnostics`。
+- named artifact records 中 `wdl` content type 为 `text/plain`，其余核心 JSON artifact 为 `application/json`。
+
+覆盖点：
+
+- 固定 artifact 列与通用 `run_artifact_records` manifest 会同步写入。
+- diagnostics 既保留在专用 diagnostic 表中，也作为命名 artifact 进入 manifest，方便后续统一 artifact 展示。
+
 ### `test_list_runs_returns_paginated_summaries_with_status_filter`
 
 输入：
@@ -699,6 +747,77 @@ OK (skipped=2)
 - W5 历史列表的 repository 查询支持分页、状态过滤和稳定排序。
 - 列表查询只返回 diagnostic counters，不读取完整 artifact。
 
+### `test_named_extra_artifacts_are_exposed_in_snapshot`
+
+输入：
+
+- 一个 natural-language run。
+- 额外命名 JSON artifact：`catalog_retrieval`。
+
+执行：
+
+- 调用 `repository.save_json_artifact("run_001", "catalog_retrieval", ...)`。
+- 读取 run snapshot。
+- 尝试保存非法名称 `Bad-Name`。
+
+期望输出：
+
+- `snapshot.artifacts.extras.catalog_retrieval` 等于保存的检索结果。
+- manifest 中包含 `catalog_retrieval`，content type 为 `application/json`。
+- 非法 artifact 名称抛出 `ValueError`。
+
+覆盖点：
+
+- 后续 Catalog Retriever、planner trace 摘要和 execution result 可以作为命名 artifact 保存，不需要为每类产物新增 SQLite 固定列。
+- Artifact 名称有稳定约束，避免 UI 和 API 消费方收到不可预测的 key。
+
+### `test_snapshot_reads_artifact_records_without_public_list_helper`
+
+输入：
+
+- 一个 natural-language run。
+- 额外命名 JSON artifact：`catalog_retrieval`。
+
+执行：
+
+- patch 当前 repository 实例的 `list_artifact_records(...)`，使其一旦被调用就抛错。
+- 调用 `repository.get_snapshot(...)`。
+
+期望输出：
+
+- snapshot 仍然成功返回。
+- `snapshot.artifacts.extras.catalog_retrieval.strategy == "lexical_v1"`。
+
+覆盖点：
+
+- `get_snapshot()` 在同一个 DB connection 内读取 run、固定 artifact、named artifact records 和 diagnostics。
+- snapshot 不再通过 `list_artifact_records()` 打开第二个连接，避免同一次 snapshot 内部读取到不同时间点的数据。
+
+### `test_schema_backfills_named_artifacts_from_legacy_fixed_columns`
+
+输入：
+
+- 手工创建的旧版 SQLite schema，只包含 `runs`、`run_events`、`run_artifacts` 和 `run_diagnostics`。
+- 旧表中已有 plan、Workflow IR、WDL 和 diagnostics。
+
+执行：
+
+- 用 `RunRepository(db_path)` 打开旧数据库，触发 `ensure_schema()`。
+- 查询 `run_artifact_records` 和 snapshot。
+
+期望输出：
+
+- 新表 `run_artifact_records` 被创建。
+- 旧固定列被回填为 `plan`、`workflow_ir`、`wdl` 和 `diagnostics` 四条 named artifact records。
+- snapshot artifacts 仍可读取旧的 Workflow IR 和 manifest。
+- 回填完成后再次初始化 repository 不再触发全量 backfill。
+
+覆盖点：
+
+- 本地 `.cache` 中已有展示数据库可以随 schema 演进自动补齐 manifest，不需要手动删除旧 DB。
+- 新增通用 artifact 存储保持向后兼容。
+- Backfill 只在缺失 legacy artifact records 时运行，避免每次 repository 初始化都扫描旧 artifact 表。
+
 ## `tests/test_run_service.py`
 
 该文件验证 persistent run lifecycle service。Service 层连接 API DTO、RunRepository 和 workflow service；FastAPI routes 只调用 service 方法。自然语言 run 通过 `workflow_service.plan_and_compile_workflow` 进入 Orchestration Graph，不在 run service 内重复调用 planner 或结构化 compiler。
@@ -726,11 +845,15 @@ OK (skipped=2)
 - WDL 包含 `workflow RNASeqDEG`。
 - events 包含 `run.created`、`artifact.updated`，最后一条为 `run.completed`。
 - 倒数第二条事件为 `artifact.updated` diagnostics，并包含 `artifact == "diagnostics"` 与 `succeeded == true`。
+- `run.created` payload 包含 `stage == "run"`、`status == "created"` 和 run kind。
+- diagnostics artifact payload 包含 `stage == "diagnostics"`、`status == "updated"`、`artifact_name == "diagnostics"` 和 `artifact_content_type == "application/json"`。
+- `run.completed` payload 包含 terminal run status。
 
 覆盖点：
 
 - 结构化编译 run 会持久化详情页所需元数据、产物、诊断和事件回放记录。
 - diagnostics 保存后会通过结构化 artifact 事件通知历史/SSE 消费方刷新。
+- 事件 payload 提供稳定 observability 字段，前端不需要解析 summary 文案判断阶段、状态或 artifact 类型。
 
 ### `test_structured_compile_run_replays_repair_artifact_before_repair_event`
 
@@ -802,11 +925,38 @@ OK (skipped=2)
 - 倒数第二条为 diagnostics artifact 更新，最后一条为 `run.completed`。
 - artifact 顺序为 `catalog_retrieval`、`plan`、`workflow_ir`、`wdl`、`diagnostics`。
 - diagnostics artifact payload 包含错误数、修复数、`check_performed` 和 `succeeded` 等结构化字段。
+- planner event payload 标记 `stage == "planning"`。
+- compiler delegate event payload 标记 `stage == "orchestration"`。
+- artifact event payload 同时保留旧字段 `artifact` 和新字段 `artifact_name` / `artifact_content_type`。
 
 覆盖点：
 
 - 成功自然语言 run 可以被前端和历史详情按关键阶段回放。
 - artifact 事件 payload 使用结构化字段，不依赖前端解析 summary 文案。
+
+### `test_extra_text_artifact_event_matches_persisted_content_type`
+
+输入：
+
+- 一个已创建的 natural-language run。
+- 额外命名 artifact：`planner_trace`，state 中内容为字符串。
+
+执行：
+
+- 通过 workflow event callback 发出 `artifact.updated` 事件。
+- 读取事件历史和 run snapshot。
+
+期望输出：
+
+- 事件 payload 中 `artifact_name == "planner_trace"`。
+- 事件 payload 中 `artifact_content_type == "text/plain"`。
+- snapshot `extras.planner_trace` 保留文本内容。
+- manifest 中 `planner_trace` 的 content type 同样为 `text/plain`。
+
+覆盖点：
+
+- 未预注册的 text artifact 会按实际 state 内容推断 content type。
+- 事件 payload 与 repository 持久化记录保持一致，不会出现事件声称 JSON、DB 保存 text 的契约分叉。
 
 ### `test_natural_language_run_preserves_empty_planner_observability_fields`
 

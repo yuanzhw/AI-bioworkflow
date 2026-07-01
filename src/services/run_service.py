@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
+from typing import Any
 from uuid import uuid4
 
 from src.api.models import (
@@ -23,6 +24,7 @@ from src.api.models import (
 )
 from src.nl_planner import DEFAULT_PLANNER_MODEL, NaturalLanguagePlanningError
 from src.services import workflow_service
+from src.services.run_repository import JSON_CONTENT_TYPE, TEXT_CONTENT_TYPE
 from src.services.run_repository import RunRepository
 from src.services.workflow_service import WorkflowCompilationResult
 
@@ -31,6 +33,12 @@ NATURAL_LANGUAGE_RUN_KIND = "natural_language"
 STRUCTURED_COMPILE_RUN_KIND = "structured_compile"
 DEFAULT_SSE_POLL_INTERVAL_SECONDS = 0.25
 REQUEST_SUMMARY_MAX_LENGTH = 160
+PLANNING_NODES = {"catalog_retriever", "planner"}
+ORCHESTRATION_NODES = {"compiler_graph"}
+COMPILER_NODES = {"compiler", "ir_normalizer", "analyzer", "repairer", "renderer", "checker"}
+DIAGNOSTIC_NODES = {"diagnostics"}
+JSON_ARTIFACTS = {"catalog_retrieval", "diagnostics", "plan", "workflow_ir"}
+TEXT_ARTIFACTS = {"wdl"}
 
 
 class RunService:
@@ -54,7 +62,11 @@ class RunService:
             run_id=run_id,
             event_type=RunEventType.RUN_CREATED,
             summary="Natural-language workflow run created.",
-            payload={"kind": NATURAL_LANGUAGE_RUN_KIND},
+            payload=_event_payload(
+                RunEventType.RUN_CREATED,
+                None,
+                {"kind": NATURAL_LANGUAGE_RUN_KIND, "status": RunStatus.CREATED.value},
+            ),
         )
         return RunAcceptedResponse(run_id=run_id, status=RunStatus.CREATED, events_url=events_url)
 
@@ -72,7 +84,11 @@ class RunService:
             run_id=run_id,
             event_type=RunEventType.RUN_CREATED,
             summary="Structured compile run created.",
-            payload={"kind": STRUCTURED_COMPILE_RUN_KIND},
+            payload=_event_payload(
+                RunEventType.RUN_CREATED,
+                None,
+                {"kind": STRUCTURED_COMPILE_RUN_KIND, "status": RunStatus.CREATED.value},
+            ),
         )
         return RunAcceptedResponse(run_id=run_id, status=RunStatus.CREATED, events_url=events_url)
 
@@ -248,7 +264,11 @@ class RunService:
             run_id=run_id,
             status=final_status,
             summary=f"Run {final_status.value}.",
-            payload={"status": final_status.value},
+            payload=_event_payload(
+                RunEventType.RUN_COMPLETED,
+                None,
+                {"status": final_status.value},
+            ),
         )
 
     def _fail_run(self, run_id: str, message: str, *, check_performed: bool) -> None:
@@ -264,7 +284,11 @@ class RunService:
             run_id=run_id,
             status=RunStatus.FAILED,
             summary="Run failed.",
-            payload={"status": RunStatus.FAILED.value, "error": message},
+            payload=_event_payload(
+                RunEventType.RUN_COMPLETED,
+                None,
+                {"status": RunStatus.FAILED.value, "error": message},
+            ),
         )
 
     def _append_compiler_failed_event(self, run_id: str, exc: Exception) -> None:
@@ -273,7 +297,11 @@ class RunService:
             event_type=RunEventType.NODE_FAILED,
             node="compiler",
             summary="Workflow compiler failed.",
-            payload={"error": str(exc)},
+            payload=_event_payload(
+                RunEventType.NODE_FAILED,
+                "compiler",
+                {"error_type": exc.__class__.__name__, "error": str(exc)},
+            ),
         )
 
     def _append_diagnostics_artifact_event(self, run_id: str, diagnostics: DiagnosticReport) -> None:
@@ -282,15 +310,19 @@ class RunService:
             event_type=RunEventType.ARTIFACT_UPDATED,
             node="diagnostics",
             summary="Diagnostics artifact updated.",
-            payload={
-                "artifact": "diagnostics",
-                "analysis_error_count": len(diagnostics.analysis_errors),
-                "analysis_warning_count": len(diagnostics.analysis_warnings),
-                "repair_action_count": len(diagnostics.repair_actions),
-                "check_performed": diagnostics.check_performed,
-                "is_valid": diagnostics.is_valid,
-                "succeeded": diagnostics.succeeded,
-            },
+            payload=_event_payload(
+                RunEventType.ARTIFACT_UPDATED,
+                "diagnostics",
+                {
+                    "artifact": "diagnostics",
+                    "analysis_error_count": len(diagnostics.analysis_errors),
+                    "analysis_warning_count": len(diagnostics.analysis_warnings),
+                    "repair_action_count": len(diagnostics.repair_actions),
+                    "check_performed": diagnostics.check_performed,
+                    "is_valid": diagnostics.is_valid,
+                    "succeeded": diagnostics.succeeded,
+                },
+            ),
         )
 
     def _compiler_event_callback(self, run_id: str):
@@ -298,13 +330,14 @@ class RunService:
 
     def _workflow_event_callback(self, run_id: str):
         def callback(event_type: str, node: str | None, summary: str, state, payload):
-            self._persist_updated_artifact(run_id, event_type, state, payload)
+            normalized_payload = _event_payload(event_type, node, payload, state=state)
+            self._persist_updated_artifact(run_id, event_type, state, normalized_payload)
             self.repository.append_event(
                 run_id=run_id,
                 event_type=RunEventType(event_type),
                 node=node,
                 summary=summary,
-                payload=payload,
+                payload=normalized_payload,
             )
 
         return callback
@@ -337,6 +370,15 @@ class RunService:
             self.repository.save_workflow_ir_artifact(run_id, state.get("workflow_ir") or {})
         elif artifact == "wdl":
             self.repository.save_wdl_artifact(run_id, state.get("current_wdl") or "")
+        elif isinstance(artifact, str) and artifact in state:
+            content = state.get(artifact)
+            if content is None:
+                return
+            content_type = payload.get("artifact_content_type")
+            if content_type == TEXT_CONTENT_TYPE:
+                self.repository.save_text_artifact(run_id, artifact, str(content))
+            else:
+                self.repository.save_json_artifact(run_id, artifact, content)
 
     def _append_failed_event_if_missing(
         self,
@@ -353,7 +395,11 @@ class RunService:
             event_type=RunEventType.NODE_FAILED,
             node=node,
             summary=summary,
-            payload={"error": str(exc)},
+            payload=_event_payload(
+                RunEventType.NODE_FAILED,
+                node,
+                {"error_type": exc.__class__.__name__, "error": str(exc)},
+            ),
         )
 
 
@@ -407,6 +453,71 @@ def get_events(run_id: str, after_sequence: int = 0) -> list[RunEvent] | None:
 
 def iter_sse_events(run_id: str, after_sequence: int = 0) -> AsyncIterator[str]:
     return get_default_run_service().iter_sse_events(run_id, after_sequence=after_sequence)
+
+
+def _event_payload(
+    event_type: RunEventType | str,
+    node: str | None,
+    payload: dict | None,
+    *,
+    state: Mapping[str, Any] | None = None,
+) -> dict:
+    event_value = event_type.value if isinstance(event_type, RunEventType) else event_type
+    normalized = dict(payload or {})
+    normalized.setdefault("stage", _event_stage(event_value, node))
+    normalized.setdefault("status", _event_status(event_value, normalized))
+    if node is not None:
+        normalized.setdefault("node", node)
+
+    artifact = normalized.get("artifact")
+    if isinstance(artifact, str):
+        normalized.setdefault("artifact_name", artifact)
+        normalized.setdefault("artifact_content_type", _artifact_content_type(artifact, state=state))
+    return normalized
+
+
+def _event_stage(event_type: str, node: str | None) -> str:
+    if event_type in {RunEventType.RUN_CREATED.value, RunEventType.RUN_COMPLETED.value}:
+        return "run"
+    if node in PLANNING_NODES:
+        return "planning"
+    if node in ORCHESTRATION_NODES:
+        return "orchestration"
+    if node in COMPILER_NODES:
+        return "compilation"
+    if node in DIAGNOSTIC_NODES:
+        return "diagnostics"
+    return "orchestration" if node else "run"
+
+
+def _event_status(event_type: str, payload: dict) -> str:
+    existing = payload.get("status")
+    if isinstance(existing, str) and existing:
+        return existing
+    return {
+        RunEventType.RUN_CREATED.value: RunStatus.CREATED.value,
+        RunEventType.NODE_STARTED.value: "started",
+        RunEventType.NODE_COMPLETED.value: "completed",
+        RunEventType.NODE_FAILED.value: RunStatus.FAILED.value,
+        RunEventType.ARTIFACT_UPDATED.value: "updated",
+        RunEventType.REPAIR_APPLIED.value: "applied",
+        RunEventType.VALIDATION_COMPLETED.value: "completed",
+        RunEventType.RUN_COMPLETED.value: "completed",
+    }.get(event_type, "unknown")
+
+
+def _artifact_content_type(
+    artifact: str,
+    *,
+    state: Mapping[str, Any] | None = None,
+) -> str:
+    if artifact in TEXT_ARTIFACTS:
+        return TEXT_CONTENT_TYPE
+    if artifact in JSON_ARTIFACTS:
+        return JSON_CONTENT_TYPE
+    if state is not None and artifact in state:
+        return TEXT_CONTENT_TYPE if isinstance(state.get(artifact), str) else JSON_CONTENT_TYPE
+    return JSON_CONTENT_TYPE
 
 
 def _new_run_id() -> str:
