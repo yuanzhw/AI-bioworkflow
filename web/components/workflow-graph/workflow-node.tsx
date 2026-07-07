@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Box, Database, FileOutput, GitBranch, Layers3 } from "lucide-react";
+import { AlertCircle, Box, Database, FileOutput, GitBranch, Layers3 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -9,16 +9,14 @@ import { cn } from "@/lib/utils";
 import type { WorkflowGraphNode, WorkflowGraphNodeKind } from "@/lib/workflow-graph";
 
 export type WorkflowGraphNodeStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
+  | "available"
+  | "unresolved"
   | "unavailable";
 
 export type WorkflowGraphNodeData = {
   graphNode: WorkflowGraphNode;
   status: WorkflowGraphNodeStatus;
-  eventCount: number;
+  unresolvedCount: number;
 };
 
 export type WorkflowGraphReactNode = Node<WorkflowGraphNodeData, "workflowGraphNode">;
@@ -31,11 +29,9 @@ const kindLabels: Record<WorkflowGraphNodeKind, string> = {
 };
 
 const statusLabels: Record<WorkflowGraphNodeStatus, string> = {
-  pending: "Pending",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  unavailable: "Unavailable",
+  available: "结构可用",
+  unresolved: "引用待审阅",
+  unavailable: "DAG 不可用",
 };
 
 const kindIcons: Record<WorkflowGraphNodeKind, LucideIcon> = {
@@ -46,25 +42,23 @@ const kindIcons: Record<WorkflowGraphNodeKind, LucideIcon> = {
 };
 
 const statusClassNames: Record<WorkflowGraphNodeStatus, string> = {
-  pending: "border-muted-foreground/30 text-muted-foreground",
-  running: "border-primary/40 bg-secondary text-primary",
-  completed: "border-primary/40 bg-secondary text-primary",
-  failed: "border-destructive/40 bg-destructive text-destructive-foreground",
+  available: "border-primary/40 bg-secondary text-primary",
+  unresolved: "border-destructive/40 bg-destructive text-destructive-foreground",
   unavailable: "border-muted-foreground/20 text-muted-foreground",
 };
 
-function formatEventCount(eventCount: number): string {
-  if (eventCount === 0) {
-    return "No events";
+function formatUnresolvedCount(unresolvedCount: number): string {
+  if (unresolvedCount === 0) {
+    return "Workflow IR 节点";
   }
-  if (eventCount === 1) {
-    return "1 event";
+  if (unresolvedCount === 1) {
+    return "1 条未解析引用";
   }
-  return `${eventCount} events`;
+  return `${unresolvedCount} 条未解析引用`;
 }
 
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowGraphReactNode>) {
-  const { graphNode, status, eventCount } = data;
+  const { graphNode, status, unresolvedCount } = data;
   const Icon = kindIcons[graphNode.kind];
   const isScatter = graphNode.kind === "scatter";
 
@@ -101,11 +95,22 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowGraphReactNod
 
       {!isScatter ? (
         <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Layers3 className="h-3.5 w-3.5" />
-          {formatEventCount(eventCount)}
+          {unresolvedCount ? (
+            <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+          ) : (
+            <Layers3 className="h-3.5 w-3.5" />
+          )}
+          {formatUnresolvedCount(unresolvedCount)}
         </div>
       ) : (
-        <div className="mt-3 text-xs leading-5 text-muted-foreground">per-sample group</div>
+        <div className="mt-3 flex items-center gap-1.5 text-xs leading-5 text-muted-foreground">
+          {unresolvedCount ? (
+            <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+          ) : (
+            <Layers3 className="h-3.5 w-3.5" />
+          )}
+          {unresolvedCount ? formatUnresolvedCount(unresolvedCount) : "scatter group"}
+        </div>
       )}
 
       {graphNode.kind !== "workflow-output" ? (

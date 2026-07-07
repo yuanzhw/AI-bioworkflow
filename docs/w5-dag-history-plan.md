@@ -6,7 +6,7 @@
 
 `W5` 的目标是把 `W4` 工作台产生的一次 workflow run，从“可实时生成”推进到“可结构化理解、可回放、可审计”。
 
-完成后，访问者应能从工作台创建 RNA-seq 示例 run，在历史列表中再次找到它，进入详情页回放事件、产物和诊断信息，并通过 DAG 图理解 Workflow IR 中的 calls、scatter、依赖边、输入输出和节点状态。
+完成后，访问者应能从工作台创建 RNA-seq 示例 run，在历史列表中再次找到它，进入详情页回放事件、产物和诊断信息，并通过 DAG 图理解 Workflow IR 中的 calls、scatter、依赖边、输入输出和结构状态。
 
 `W5` 是 run 历史与 Workflow IR 可视化阶段，不改变 Compiler Graph 的职责，不让前端生成或修复 Plan、IR、WDL，也不引入新的 Agent 节点或真实 WDL 执行后端。
 
@@ -44,6 +44,28 @@
 3. **DAG 视图**：从详情页中的 Workflow IR 派生图结构，展示 workflow inputs、call nodes、scatter group、workflow outputs 和依赖边。
 
 历史详情页和工作台应复用同一批展示组件，例如 timeline、artifact tabs、diagnostics summary 和 code viewer。工作台关注“当前运行中”，历史详情页关注“刷新后仍可审计”。
+
+### DAG 状态语义
+
+W5 的 DAG 是 Workflow IR 结构审计图，不是 workflow call 执行监控图。当前后端 SSE 事件记录的是 planner、Compiler Graph、Analyzer、Renderer 和 Checker 等编译阶段事件，并不代表 `fastp`、`salmon`、`tximport`、`deseq2` 或 `multiqc` 等 workflow call 的真实运行状态。
+
+因此第一版 DAG 节点只使用结构状态：
+
+- `available`：节点存在于当前 Workflow IR 中，结构和元数据可审阅。
+- `unresolved`：节点包含无法解析的表达式引用，需要结合 diagnostics 审阅。
+- `unavailable`：当前 run 尚未产生可展示的 Workflow IR 节点。
+
+Analyzer、Checker 或 Planner 失败应主要通过 timeline、diagnostics 和 run summary 呈现。除非后端未来提供带 `step_id` / `call_id` 的 workflow call 级事件，否则前端不得把 compiler 阶段事件映射成 DAG 节点的 `running`、`completed` 或 `failed` 执行状态。
+
+### 失败 run 展示口径
+
+失败 run 的详情页和工作台应额外展示失败摘要，但不改变 DAG 的结构语义。第一版摘要包含：
+
+- 首要失败线索，优先级为 `diagnostics.analysis_errors[0]`、`diagnostics.validation_message`、`diagnostics.analysis_warnings[0]`，都为空时引导查看 timeline。
+- 已保留产物状态，包括 Plan、Workflow IR、WDL 和 Diagnostics。
+- DAG 展示口径：如果失败前已保存 Workflow IR，则 DAG 继续展示结构；如果没有 Workflow IR，则 DAG 使用空状态。失败阶段仍以 timeline 和 diagnostics 为准。
+
+这样可以同时覆盖 planner 失败、Analyzer / Checker 失败和结构化编译中途失败，而不会把编译阶段事件误读成 workflow call 级执行结果。
 
 ## 任务拆分
 
@@ -166,11 +188,11 @@ web/components/workflow-graph/
 
 第一版图交互：
 
-- 节点状态映射 pending / running / completed / failed / unavailable。
-- 点击节点展示 task、inputs、outputs、runtime docker 和相关事件摘要。
+- 节点结构状态映射 `available` / `unresolved` / `unavailable`。
+- 点击节点展示 task、inputs、outputs、runtime docker 和 unresolved reference 摘要。
 - scatter group 能体现 per-sample 并行语义。
 - DAG 空状态说明当前 run 尚未产生 Workflow IR。
-- 失败 run 中已产生 IR 时仍展示 DAG，并标出失败节点。
+- 失败 run 中已产生 IR 时仍展示 DAG；失败阶段由 timeline / diagnostics 呈现，DAG 仅标出 unresolved 结构问题。
 
 ### 7. 导航、文案与文档更新
 
@@ -209,7 +231,7 @@ web/components/workflow-graph/
 - `/runs/[runId]` 能回放 events、artifacts 和 diagnostics。
 - DAG 能正确展示 RNA-seq 示例中的 per-sample Salmon scatter、tximport、DESeq2 和 MultiQC 依赖关系。
 - 点击 DAG 节点能看到对应 task、inputs、outputs 和 runtime docker。
-- 失败 run 已有 Workflow IR 时仍能展示 DAG，并突出失败阶段或失败节点。
+- 失败 run 已有 Workflow IR 时仍能展示 DAG；失败阶段通过 timeline / diagnostics 回放，DAG 不伪造 call-level 执行状态。
 
 工程验收：
 

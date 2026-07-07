@@ -1,10 +1,9 @@
 "use client";
 
-import { Activity, AlertCircle, Box, FileOutput, GitBranch, Info } from "lucide-react";
+import { AlertCircle, Box, FileOutput, GitBranch, Info } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { runEventLabels } from "@/lib/run-events";
-import type { JsonValue, RunEvent } from "@/lib/types";
+import type { JsonValue } from "@/lib/types";
 import type {
   WorkflowGraphExpression,
   WorkflowGraphNode,
@@ -13,11 +12,21 @@ import type {
 import type { WorkflowGraphNodeStatus } from "./workflow-node";
 
 const statusLabels: Record<WorkflowGraphNodeStatus, string> = {
-  pending: "Pending",
-  running: "Running",
-  completed: "Completed",
-  failed: "Failed",
-  unavailable: "Unavailable",
+  available: "结构可用",
+  unresolved: "引用待审阅",
+  unavailable: "DAG 不可用",
+};
+
+const statusDescriptions: Record<WorkflowGraphNodeStatus, string> = {
+  available: "该节点来自当前 Workflow IR，可用于审阅结构和元数据。",
+  unresolved: "该节点包含无法解析的表达式引用，需要结合 diagnostics 审阅。",
+  unavailable: "当前 run 尚未产生可展示的 Workflow IR 节点。",
+};
+
+const statusClassNames: Record<WorkflowGraphNodeStatus, string> = {
+  available: "border-primary/40 bg-secondary text-primary",
+  unresolved: "border-destructive/40 bg-destructive text-destructive-foreground",
+  unavailable: "border-muted-foreground/20 text-muted-foreground",
 };
 
 function formatExpression(value: WorkflowGraphExpression): string {
@@ -57,13 +66,18 @@ function runtimeValues(runtime: Record<string, JsonValue>): Record<string, strin
   );
 }
 
+function statusSummary(status: WorkflowGraphNodeStatus, unresolvedCount: number): string {
+  if (status !== "unresolved") {
+    return statusDescriptions[status];
+  }
+  return `${statusDescriptions[status]} 当前节点有 ${unresolvedCount} 条未解析引用。`;
+}
+
 export function NodeDetailPanel({
   node,
-  relatedEvents,
   status,
 }: {
   node: WorkflowGraphNode | null;
-  relatedEvents: RunEvent[];
   status: WorkflowGraphNodeStatus;
 }) {
   if (!node) {
@@ -90,9 +104,14 @@ export function NodeDetailPanel({
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-semibold">{node.label}</h3>
         <Badge variant="outline">{node.kind}</Badge>
-        <Badge variant="secondary">{statusLabels[status]}</Badge>
+        <Badge variant="outline" className={statusClassNames[status]}>
+          {statusLabels[status]}
+        </Badge>
       </div>
       <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{node.sourceStepId}</p>
+      <div className="mt-4 rounded-md border bg-background p-3 text-sm leading-6 text-muted-foreground">
+        {statusSummary(status, unresolvedReferences.length)}
+      </div>
 
       {metadata.workflowInput ? (
         <section className="mt-5">
@@ -188,32 +207,6 @@ export function NodeDetailPanel({
           </ul>
         </section>
       ) : null}
-
-      <section className="mt-5">
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-          <Activity className="h-4 w-4 text-primary" />
-          Related events
-        </div>
-        {relatedEvents.length ? (
-          <div className="grid gap-2">
-            {relatedEvents.slice(-4).map((event) => (
-              <div key={event.event_id} className="rounded-md border bg-background p-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <Badge variant="outline">#{event.sequence}</Badge>
-                  <span className="font-medium">{runEventLabels[event.type]}</span>
-                </div>
-                <p className="mt-2 break-words text-xs leading-5 text-muted-foreground">
-                  {event.summary}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-            暂无关联事件。
-          </div>
-        )}
-      </section>
     </aside>
   );
 }
