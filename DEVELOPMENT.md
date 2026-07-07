@@ -733,6 +733,14 @@ P1 的目标是明确 Compiler Graph，并建立第一版 Orchestration Graph �
 
 👉 **[P1 Orchestration Graph 实施计划](./docs/p1-orchestration-graph-plan.md)**
 
+### P2 实施计划
+
+P2 的目标是将 Reviewer LLM 作为受控 IR 修复分支接入 Compiler Graph。Reviewer 只能在确定性 repairer 没有安全修复动作时提出结构化 Workflow IR patch；patch 必须经过 schema、policy、Analyzer、Renderer 和 Checker 验证，不能直接生成 WDL 或绕过 Catalog 与容器准入边界。
+
+详细工作拆解、关键契约、验收清单和建议 PR 切分维护在：
+
+👉 **[P2 Reviewer IR Repair Plan](./docs/p2-reviewer-repair-plan.md)**
+
 ## 评测重点（规划中）
 
 | 能力 | 首要指标 |
