@@ -739,7 +739,7 @@ P2 的目标是将 Reviewer LLM 作为受控 IR 修复分支接入 Compiler Grap
 
 详细工作拆解、关键契约、验收清单和建议 PR 切分维护在：
 
-👉 **[P2 Reviewer IR Repair Plan](./docs/p2-reviewer-repair-plan.md)**
+👉 **[P2 Reviewer IR 修复闭环实施计划](./docs/p2-reviewer-repair-plan.md)**
 
 ## 评测重点（规划中）
 
