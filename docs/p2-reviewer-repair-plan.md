@@ -44,8 +44,8 @@ Reviewer 提出结构化 Workflow IR 修复建议。
 
 - Analyzer 和 Checker 失败可以路由到 Reviewer repair 分支，但必须发生在
   deterministic repairer 已失败或明确放弃修复之后。
-- Reviewer 输入是结构化请求，包含当前 Workflow IR、diagnostics、validation
-  output、修复历史和 approved Catalog 上下文。
+- Reviewer 输入是结构化请求，包含当前 Workflow IR、diagnostics、
+  `validation_message`、修复历史和 approved Catalog 上下文。
 - Reviewer 输出只能是 schema 可校验的 IR patch 或显式 no-op 结果。
 - patch 应用范围限制在 Workflow IR 内，并且应用后必须重新经过 Analyzer、
   Renderer 和 Checker。
