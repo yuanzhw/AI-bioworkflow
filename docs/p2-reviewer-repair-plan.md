@@ -270,6 +270,12 @@ artifacts，避免前端和 API 消费方解析文本 summary。
 
 验证：
 
+```bash
+.venv/bin/python -m unittest discover -v
+```
+
+Windows PowerShell：
+
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -v
 ```
