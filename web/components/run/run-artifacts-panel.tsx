@@ -2,7 +2,7 @@
 
 import { Activity, FileJson, Layers3, Search, SquareTerminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CatalogRetrievalSummary } from "@/components/run/catalog-retrieval-summary";
 import { Badge } from "@/components/ui/badge";
@@ -130,6 +130,7 @@ export function RunArtifactsPanel({
   title?: string;
 }) {
   const [activeTab, setActiveTab] = useState<ArtifactTabId>("plan");
+  const didAutoSelectCatalogRef = useRef(false);
   const hasRetrieval = hasCatalogRetrieval(artifacts.catalog_retrieval);
   const content = useMemo(
     () => ({
@@ -141,7 +142,15 @@ export function RunArtifactsPanel({
   );
 
   useEffect(() => {
-    if (activeTab === "plan" && !content.plan && hasRetrieval) {
+    if (!hasRetrieval) {
+      didAutoSelectCatalogRef.current = false;
+      return;
+    }
+    if (didAutoSelectCatalogRef.current) {
+      return;
+    }
+    didAutoSelectCatalogRef.current = true;
+    if (activeTab === "plan" && !content.plan) {
       setActiveTab("catalog");
     }
   }, [activeTab, content.plan, hasRetrieval]);

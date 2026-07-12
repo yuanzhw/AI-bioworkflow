@@ -8,12 +8,14 @@ import type {
 export const DEFAULT_TOP_TOOL_COUNT = 5;
 export const DEFAULT_MATCHED_TERM_COUNT = 6;
 
-const TRUST_STATUSES = new Set<TrustStatus>([
+const TRUST_STATUS_VALUES = [
   "catalog-approved",
   "auto-validated",
   "experimental",
   "rejected",
-]);
+] satisfies TrustStatus[];
+
+const TRUST_STATUSES = new Set<TrustStatus>(TRUST_STATUS_VALUES);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

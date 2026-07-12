@@ -24,6 +24,7 @@ import {
   createStructuredCompileRun,
   getRunSnapshot,
 } from "@/lib/api";
+import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
 import { rnaseqExamplePrompt, rnaseqRecipePlan, rnaseqRecipeSteps } from "@/lib/examples";
 import type {
   DiagnosticReport,
@@ -209,7 +210,7 @@ export function WorkspaceWorkbench({
   const shouldShowRetrievalSummary =
     mode === "natural_language" ||
     snapshot?.kind === "natural_language" ||
-    artifacts.catalog_retrieval !== null;
+    hasCatalogRetrieval(artifacts.catalog_retrieval);
   const wdlLineCount = useMemo(() => {
     if (!artifacts.wdl) {
       return 0;
