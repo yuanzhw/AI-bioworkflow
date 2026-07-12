@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { RunArtifactsPanel } from "@/components/run/run-artifacts-panel";
 import { RunEventsTimeline } from "@/components/run/run-events-timeline";
+import { RunFailureSummary } from "@/components/run/run-failure-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -413,6 +414,14 @@ export function WorkspaceWorkbench({
           ) : null}
         </section>
       </div>
+
+      {currentStatus === "failed" ? (
+        <RunFailureSummary
+          artifacts={artifacts}
+          className="mt-6"
+          diagnostics={diagnostics}
+        />
+      ) : null}
 
       <RunEventsTimeline
         eventsUrl={acceptedRun?.events_url ?? null}

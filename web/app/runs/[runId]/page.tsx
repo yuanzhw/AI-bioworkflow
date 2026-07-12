@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RunArtifactsPanel } from "@/components/run/run-artifacts-panel";
 import { RunEventsTimeline } from "@/components/run/run-events-timeline";
+import { RunFailureSummary } from "@/components/run/run-failure-summary";
 import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
 import { getRunSnapshot } from "@/lib/api";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
@@ -198,11 +199,15 @@ function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
         <DiagnosticsSummary snapshot={snapshot} />
       </section>
 
-      <WorkflowGraphPanel
-        workflowIr={snapshot.artifacts.workflow_ir}
-        eventsUrl={snapshot.events_url}
-        status={snapshot.status}
-      />
+      {snapshot.status === "failed" ? (
+        <RunFailureSummary
+          artifacts={snapshot.artifacts}
+          className="mt-6"
+          diagnostics={snapshot.diagnostics}
+        />
+      ) : null}
+
+      <WorkflowGraphPanel workflowIr={snapshot.artifacts.workflow_ir} />
       <RunEventsTimeline eventsUrl={snapshot.events_url} status={snapshot.status} />
       <RunArtifactsPanel artifacts={snapshot.artifacts} diagnostics={snapshot.diagnostics} />
     </>
