@@ -771,6 +771,31 @@ OK (skipped=2)
 - 后续 Catalog Retriever、planner trace 摘要和 execution result 可以作为命名 artifact 保存，不需要为每类产物新增 SQLite 固定列。
 - Artifact 名称有稳定约束，避免 UI 和 API 消费方收到不可预测的 key。
 
+### `test_named_records_override_legacy_fixed_columns_in_snapshot`
+
+输入：
+
+- 一个 natural-language run。
+- 旧固定 artifact 列中已有 `catalog_retrieval`、`plan`、`workflow_ir` 和 `wdl`。
+- 同名 named artifact records 中写入更新后的内容，其中 `workflow_ir == {}` 且 `wdl == ""`。
+
+执行：
+
+- 先调用 `repository.save_artifacts(...)` 写入 legacy fixed columns 和初始 records。
+- 再通过 `save_json_artifact(...)` / `save_text_artifact(...)` 只更新同名 named artifact records。
+- 读取 run snapshot。
+
+期望输出：
+
+- snapshot 顶层 `catalog_retrieval`、`plan`、`workflow_ir` 和 `wdl` 均来自 named artifact records。
+- `extras.catalog_retrieval` 与顶层 `catalog_retrieval` 保持一致。
+- 空 dict 和空字符串 record 不会被当作缺失值而回退到旧固定列。
+
+覆盖点：
+
+- `run_artifact_records` 是 snapshot 的优先读取来源。
+- `run_artifacts` 固定列只作为兼容旧数据库或缺失 records 时的 fallback。
+
 ### `test_snapshot_reads_artifact_records_without_public_list_helper`
 
 输入：
