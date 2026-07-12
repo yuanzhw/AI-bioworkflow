@@ -974,16 +974,27 @@ def _row_to_artifacts(
     artifact_records: list[RunArtifactRecord],
 ) -> WorkflowArtifacts:
     record_by_name = {record.name: record for record in artifact_records}
-    catalog_retrieval = _artifact_record_content(record_by_name, "catalog_retrieval")
-    plan = _artifact_record_content(record_by_name, "plan")
-    workflow_ir = _artifact_record_content(record_by_name, "workflow_ir") or {}
-    wdl = _artifact_record_content(record_by_name, "wdl") or ""
+    legacy_catalog_retrieval = (
+        _from_json(row["catalog_retrieval_json"]) if row is not None else None
+    )
+    legacy_plan = _from_json(row["plan_json"]) if row is not None else None
+    legacy_workflow_ir = (
+        _from_json(row["workflow_ir_json"]) if row is not None else None
+    )
+    legacy_wdl = row["wdl"] if row is not None else None
 
-    if row is not None:
-        catalog_retrieval = _from_json(row["catalog_retrieval_json"])
-        plan = _from_json(row["plan_json"])
-        workflow_ir = _from_json(row["workflow_ir_json"]) or {}
-        wdl = row["wdl"] or ""
+    catalog_retrieval = _artifact_record_content_or_legacy(
+        record_by_name,
+        "catalog_retrieval",
+        legacy_catalog_retrieval,
+    )
+    plan = _artifact_record_content_or_legacy(record_by_name, "plan", legacy_plan)
+    workflow_ir = _artifact_record_content_or_legacy(
+        record_by_name,
+        "workflow_ir",
+        legacy_workflow_ir,
+    )
+    wdl = _artifact_record_content_or_legacy(record_by_name, "wdl", legacy_wdl)
 
     return WorkflowArtifacts(
         catalog_retrieval=catalog_retrieval if isinstance(catalog_retrieval, dict) else None,
@@ -1006,12 +1017,14 @@ def _row_to_artifacts(
     )
 
 
-def _artifact_record_content(
+def _artifact_record_content_or_legacy(
     record_by_name: dict[str, RunArtifactRecord],
     name: str,
+    legacy_content: Any,
 ) -> Any:
-    record = record_by_name.get(name)
-    return record.content if record is not None else None
+    if name in record_by_name:
+        return record_by_name[name].content
+    return legacy_content
 
 
 def _row_to_diagnostics(row: sqlite3.Row | None, *, check_performed: bool) -> DiagnosticReport:
