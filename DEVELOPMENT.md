@@ -455,7 +455,7 @@ W2 当前接口：
   "updated_at": "2026-06-16T00:00:02Z",
   "completed_at": "2026-06-16T00:00:02Z",
   "artifacts": {
-    "catalog_retrieval": {},
+    "catalog_retrieval": null,
     "plan": {},
     "workflow_ir": {},
     "wdl": "version 1.0\n...",

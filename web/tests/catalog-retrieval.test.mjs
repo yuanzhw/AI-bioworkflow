@@ -46,7 +46,24 @@ const retrieval = {
 };
 
 test("detects non-empty catalog retrieval artifacts", () => {
+  assert.equal(hasCatalogRetrieval(undefined), false);
   assert.equal(hasCatalogRetrieval(null), false);
+  assert.equal(hasCatalogRetrieval({}), false);
+  assert.equal(
+    hasCatalogRetrieval({
+      query: "Run bulk RNA-seq differential expression.",
+      recipes: [],
+      tools: [],
+    }),
+    false,
+  );
+  assert.equal(
+    hasCatalogRetrieval({
+      ...retrieval,
+      tools: [{ id: "deseq2" }],
+    }),
+    false,
+  );
   assert.equal(
     hasCatalogRetrieval({
       query: "",
