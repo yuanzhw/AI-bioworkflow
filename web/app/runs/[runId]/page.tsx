@@ -18,6 +18,7 @@ import { CatalogRetrievalSummary } from "@/components/run/catalog-retrieval-summ
 import { RunEventsTimeline } from "@/components/run/run-events-timeline";
 import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
 import { getRunSnapshot } from "@/lib/api";
+import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +126,7 @@ function DiagnosticsSummary({ snapshot }: { snapshot: WorkflowRunSnapshotRespons
 function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
   const kindLabel = snapshot.kind ? kindLabels[snapshot.kind] ?? snapshot.kind : "未记录";
   const requestText = formatRequest(snapshot.request);
+  const hasRetrieval = hasCatalogRetrieval(snapshot.artifacts.catalog_retrieval);
 
   return (
     <>
@@ -168,7 +170,7 @@ function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
         <StatItem label="运行类型" value={kindLabel} />
       </section>
 
-      {snapshot.kind === "natural_language" || snapshot.artifacts.catalog_retrieval ? (
+      {snapshot.kind === "natural_language" || hasRetrieval ? (
         <CatalogRetrievalSummary
           className="mt-6"
           emptyMessage="该自然语言 run 尚未保存 Catalog Retrieval artifact。"
