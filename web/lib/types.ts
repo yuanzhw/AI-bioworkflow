@@ -117,7 +117,35 @@ export type RunListResponse = {
   total: number;
 };
 
+export type CatalogRetrievalRecipe = {
+  id: string;
+  score: number;
+  matched_terms: string[];
+  matched_fields: string[];
+  reason: string;
+};
+
+export type CatalogRetrievalTool = {
+  id: string;
+  version: string;
+  score: number;
+  matched_terms: string[];
+  matched_fields: string[];
+  trust_status: TrustStatus;
+  reason: string;
+};
+
+export type CatalogRetrievalArtifact = {
+  query: string;
+  strategy: string;
+  recipes: CatalogRetrievalRecipe[];
+  tools: CatalogRetrievalTool[];
+  fallback_used: boolean;
+  fallback_reason: string | null;
+};
+
 export type WorkflowArtifacts = {
+  catalog_retrieval: CatalogRetrievalArtifact | null;
   plan: JsonObject | null;
   workflow_ir: JsonObject;
   wdl: string;

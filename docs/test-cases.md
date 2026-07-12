@@ -3457,6 +3457,83 @@ npm run test:graph
 - graph metadata 中无法直接转成表达式文本的 object fallback 保持 deterministic。
 - 该行为只影响节点详情/审计字符串，不改变 Workflow IR，也不参与 Analyzer 或 Renderer。
 
+## `web/tests/catalog-retrieval.test.mjs`
+
+该文件验证前端 Catalog Retrieval 展示所依赖的纯数据 helper。测试通过
+`tsx --test` 调用 Node 内置 test runner，不启动 Next.js，也不访问后端 API。
+
+运行方式：
+
+```powershell
+cd web
+npm run test:catalog-retrieval
+```
+
+### `detects non-empty catalog retrieval artifacts`
+
+输入：
+
+- `null` retrieval。
+- 空 query、空 recipes、空 tools 且未 fallback 的 retrieval。
+- 包含 RNA-seq query、recipe 和 tool 候选的 retrieval。
+
+期望输出：
+
+- `null` 与空 retrieval 返回 `false`。
+- 包含候选或 query 的 retrieval 返回 `true`。
+
+覆盖点：
+
+- 前端不会为结构化入口或未产生检索产物的 run 伪造 Catalog Retrieval 展示。
+
+### `selects top catalog recipe and limited tools`
+
+输入：
+
+- RNA-seq retrieval artifact，包含 `rnaseq_differential_expression` recipe，以及 `deseq2`、`salmon` tools。
+
+期望输出：
+
+- top recipe 为 `rnaseq_differential_expression`。
+- 限制 tool 数量为 1 时只返回 `deseq2:1.42.1`。
+- limit 为 0 时返回空数组。
+
+覆盖点：
+
+- 工作台 run 卡片和详情页摘要使用稳定的 top recipe/tools 选择逻辑。
+
+### `summarizes matched terms with overflow count`
+
+输入：
+
+- matched terms：`["rna", "seq", "deg"]`，limit 为 2。
+- matched terms：`["rna", "seq"]`，limit 为 4。
+
+期望输出：
+
+- 第一组显示前两个 term，并记录 1 个隐藏 term。
+- 第二组全部显示，隐藏数为 0。
+
+覆盖点：
+
+- `matched_terms` 在紧凑卡片中保持可扫读，同时不丢失溢出计数。
+
+### `formats retrieval scores compactly`
+
+输入：
+
+- 整数 score、浮点 score 和 `NaN`。
+
+期望输出：
+
+- 整数不补小数。
+- 浮点保留 1 位小数。
+- 非法数字显示为 `0`。
+
+覆盖点：
+
+- 候选 recipe/tools 的 score 在前端展示中稳定、简洁。
+
 ## 当前测试覆盖边界
 
 已有测试重点覆盖：
@@ -3467,6 +3544,7 @@ npm run test:graph
 - Catalog 查询服务的 recipe/tool JSON-ready 输出。
 - Approved Catalog Retriever 的词法召回、CJK tokenization、fallback 原因和 JSON-ready 输出契约。
 - 自然语言 run 对 catalog retrieval artifact 的持久化、snapshot 暴露和 SSE 事件回放顺序。
+- 前端 Catalog Retrieval 摘要对 top recipe/tools、matched terms 和 score 格式的处理。
 - Analyzer 对引用、optional input、scatter output 类型提升的处理。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。
@@ -3488,4 +3566,4 @@ npm run test:graph
 - Reviewer LLM / Resource Agent / Bioinfo Reviewer 等规划中 Agent。
 - Nextflow 或其他 backend。
 - 真实自然语言模型调用的在线集成测试。
-- Next.js 工作台、DAG 可视化和 run history 前端回放。
+- Next.js 工作台、DAG 可视化和 run history 的浏览器级视觉回归测试。

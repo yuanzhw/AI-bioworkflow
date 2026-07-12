@@ -14,6 +14,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RunArtifactsPanel } from "@/components/run/run-artifacts-panel";
+import { CatalogRetrievalSummary } from "@/components/run/catalog-retrieval-summary";
 import { RunEventsTimeline } from "@/components/run/run-events-timeline";
 import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
 import { getRunSnapshot } from "@/lib/api";
@@ -166,6 +167,15 @@ function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
         <StatItem label="完成时间" value={formatDateTime(snapshot.completed_at)} />
         <StatItem label="运行类型" value={kindLabel} />
       </section>
+
+      {snapshot.kind === "natural_language" || snapshot.artifacts.catalog_retrieval ? (
+        <CatalogRetrievalSummary
+          className="mt-6"
+          emptyMessage="该自然语言 run 尚未保存 Catalog Retrieval artifact。"
+          retrieval={snapshot.artifacts.catalog_retrieval}
+          title="Catalog Retrieval 回放"
+        />
+      ) : null}
 
       <section className="mt-6 rounded-md border bg-white p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

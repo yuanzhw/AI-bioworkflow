@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint app components lib --max-warnings=0",
+    "test:catalog-retrieval": "tsx --test tests/catalog-retrieval.test.mjs",
     "test:graph": "tsx --test tests/workflow-graph.test.mjs"
   },
   "dependencies": {
