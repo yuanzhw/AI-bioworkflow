@@ -38,7 +38,9 @@ function hasDiagnosticSignals(diagnostics: DiagnosticReport): boolean {
 }
 
 function getPrimaryFailureReason(diagnostics: DiagnosticReport): string {
-  const analysisError = diagnostics.analysis_errors.find((error) => error.trim().length > 0);
+  const analysisError = diagnostics.analysis_errors
+    .map((error) => error.trim())
+    .find((error) => error.length > 0);
   if (analysisError) {
     return analysisError;
   }
@@ -48,9 +50,9 @@ function getPrimaryFailureReason(diagnostics: DiagnosticReport): string {
     return validationMessage;
   }
 
-  const analysisWarning = diagnostics.analysis_warnings.find(
-    (warning) => warning.trim().length > 0,
-  );
+  const analysisWarning = diagnostics.analysis_warnings
+    .map((warning) => warning.trim())
+    .find((warning) => warning.length > 0);
   if (analysisWarning) {
     return analysisWarning;
   }
