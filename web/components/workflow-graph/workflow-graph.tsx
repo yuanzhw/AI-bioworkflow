@@ -99,11 +99,21 @@ export function WorkflowGraphPanel({
 
   const selectedNode = selectedNodeId ? graphNodesById.get(selectedNodeId) ?? null : null;
   const selectedView = selectedNodeId ? nodeViews.get(selectedNodeId) : null;
+  const hasGraph = graph.nodes.length > 0;
   const unresolvedCount = graph.unresolvedReferences.length;
   const handleNodeClick: NodeMouseHandler = (_, node) => {
     setSelectedNodeId(node.id);
   };
-  const graphStatusLabel = unresolvedCount ? "引用待审阅" : "结构可用";
+  const graphStatusLabel = !hasGraph
+    ? "DAG 不可用"
+    : unresolvedCount
+      ? "引用待审阅"
+      : "结构可用";
+  const graphStatusVariant = !hasGraph
+    ? "outline"
+    : unresolvedCount
+      ? "destructive"
+      : "secondary";
 
   return (
     <section className="mt-6 rounded-md border bg-white p-5">
@@ -114,7 +124,7 @@ export function WorkflowGraphPanel({
             <h2 className="font-semibold">Workflow DAG</h2>
             <Badge variant="outline">{graph.nodes.length} nodes</Badge>
             <Badge variant="outline">{graph.edges.length} edges</Badge>
-            {unresolvedCount ? (
+            {hasGraph && unresolvedCount ? (
               <Badge variant="destructive" className="gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" />
                 {unresolvedCount} unresolved
@@ -125,13 +135,13 @@ export function WorkflowGraphPanel({
             基于 Workflow IR 的 inputs、steps、scatter 和 outputs 构建依赖图；该图展示编译时结构，不代表真实任务执行状态。
           </p>
         </div>
-        <Badge variant={unresolvedCount ? "destructive" : "secondary"} className="gap-1.5">
-          {unresolvedCount ? <AlertCircle className="h-3.5 w-3.5" /> : null}
+        <Badge variant={graphStatusVariant} className="gap-1.5">
+          {hasGraph && unresolvedCount ? <AlertCircle className="h-3.5 w-3.5" /> : null}
           {graphStatusLabel}
         </Badge>
       </div>
 
-      {graph.nodes.length ? (
+      {hasGraph ? (
         <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="h-[38rem] overflow-hidden rounded-md border bg-background xl:h-[42rem]">
             <ReactFlowProvider>
