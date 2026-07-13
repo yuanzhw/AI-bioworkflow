@@ -275,7 +275,7 @@ export default async function RunsPage({
         <Button asChild variant="outline">
           <Link href="/workspace?example=rnaseq-deg">
             <RotateCcw className="h-4 w-4" />
-            运行 RNA-seq 示例
+            返回工作台
           </Link>
         </Button>
       </div>
