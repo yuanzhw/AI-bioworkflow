@@ -1,15 +1,17 @@
 "use client";
 
-import { Activity, FileJson, Layers3, SquareTerminal } from "lucide-react";
+import { Activity, FileJson, Layers3, Search, SquareTerminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { CatalogRetrievalSummary } from "@/components/run/catalog-retrieval-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
 import type { DiagnosticReport, JsonObject, WorkflowArtifacts } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type ArtifactTabId = "plan" | "ir" | "wdl" | "diagnostics";
+type ArtifactTabId = "catalog" | "plan" | "ir" | "wdl" | "diagnostics";
 
 type ArtifactTab = {
   id: ArtifactTabId;
@@ -19,6 +21,7 @@ type ArtifactTab = {
 };
 
 const artifactTabs: ArtifactTab[] = [
+  { id: "catalog", label: "Catalog", description: "Approved retriever", icon: Search },
   { id: "plan", label: "Plan", description: "Recipe Tool Plan", icon: FileJson },
   { id: "ir", label: "IR", description: "Workflow DAG 契约", icon: Layers3 },
   { id: "wdl", label: "WDL", description: "生成的 WDL 1.0", icon: SquareTerminal },
@@ -127,6 +130,8 @@ export function RunArtifactsPanel({
   title?: string;
 }) {
   const [activeTab, setActiveTab] = useState<ArtifactTabId>("plan");
+  const didAutoSelectCatalogRef = useRef(false);
+  const hasRetrieval = hasCatalogRetrieval(artifacts.catalog_retrieval);
   const content = useMemo(
     () => ({
       plan: formatJson(artifacts.plan),
@@ -135,6 +140,20 @@ export function RunArtifactsPanel({
     }),
     [artifacts.plan, artifacts.workflow_ir, artifacts.wdl],
   );
+
+  useEffect(() => {
+    if (!hasRetrieval) {
+      didAutoSelectCatalogRef.current = false;
+      return;
+    }
+    if (didAutoSelectCatalogRef.current) {
+      return;
+    }
+    didAutoSelectCatalogRef.current = true;
+    if (activeTab === "plan" && !content.plan) {
+      setActiveTab("catalog");
+    }
+  }, [activeTab, content.plan, hasRetrieval]);
 
   const active = artifactTabs.find((tab) => tab.id === activeTab) ?? artifactTabs[0];
 
@@ -166,7 +185,12 @@ export function RunArtifactsPanel({
       </div>
 
       <div className="mt-5 rounded-md border bg-background p-4">
-        {activeTab === "diagnostics" ? (
+        {activeTab === "catalog" ? (
+          <CatalogRetrievalSummary
+            retrieval={artifacts.catalog_retrieval}
+            emptyMessage="当前 run 尚未记录 Catalog Retrieval；结构化编译入口不会触发该阶段。"
+          />
+        ) : activeTab === "diagnostics" ? (
           <DiagnosticsView diagnostics={diagnostics} />
         ) : content[activeTab] ? (
           <pre className="max-h-[42rem] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-foreground">

@@ -22,8 +22,44 @@ export const runEventLabels: Record<RunEventType, string> = {
   "run.completed": "Run 完成",
 };
 
+export const runNodeLabels: Record<string, string> = {
+  analyzer: "Analyzer",
+  catalog_retriever: "Catalog Retrieval",
+  checker: "Checker",
+  compiler: "Compiler",
+  compiler_graph: "Compiler Graph",
+  diagnostics: "Diagnostics",
+  ir_normalizer: "IR Normalizer",
+  planner: "Planner",
+  renderer: "Renderer",
+  repairer: "Repairer",
+};
+
+export const artifactLabels: Record<string, string> = {
+  catalog_retrieval: "Catalog Retrieval",
+  diagnostics: "Diagnostics",
+  plan: "Recipe Tool Plan",
+  wdl: "WDL",
+  workflow_ir: "Workflow IR",
+};
+
 export function isTerminalRunStatus(status: RunStatus): boolean {
   return status === "succeeded" || status === "failed";
+}
+
+export function getRunNodeLabel(node: string | null): string | null {
+  if (node === null) {
+    return null;
+  }
+  return runNodeLabels[node] ?? node;
+}
+
+export function getArtifactLabel(payload: JsonObject): string | null {
+  const artifact = readPayloadString(payload, "artifact");
+  if (artifact === null) {
+    return null;
+  }
+  return artifactLabels[artifact] ?? artifact;
 }
 
 export function mergeRunEvent(events: RunEvent[], nextEvent: RunEvent): RunEvent[] {

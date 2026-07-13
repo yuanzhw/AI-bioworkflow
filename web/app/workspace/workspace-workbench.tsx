@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { CatalogRetrievalSummary } from "@/components/run/catalog-retrieval-summary";
 import { RunArtifactsPanel } from "@/components/run/run-artifacts-panel";
 import { RunEventsTimeline } from "@/components/run/run-events-timeline";
 import { RunFailureSummary } from "@/components/run/run-failure-summary";
@@ -24,6 +25,7 @@ import {
   createStructuredCompileRun,
   getRunSnapshot,
 } from "@/lib/api";
+import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
 import { rnaseqExamplePrompt, rnaseqRecipePlan, rnaseqRecipeSteps } from "@/lib/examples";
 import type {
   DiagnosticReport,
@@ -39,6 +41,7 @@ type WorkspaceRunMode = "structured" | "natural_language";
 const POLL_INTERVAL_MS = 1200;
 
 const emptyArtifacts: WorkflowArtifacts = {
+  catalog_retrieval: null,
   plan: null,
   workflow_ir: {},
   wdl: "",
@@ -205,6 +208,10 @@ export function WorkspaceWorkbench({
   const currentStatus = snapshot?.status ?? acceptedRun?.status ?? "created";
   const artifacts = snapshot?.artifacts ?? emptyArtifacts;
   const diagnostics = snapshot?.diagnostics ?? emptyDiagnostics;
+  const shouldShowRetrievalSummary =
+    mode === "natural_language" ||
+    snapshot?.kind === "natural_language" ||
+    hasCatalogRetrieval(artifacts.catalog_retrieval);
   const wdlLineCount = useMemo(() => {
     if (!artifacts.wdl) {
       return 0;
@@ -411,6 +418,16 @@ export function WorkspaceWorkbench({
                 {diagnostics.validation_message}
               </p>
             </div>
+          ) : null}
+
+          {shouldShowRetrievalSummary ? (
+            <CatalogRetrievalSummary
+              compact
+              className="mt-4"
+              emptyMessage="等待 Catalog Retriever 记录候选 recipe 和 tools。"
+              retrieval={artifacts.catalog_retrieval}
+              title="Retriever 候选"
+            />
           ) : null}
         </section>
       </div>

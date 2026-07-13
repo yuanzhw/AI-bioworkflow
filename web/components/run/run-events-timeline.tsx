@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { buildRunEventsUrl } from "@/lib/api";
 import {
   isTerminalRunStatus,
+  getArtifactLabel,
+  getRunNodeLabel,
   mergeRunEvent,
   parseRunEventMessage,
   runEventLabels,
@@ -147,27 +149,33 @@ export function RunEventsTimeline({
 
       {events.length ? (
         <div className="mt-5 grid gap-3">
-          {events.map((event) => (
-            <div
-              key={event.event_id}
-              className="grid gap-3 rounded-md border bg-background p-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start"
-            >
-              <div className="mt-0.5">{getEventIcon(event)}</div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">#{event.sequence}</Badge>
-                  <span className="font-medium">{runEventLabels[event.type]}</span>
-                  {event.node ? <Badge variant="secondary">{event.node}</Badge> : null}
+          {events.map((event) => {
+            const artifactLabel = getArtifactLabel(event.payload);
+            const nodeLabel = getRunNodeLabel(event.node);
+
+            return (
+              <div
+                key={event.event_id}
+                className="grid gap-3 rounded-md border bg-background p-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start"
+              >
+                <div className="mt-0.5">{getEventIcon(event)}</div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">#{event.sequence}</Badge>
+                    <span className="font-medium">{runEventLabels[event.type]}</span>
+                    {nodeLabel ? <Badge variant="secondary">{nodeLabel}</Badge> : null}
+                    {artifactLabel ? <Badge variant="outline">{artifactLabel}</Badge> : null}
+                  </div>
+                  <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">
+                    {event.summary}
+                  </p>
                 </div>
-                <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">
-                  {event.summary}
-                </p>
+                <div className="text-xs text-muted-foreground md:text-right">
+                  {formatDateTime(event.timestamp)}
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground md:text-right">
-                {formatDateTime(event.timestamp)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="mt-5 rounded-md border bg-background p-5 text-sm leading-6 text-muted-foreground">
