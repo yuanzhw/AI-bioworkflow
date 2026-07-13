@@ -81,17 +81,17 @@ Workflow IR 是本项目的核心编译契约。字段结构、表达式系统�
 
 后续新增 IR 数据结构、表达式形式、renderer backend 或 Nextflow 支持时，应先更新该规范，再实现代码与测试。
 
-## 项目展示定位与 Web 产品化目标（规划中）
+## 项目展示定位与 Web 产品化目标
 
 本项目同时承担求职作品集项目的职责：展示开发者能够将生物信息学领域知识转化为可解释、可测试、可交付的 AI Agent 工程系统。因此 Web 层不是简单的结果展示壳，而是用于呈现 Agent 决策过程、结构化中间产物、验证闭环和领域可信边界的产品入口。
 
 Web 产品化遵循以下目标：
 
-1. **突出 Agent 工程能力**：页面应能够展示从自然语言需求、规划过程、Workflow IR、静态分析/修复到 WDL 校验结果的完整链路，而不是只提供一个返回代码的聊天框。
+1. **突出 Agent 工程能力**：页面能够展示从自然语言需求、规划过程、Workflow IR、静态分析/修复到 WDL 校验结果的完整链路，而不是只提供一个返回代码的聊天框。
 2. **突出领域建模能力**：通过 recipe、tool catalog、工作流 DAG、运行输出和科学性告警展示生物信息学问题如何被结构化。
 3. **突出可解释与可审计性**：关键状态变化、修复动作、错误诊断、候选工具来源和镜像可信等级应能够被记录并在详情页回看。
 4. **保留核心编译器独立性**：Web API、CLI 与测试复用相同的 Python 服务层；UI 不侵入 Workflow IR 到 WDL 的确定性编译路径。
-5. **控制非核心投入**：第一版优先完成可演示的 Agent 工作台，不提前引入用户权限、计费、复杂微服务或大规模任务调度基础设施。
+5. **控制非核心投入**：W0-W5 已优先完成可演示的 Agent 工作台、run history、DAG 审阅和失败回放，不提前引入用户权限、计费、复杂微服务或大规模任务调度基础设施。
 
 ## 当前端到端调用链路与编译子图
 
@@ -302,7 +302,7 @@ FastAPI Application
 
 ### 目标仓库目录
 
-以下目录是在现有核心代码基础上的产品化目标结构，按迭代逐步创建：
+以下目录是在现有核心代码基础上的产品化结构；W0-W5 已覆盖 service、API、工作台、历史详情和 DAG 审阅主路径：
 
 ```text
 AI-bioworkflow/
@@ -319,12 +319,12 @@ AI-bioworkflow/
 │   ├── app/
 │   │   ├── page.tsx                # 项目介绍页
 │   │   ├── workspace/              # Workflow 生成工作台
-│   │   ├── workflows/[id]/graph/   # DAG 可视化页
-│   │   └── runs/[id]/              # Agent 执行历史详情页
+│   │   ├── runs/                   # Run 历史列表
+│   │   └── runs/[runId]/           # Run 详情、DAG、事件与产物回放
 │   ├── components/
 │   │   ├── workflow-graph/         # React Flow 图组件
-│   │   ├── run-timeline/           # Agent 阶段与事件组件
-│   │   └── code-viewer/            # Plan / IR / WDL 查看组件
+│   │   ├── run/                    # timeline、artifact tabs、failed summary
+│   │   └── ui/                     # 共享界面组件
 │   └── lib/                        # API client、SSE client 与 TypeScript types
 ├── tests/
 │   ├── ...                         # 现有核心测试
@@ -336,10 +336,10 @@ AI-bioworkflow/
 
 | 页面 | 核心内容 | 招聘展示价值 | 第一版完成标准 |
 | --- | --- | --- | --- |
-| 项目介绍页 | 问题背景、Agent/Compiler 架构、RNA-seq DEG 示例、技术栈与项目边界 | 快速说明生信经验如何转化为 Agent 产品能力 | 可以从介绍跳转到预填充示例的工作台 |
-| Workflow 生成工作台 | 自然语言输入、执行阶段流、Plan / IR / WDL 标签页、校验和修复信息 | 展示端到端 Agent 工程链路与可解释输出 | 提交一个示例请求后可实时看到状态与最终校验结果 |
-| 工作流 DAG 可视化页 | calls、scatter、依赖边、输入输出以及节点状态 | 展示结构化建模、领域工作流理解和可视化能力 | 能从生成的 IR 渲染 RNA-seq 示例 DAG 并选中节点查看详情 |
-| Agent 执行历史详情页 | 原始请求、事件时间线、模型/编译步骤、修复动作、产物与诊断 | 展示可观测性、审计能力和失败处理意识 | 刷新页面后仍可重看一次成功或失败 run 的关键产物 |
+| 项目介绍页 | 问题背景、Agent/Compiler 架构、RNA-seq DEG 示例、技术栈与项目边界 | 快速说明生信经验如何转化为 Agent 产品能力 | 可跳转到预填充示例工作台、run 历史和 API 文档 |
+| Workflow 生成工作台 | 自然语言输入、执行阶段流、Plan / IR / WDL 标签页、校验、修复信息和失败摘要 | 展示端到端 Agent 工程链路与可解释输出 | 提交一个示例请求后可实时看到状态、最终校验结果，并进入历史详情 |
+| Workflow DAG 审阅 | calls、scatter、依赖边、输入输出、runtime docker 和结构状态 | 展示结构化建模、领域工作流理解和可视化能力 | 能在 run 详情中从 Workflow IR 渲染 RNA-seq 示例 DAG 并选中节点查看详情 |
+| Run 历史详情 | 原始请求、事件时间线、模型/编译步骤、修复动作、产物、诊断与失败回放 | 展示可观测性、审计能力和失败处理意识 | 刷新页面后仍可重看一次成功或失败 run 的关键产物 |
 
 第一版工作台重点呈现的阶段为：
 
@@ -359,7 +359,7 @@ AI-bioworkflow/
 
 API 第一版围绕“生成并查看一次可解释 workflow run”设计，不直接引入登录、多租户或正式执行集群。
 
-当前 W2 已落地的是持久化 run API：API 层接收请求、创建展示级 run 记录，并通过后台任务调用 application service / Compiler Graph。FastAPI 只负责 HTTP 入口、状态查询和 SSE 输出，不实现 planner、catalog resolver、Analyzer、Renderer 或 Checker 逻辑。
+当前持久化 run API 已覆盖 W2-W5 展示需求：API 层接收请求、创建展示级 run 记录，并通过后台任务调用 application service / Compiler Graph。FastAPI 只负责 HTTP 入口、状态查询和 SSE 输出，不实现 planner、catalog resolver、Analyzer、Renderer 或 Checker 逻辑。
 
 本地开发端口约定：
 
@@ -380,12 +380,13 @@ FastAPI 默认允许本地 Next.js 开发来源 `http://127.0.0.1:3000` 和
 `http://localhost:3000` 访问 API。当前端开发服务改用其他端口时，可通过
 `AI_BIOWORKFLOW_CORS_ORIGINS` 配置逗号分隔的 allowed origins；配置值会去除首尾空白和末尾 `/`，避免常见本地 URL 写法导致 CORS 不匹配。
 
-W4 工作台已接入真实 run 生命周期：`/workspace?example=rnaseq-deg`
+W4/W5 Web 界面已接入真实 run 生命周期：`/workspace?example=rnaseq-deg`
 默认提交结构化 RNA-seq Recipe Tool Plan 到 `POST /api/compile`，也可切换到自然语言模式调用
 `POST /api/runs`。页面会订阅 `GET /api/runs/{run_id}/events` 的 SSE 事件流，轮询
 `GET /api/runs/{run_id}` snapshot，并展示同一次 run 的 Catalog Retrieval、Plan、Workflow IR、WDL 和 diagnostics。
+`/runs` 读取持久化 run 摘要，`/runs/[runId]` 可回放事件、产物、诊断、失败摘要和基于 Workflow IR 派生的 DAG。DAG 节点状态表达结构审阅语义，不代表真实 workflow call 执行状态。
 
-W2 当前接口：
+当前 run API 接口：
 
 | Endpoint | 用途 | 主要返回 |
 | --- | --- | --- |
@@ -514,7 +515,7 @@ W2 当前接口：
 }
 ```
 
-第一版事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、`artifact.updated`、`repair.applied`、`validation.completed` 和 `run.completed`。Run service 会为事件 payload 补充稳定的 observability 字段，例如 `stage`、`status`、`node`、`artifact_name`、`artifact_content_type` 和 `error_type`。这些字段用于前端时间线、DAG 状态映射和历史回放；事件中不保存 API key、原始模型鉴权信息或其他秘密环境变量。
+第一版事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、`artifact.updated`、`repair.applied`、`validation.completed` 和 `run.completed`。Run service 会为事件 payload 补充稳定的 observability 字段，例如 `stage`、`status`、`node`、`artifact_name`、`artifact_content_type` 和 `error_type`。这些字段用于前端时间线、失败摘要和历史回放；DAG 状态由 Workflow IR 结构与 unresolved references 派生。事件中不保存 API key、原始模型鉴权信息或其他秘密环境变量。
 
 ### 持久化与部署边界
 
@@ -537,13 +538,15 @@ Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经
 | W5 | DAG 与历史详情 | React Flow 工作流图、run 历史详情和失败/修复回放 | W4 |
 | W6 | 部署与作品集打磨 | 在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航 | W5 |
 
+截至 W5，最小作品集演示链路已经落地：访问者能够使用预置 RNA-seq 示例触发 run，看到 Agent/Compiler 阶段过程、Workflow IR、DAG、校验后的 WDL、历史回放和失败 run 摘要。W6 负责将这些能力包装成可在简历和项目主页直接访问、快速理解的在线作品。
+
 `W4` 的具体实施范围、任务拆分和验收口径记录在
 [W4 Workflow 生成工作台工作拆解](./docs/w4-workbench-plan.md)。
 
 `W5` 的具体实施范围、任务拆分和验收口径记录在
 [W5 DAG 与历史详情工作拆解](./docs/w5-dag-history-plan.md)。
 
-求职展示的最小可发布范围为 `W0` 至 `W5`：访问者能够使用一个预置 RNA-seq 示例触发 run，看到 Agent/Compiler 的阶段过程、Workflow IR、DAG、校验后的 WDL 与历史回放。`W6` 负责将能力包装成可在简历和项目主页直接访问、快速理解的作品。
+W0-W5 是求职展示的最小可发布范围；W6 继续补齐在线部署、截图/录屏、架构图和更直接的作品集导航。
 
 ## Agent 修复闭环与职责边界（规划中）
 
