@@ -200,7 +200,7 @@ web/components/workflow-graph/
 ### 7. 导航、文案与文档更新
 
 - 工作台运行后提供“查看详情”入口。
-- `/runs` 列表提供返回工作台 / 运行示例入口。
+- `/runs` 列表提供运行 RNA-seq 示例入口，`/runs/[runId]` 详情页提供返回历史和运行示例入口。
 - 项目介绍页中 DAG 和 Timeline 的系统视图文案已从预览状态更新为真实能力。
 - README roadmap 已链接到本文件，并将 W5 标记为完成。
 - `DEVELOPMENT.md` 保留 W5 里程碑摘要，并链接本拆解文档。

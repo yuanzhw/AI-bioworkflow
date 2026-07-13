@@ -384,7 +384,7 @@ W4/W5 Web 界面已接入真实 run 生命周期：`/workspace?example=rnaseq-de
 默认提交结构化 RNA-seq Recipe Tool Plan 到 `POST /api/compile`，也可切换到自然语言模式调用
 `POST /api/runs`。页面会订阅 `GET /api/runs/{run_id}/events` 的 SSE 事件流，轮询
 `GET /api/runs/{run_id}` snapshot，并展示同一次 run 的 Catalog Retrieval、Plan、Workflow IR、WDL 和 diagnostics。
-`/runs` 读取持久化 run 摘要，`/runs/{run_id}` 可回放事件、产物、诊断、失败摘要和基于 Workflow IR 派生的 DAG。DAG 节点状态表达结构审阅语义，不代表真实 workflow call 执行状态。
+`/runs` 读取持久化 run 摘要，`/runs/[runId]` 可回放事件、产物、诊断、失败摘要和基于 Workflow IR 派生的 DAG。DAG 节点状态表达结构审阅语义，不代表真实 workflow call 执行状态。
 
 当前 run API 接口：
 
