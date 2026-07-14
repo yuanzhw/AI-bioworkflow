@@ -560,7 +560,7 @@ W0-W5 是求职展示的最小可发布范围；W6 继续补齐在线部署、�
 - 工作台调用 FastAPI run API，轮询 run snapshot，并通过 SSE 订阅事件流。
 - Run timeline 展示 planner、compiler、artifact update、repair 和 checker 事件。
 - Artifact tabs 展示 Catalog Retrieval、Plan、Workflow IR、WDL 和 Diagnostics。
-- Catalog Retrieval summary 展示 top recipe、top tools、score、matched terms、matched fields、trust status 和 fallback 状态。
+- Catalog Retrieval summary 展示 top recipe、top tools、`score`、`matched_terms`、`matched_fields`、`trust_status` 和 fallback 状态。
 - `/runs` 历史列表读取持久化 run 摘要，展示状态、请求摘要、诊断计数和时间戳。
 - `/runs/[runId]` 详情页支持刷新后回放 request、events、artifacts、diagnostics 和 Workflow IR DAG。
 - Workflow DAG 基于 Workflow IR 生成 React Flow 图，支持 workflow inputs、call nodes、scatter groups、outputs 和节点详情。

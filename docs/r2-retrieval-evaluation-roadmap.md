@@ -136,7 +136,7 @@ tests/test_retrieval_evaluation.py
 
 - 将 recipe/tool metadata 构造成本地 catalog documents。
 - 对 description、aliases、inputs、outputs、params、steps role 建立 embedding。
-- 保留 metadata filtering，例如 tool id、version、trust status、recipe id。
+- 保留 metadata filtering，例如 tool id、version、`trust_status`、recipe id。
 
 边界：
 
@@ -150,7 +150,7 @@ tests/test_retrieval_evaluation.py
 职责：
 
 - 融合 lexical score 和 vector similarity。
-- 保留 matched_terms / matched_fields，用于解释。
+- 保留 `matched_terms` / `matched_fields`，用于解释。
 - 输出与 lexical retriever 相同的 artifact contract。
 
 验收：
