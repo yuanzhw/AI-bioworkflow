@@ -575,7 +575,7 @@ W0-W5 是求职展示的最小可发布范围；W6 继续补齐在线部署、�
 
 W6 之后，前端不再规划新的独立 W7/W8 产品阶段。后续只作为 backend / Agent 能力的展示承接面，候选增量包括：
 
-- **Real Catalog Browser**：Catalog 页面读取 `/api/recipes` 和 `/api/tools`，展示 recipe required inputs、steps、scatter、allowed tools，以及 tool inputs、params、outputs、runtime docker 和 trust status。
+- **Real Catalog Browser**：Catalog 页面读取 `/api/recipes` 和 `/api/tools`，展示 recipe required inputs、steps、scatter、allowed tools，以及 tool inputs、params、outputs、`runtime.docker` 和 `trust_status`。
 - **Retrieval Evaluation Summary**：当 retrieval evaluation 建立后，前端可展示 lexical、vector、hybrid retriever 的指标摘要；指标应来自 eval artifact 或版本化结果，不在前端重新计算。
 - **Agent Artifact Display**：Bioinfo Reviewer warnings、Resource Agent suggestions、Reviewer Repair request / patch / rejection / applied summary 等能力落地后，以结构化 artifact 形式进入 UI；前端不展示未脱敏 raw model output，也不改变 Plan、IR 或 WDL。
 
