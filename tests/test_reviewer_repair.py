@@ -29,7 +29,6 @@ def sample_workflow_ir():
                     "task": "fastp",
                     "inputs": {
                         "r1": "raw_r1",
-                        "r2": "raw_r2",
                     },
                 }
             ],
@@ -146,6 +145,9 @@ class ReviewerRepairContractTests(unittest.TestCase):
         forbidden_paths = [
             "/current_wdl",
             "/catalog/tools/fastp",
+            "/workflow/steps",
+            "/workflow/calls",
+            "/workflow/steps/0/task",
             "/tasks/fastp/command",
             "/tasks/fastp/runtime/docker",
             "/tasks/fastp/runtime/cpu",
@@ -167,7 +169,7 @@ class ReviewerRepairContractTests(unittest.TestCase):
                     }
                 )
 
-                with self.assertRaisesRegex(ReviewerPatchPolicyError, "forbidden"):
+                with self.assertRaises(ReviewerPatchPolicyError):
                     validate_reviewer_patch_policy(patch)
 
     def test_policy_rejects_catalog_references_outside_current_workflow_context(self):
@@ -189,6 +191,44 @@ class ReviewerRepairContractTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ReviewerPatchPolicyError, "not in the approved"):
             validate_reviewer_patch_policy(patch, catalog_context=context)
+
+    def test_policy_rejects_catalog_references_without_context(self):
+        patch = ReviewerIRPatch.model_validate(
+            {
+                "summary": "Repair missing call input wiring.",
+                "actions": [
+                    {
+                        "operation": "add",
+                        "path": "/workflow/steps/0/inputs/r2",
+                        "value": "raw_r2",
+                        "reason": "The existing workflow input satisfies the missing task input.",
+                    }
+                ],
+                "catalog_references": ["fastp:1.3.3"],
+            }
+        )
+
+        with self.assertRaisesRegex(ReviewerPatchPolicyError, "catalog_references require"):
+            validate_reviewer_patch_policy(patch)
+
+    def test_policy_allows_move_only_for_workflow_step_or_call_items(self):
+        patch = ReviewerIRPatch.model_validate(
+            {
+                "summary": "Move a call to satisfy dependencies.",
+                "actions": [
+                    {
+                        "operation": "move",
+                        "from_path": "/workflow/steps/1",
+                        "path": "/workflow/steps/0",
+                        "reason": "Move the upstream call before the dependent call.",
+                    }
+                ],
+            }
+        )
+
+        validated = validate_reviewer_patch_policy(patch)
+
+        self.assertIs(validated, patch)
 
     def test_repair_result_requires_parsed_patch_or_rejection_reason(self):
         patch = ReviewerIRPatch.model_validate(

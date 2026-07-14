@@ -239,7 +239,9 @@ def validate_reviewer_patch_policy(
     for action in patch.actions:
         violations.extend(_validate_action_policy(action))
 
-    if catalog_context is not None:
+    if patch.catalog_references and catalog_context is None:
+        violations.append("catalog_references require approved current-workflow catalog_context")
+    elif catalog_context is not None:
         allowed_references = catalog_context.approved_reference_ids()
         for reference in patch.catalog_references:
             if reference not in allowed_references:
@@ -271,9 +273,6 @@ def _iter_action_paths(action: ReviewerPatchAction) -> list[tuple[str, str]]:
 
 
 def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
-    if path in {"/workflow/steps", "/workflow/calls", "/workflow/outputs"}:
-        return True
-
     if path.startswith("/workflow/outputs/"):
         return True
 
@@ -290,13 +289,11 @@ def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
 
 
 def _is_call_input_path(path: str) -> bool:
-    if not _is_workflow_step_or_call_path(path):
-        return False
-    return "/inputs/" in path or path.endswith("/inputs")
+    return bool(re.match(r"^/workflow/(steps|calls)/[0-9]+/inputs/[^/]+$", path))
 
 
 def _is_workflow_step_or_call_path(path: str) -> bool:
-    return path.startswith("/workflow/steps/") or path.startswith("/workflow/calls/")
+    return bool(re.match(r"^/workflow/(steps|calls)/[0-9]+$", path))
 
 
 def _is_forbidden_path(path: str) -> bool:

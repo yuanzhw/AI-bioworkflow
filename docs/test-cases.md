@@ -1823,6 +1823,9 @@ result 和 policy 边界。
 - 分别尝试 patch：
   - `/current_wdl`
   - `/catalog/tools/fastp`
+  - `/workflow/steps`
+  - `/workflow/calls`
+  - `/workflow/steps/0/task`
   - `/tasks/fastp/command`
   - `/tasks/fastp/runtime/docker`
   - `/tasks/fastp/runtime/cpu`
@@ -1839,6 +1842,7 @@ result 和 policy 边界。
 
 - Reviewer 不能修改最终 WDL、Catalog、command template、runtime image 或 resource
   sizing fields。
+- Reviewer 不能替换整个 workflow step/call 集合，也不能修改 call 的 task 选择。
 
 ### `test_policy_rejects_catalog_references_outside_current_workflow_context`
 
@@ -1858,6 +1862,48 @@ result 和 policy 边界。
 覆盖点：
 
 - Reviewer 不能借由 catalog references 引入未传入的候选工具上下文。
+
+### `test_policy_rejects_catalog_references_without_context`
+
+输入：
+
+- 一个合法的 call input wiring patch。
+- `catalog_references` 包含 `fastp:1.3.3`。
+- 不传 `catalog_context`。
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- patch 引用 catalog metadata 时必须同时提供当前 workflow 的 approved context；
+  不能因为调用方漏传 context 而跳过 membership 校验。
+
+### `test_policy_allows_move_only_for_workflow_step_or_call_items`
+
+输入：
+
+- 一个 `move` patch：
+  - `from_path = /workflow/steps/1`
+  - `path = /workflow/steps/0`
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- policy validation 返回原 patch。
+
+覆盖点：
+
+- P2 policy 允许 Reviewer 通过 list-item pointer 调整 step/call ordering。
+- 该权限不扩展到整体替换 `workflow.steps` 或修改 step 内部 task 选择。
 
 ### `test_repair_result_requires_parsed_patch_or_rejection_reason`
 
