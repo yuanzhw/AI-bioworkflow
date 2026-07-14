@@ -551,6 +551,34 @@ Web 展示轨道与后续 Multi-Agent 能力路线并行推进，优先让已经
 
 W0-W5 是求职展示的最小可发布范围；W6 继续补齐在线部署、截图/录屏、架构图和更直接的作品集导航。W6 完成后，前端主线进入 feature freeze：除 bugfix、响应式 polish、文案微调和后续 Agent 能力带来的小型展示增量外，不再继续规划独立的前端功能阶段。
 
+### W0-W6 前端展示面与后续承接边界
+
+当前前端已形成完整的 run workbench 和 replay 体验：
+
+- 首页提供项目入口、核心能力说明和 demo 导航。
+- `/workspace` 支持结构化 RNA-seq 示例和自然语言 run 两种模式。
+- 工作台调用 FastAPI run API，轮询 run snapshot，并通过 SSE 订阅事件流。
+- Run timeline 展示 planner、compiler、artifact update、repair 和 checker 事件。
+- Artifact tabs 展示 Catalog Retrieval、Plan、Workflow IR、WDL 和 Diagnostics。
+- Catalog Retrieval summary 展示 top recipe、top tools、score、matched terms、matched fields、trust status 和 fallback 状态。
+- `/runs` 历史列表读取持久化 run 摘要，展示状态、请求摘要、诊断计数和时间戳。
+- `/runs/[runId]` 详情页支持刷新后回放 request、events、artifacts、diagnostics 和 Workflow IR DAG。
+- Workflow DAG 基于 Workflow IR 生成 React Flow 图，支持 workflow inputs、call nodes、scatter groups、outputs 和节点详情。
+- 失败 run 摘要能够展示失败状态、diagnostics 和已保存的部分 artifacts。
+
+前端职责边界：
+
+- 前端展示后端 API 和 persisted run artifacts，不生成或修复 Recipe Tool Plan、Workflow IR 或 WDL。
+- 页面展示的数据应来自 API snapshot、SSE event 或 persisted artifact，不依赖前端推理拼装状态。
+- 工作台和历史详情页应复用 timeline、artifact、diagnostics、DAG 和 failure summary 组件。
+- Planner、Catalog、Analyzer、Checker 或未来 Reviewer 的失败都应保留已产生 artifacts，并可在历史详情中回放。
+
+W6 之后，前端不再规划新的独立 W7/W8 产品阶段。后续只作为 backend / Agent 能力的展示承接面，候选增量包括：
+
+- **Real Catalog Browser**：Catalog 页面读取 `/api/recipes` 和 `/api/tools`，展示 recipe required inputs、steps、scatter、allowed tools，以及 tool inputs、params、outputs、runtime docker 和 trust status。
+- **Retrieval Evaluation Summary**：当 retrieval evaluation 建立后，前端可展示 lexical、vector、hybrid retriever 的指标摘要；指标应来自 eval artifact 或版本化结果，不在前端重新计算。
+- **Agent Artifact Display**：Bioinfo Reviewer warnings、Resource Agent suggestions、Reviewer Repair request / patch / rejection / applied summary 等能力落地后，以结构化 artifact 形式进入 UI；前端不展示未脱敏 raw model output，也不改变 Plan、IR 或 WDL。
+
 ## Agent 修复闭环与职责边界（规划中）
 
 ### 有界反思与自愈
@@ -719,15 +747,33 @@ Candidate ToolSpec
 
 本路线描述智能编排、检索和运行环境能力的演进；可演示 Web 产品的建设顺序见上文 `W0` 至 `W6`，两条轨道可以并行推进。
 
+后端 Agent 路线继续遵循当前稳定边界：
+
+- LLM 不直接生成最终 WDL；自然语言 Planner 只输出 Recipe Tool Plan。
+- Recipe 和 tool 选择必须通过完整 approved Catalog validation。
+- Approved Catalog Retriever 只缩小 planner context，不作为准入边界。
+- Workflow IR 是 compiler 内部 canonical model；WDL 由确定性 renderer 生成。
+- Analyzer、Repairer、Renderer、Checker 不应被前端、prompt 或 Agent 节点绕过。
+- 结构化编译路径不依赖 `DEEPSEEK_API_KEY`。
+
+当前已落地的后端 Agent 基线包括：
+
+- `plan_and_compile_workflow` 通过 Orchestration Graph 串联 planner 和 compiler delegate。
+- `compile_structured_workflow` 支持 Recipe Tool Plan、Workflow IR 和 legacy JSON。
+- Run service 保存 run、events、artifacts、diagnostics，并支持 SSE replay。
+- Planner failure、schema failure、catalog failure、compiler failure 会进入 failed run。
+- Deterministic repairer 可处理安全的 IR 修复，例如拓扑顺序和有限 literal 问题。
+- Execution backend 抽象和 Cromwell backend contract tests 已存在，但不混入默认前端 demo 路径。
+
 | 阶段 | 建设内容 | 主要交付 |
 | --- | --- | --- |
-| P0 | 稳定现有 Recipe / Catalog / 执行测试 | 可靠的编译与执行评测基线 |
+| P0 | 稳定现有 Recipe / Catalog / 执行测试 | 可靠的编译、验证、run 记录和执行评测基线 |
 | P1 | Compiler Graph 明确化与 Orchestration Graph 外壳 | 自然语言和结构化入口分层，Planner 可在上层图运行 |
-| P2 | 有界 Reviewer LLM 与 IR 修复闭环 | 结构化修复、诊断记录、失败报告 |
-| P3 | Architect 与 Bioinfo Reviewer 分层 | 分析方案和科学性告警职责分离 |
-| P4 | Approved Catalog Tool Retriever | 高召回候选工具筛选和 prompt 缩减 |
-| P5 | Resource Agent | 可追踪的 CPU / memory / disk 建议与 override |
-| P6 | External Retrieval 与 Candidate ToolSpec | 未知工具发现和候选定义 |
+| P2 | 有界 Reviewer LLM 与 IR 修复闭环 | 结构化 IR patch、policy validation、diagnostics 和 run artifacts |
+| P3 | Architect 与 Bioinfo Reviewer 分层 | 分析方案和科学性告警职责分离，Bioinfo Reviewer 只读输出 warnings |
+| P4 | Approved Catalog Tool Retriever 与 RAG 子序列 | approved catalog 内候选工具筛选、prompt 缩减、retrieval trace、查询测试集和检索策略演进 |
+| P5 | Resource Agent | 可追踪的 CPU / memory / disk 建议与 override，资源建议不选择工具或镜像 |
+| P6 | External Retrieval 与 Candidate ToolSpec | 未知工具发现和候选定义，不自动写入 approved Catalog |
 | P7 | On-demand Experimental Container Build | 临时镜像支持当前探索任务 |
 | P8 | Validated Container Promotion | GHCR 正式发布及 Catalog digest 准入 |
 | P9 | 文献驱动 Workflow Blueprint | 从文献方法提取候选流程 |
@@ -749,14 +795,60 @@ P2 的目标是将 Reviewer LLM 作为受控 IR 修复分支接入 Compiler Grap
 
 👉 **[P2 Reviewer IR 修复闭环实施计划](./docs/p2-reviewer-repair-plan.md)**
 
+### P3 Architect 与 Bioinfo Reviewer
+
+P3 的目标是把分析方案职责和方法学审查职责分开。Architect Agent 负责形成候选分析方案、步骤和预期输出；Bioinfo Reviewer 负责只读审查并输出 warnings，例如缺少 QC、缺少样本分组或 contrast、未说明 transcriptome index / reference resource、MultiQC 汇总输入不足等。
+
+Bioinfo Reviewer 的边界：
+
+- 不直接修改 Recipe Tool Plan 或 Workflow IR。
+- 不选择工具、不改 runtime、不生成 WDL。
+- warnings 进入 run artifacts，并可被前端展示。
+- warnings 默认不阻断确定性编译，除非后续显式引入 policy。
+
+### P4 Approved Catalog Tool Retriever 与 RAG 子序列
+
+P4 的目标是在自然语言 Planner 之前加入 approved catalog 内部检索层。这个检索层只缩小候选 recipe / tool context，并记录召回依据；完整 recipe/catalog validation 仍然使用全量 approved catalog，结构化编译入口也不依赖 retriever。
+
+RAG 开发序列放在 P4 之下维护：
+
+| 子阶段 | 文档 | 目标 |
+| --- | --- | --- |
+| R1 | [Internal Catalog RAG / Tool Retriever](./docs/r1-internal-catalog-rag-plan.md) | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
+| R2 | [Retrieval Evaluation Roadmap](./docs/r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
+| R3 | 规划中 | 在 R2 baseline 后选择 vector 或 hybrid backend，并保持现有 artifact contract |
+| R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
+
+R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
+
+### P5 Resource Agent
+
+P5 的目标是对 task runtime 资源字段提供可追踪建议。Resource Agent 只处理 CPU、memory、disk 等资源字段，并记录建议依据，例如 tool metadata、sample count、file size hint 或默认 policy。
+
+Resource Agent 的边界：
+
+- 不选择工具。
+- 不替换 Docker image。
+- 不改变 command template。
+- 不改变分析方法。
+- Resource suggestion 与 Workflow IR 修改分开记录；如资源字段被覆盖，run artifacts 必须包含理由。
+
+### P6 External Retrieval 与 Candidate ToolSpec
+
+P6 的目标是在 approved Catalog 不覆盖用户请求时，形成候选工具定义，而不是直接引入未知工具。
+
+External Retrieval 的输出应是 Candidate ToolSpec 草案，至少记录工具名称、版本、用途、输入输出、参数、命令依据、来源 URL、未确认字段和验证状态。该草案不自动写入 approved Catalog，不自动替换 container image，也不能绕过 Catalog validation。
+
 ## 评测重点（规划中）
 
 | 能力 | 首要指标 |
 | --- | --- |
-| Reviewer LLM | IR 修复成功率、错误修改率、平均修复轮数、诊断可读性 |
+| Planner | valid plan rate、catalog validation pass rate、planner error class distribution |
+| Deterministic Repairer | safe repair success rate、false repair rate |
+| Reviewer LLM | IR patch accepted rate、post-patch validation pass rate、policy rejection rate、诊断可读性 |
 | Bioinfo Reviewer | 高风险缺失步骤召回率、误告警率 |
 | Tool Retriever | `Recall@K`、步骤覆盖率、Planner 成功率、prompt token 降幅、回退比例 |
-| Resource Agent | 执行成功率、OOM 率、资源浪费比例、override 可追踪率 |
+| Resource Agent | OOM reduction、resource over-allocation rate、suggestion traceability |
 | Candidate ToolSpec | 字段完整率、来源可追溯率、准入接受率 |
 | 临时镜像构建 | 构建成功率、smoke test 通过率、任务首跑等待时间 |
 | 文献方法提取 | 显式步骤提取准确率、推断标注准确率、缺失信息识别率 |
