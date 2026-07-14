@@ -116,34 +116,59 @@ const stackRows = [
 
 export default function Home() {
   const workspaceHref = "/workspace?example=rnaseq-deg";
+  const demoRoutes: Array<{
+    title: string;
+    href: string;
+  }> = [
+    {
+      title: "运行 RNA-seq 示例",
+      href: workspaceHref,
+    },
+    {
+      title: "回看 Run 历史",
+      href: "/runs",
+    },
+    {
+      title: "审阅 Catalog 边界",
+      href: "/catalog",
+    },
+  ];
+  const demoHighlights = ["Timeline", "Plan / IR / WDL", "Diagnostics", "Workflow IR DAG", "Failed replay"];
 
   return (
     <div>
       <section className="workflow-backdrop border-b">
-        <div className="mx-auto flex min-h-[680px] max-w-7xl flex-col justify-center px-6 py-14 sm:px-8 lg:px-10">
+        <div className="mx-auto flex min-h-[620px] max-w-7xl flex-col justify-center px-6 py-12 sm:px-8 lg:px-10">
           <div className="w-full max-w-[calc(100vw-3rem)] sm:max-w-2xl">
             <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="secondary">可解释的生信 Workflow 生成与编译系统</Badge>
-              <Badge variant="outline">W5 Run history + DAG</Badge>
+              <Badge variant="secondary">Bioinformatics workflow compiler</Badge>
+              <Badge variant="outline">W6 portfolio demo hub</Badge>
             </div>
             <h1 className="mt-6 text-4xl font-semibold tracking-normal text-foreground sm:text-5xl lg:text-6xl">
               AI-bioworkflow
             </h1>
             <p className="mt-6 max-w-xl break-words text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
-              从自然语言需求到结构化计划、Workflow IR 与可验证 WDL，
-              展示工具目录、静态分析、确定性渲染、DAG 审阅和历史回放。
+              一个把自然语言或结构化生信需求编译成可验证 WDL 的工程作品集：
+              LLM 停在 Recipe Tool Plan 边界，Workflow IR、Analyzer、Renderer 和 Checker
+              负责确定性的编译闭环。
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
                 <Link href={workspaceHref}>
-                  打开 RNA-seq 示例
+                  运行 RNA-seq 示例
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/runs">
                   <History className="h-4 w-4" />
-                  查看 Run 历史
+                  Run 历史
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/catalog">
+                  <Database className="h-4 w-4" />
+                  Catalog
                 </Link>
               </Button>
               <Button asChild variant="outline">
@@ -151,16 +176,30 @@ export default function Home() {
               </Button>
             </div>
 
-            <div className="mt-10 grid w-full max-w-[calc(100vw-3rem)] gap-3 text-sm sm:max-w-2xl sm:grid-cols-3">
-              {[
-                ["边界", "LLM 负责规划"],
-                ["契约", "Recipe Tool Plan -> Workflow IR"],
-                ["回放", "Timeline + DAG + Diagnostics"],
-              ].map(([label, body]) => (
-                <div key={label} className="rounded-md border bg-white/88 p-4 shadow-sm backdrop-blur">
-                  <div className="font-semibold text-primary">{label}</div>
-                  <div className="mt-2 leading-6 text-muted-foreground">{body}</div>
+            <div className="mt-7 max-w-2xl rounded-md border bg-white/82 p-3 shadow-sm backdrop-blur">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                <div className="flex items-center gap-2 font-semibold text-primary">
+                  <FlaskConical className="h-4 w-4 text-accent" />
+                  推荐演示路径
                 </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
+                  {demoRoutes.map((route, index) => (
+                    <span key={route.title} className="inline-flex items-center gap-2">
+                      <Link href={route.href} className="font-medium text-foreground hover:text-primary">
+                        {index + 1}. {route.title}
+                      </Link>
+                      {index < demoRoutes.length - 1 ? <ArrowRight className="h-3.5 w-3.5 text-primary/70" /> : null}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex max-w-2xl flex-wrap gap-2">
+              {demoHighlights.map((item) => (
+                <Badge key={item} variant="outline" className="bg-white/80">
+                  {item}
+                </Badge>
               ))}
             </div>
           </div>
