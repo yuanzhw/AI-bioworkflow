@@ -1884,6 +1884,27 @@ result 和 policy 边界。
 - patch 引用 catalog metadata 时必须同时提供当前 workflow 的 approved context；
   不能因为调用方漏传 context 而跳过 membership 校验。
 
+### `test_policy_rejects_empty_or_nested_workflow_output_paths`
+
+输入：
+
+- 分别尝试 patch：
+  - `/workflow/outputs/`
+  - `/workflow/outputs/clean_r1/value`
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 每个 patch 都抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- `workflow.outputs` 是 `dict[str, str]`，Reviewer 只能直接修改单个 output entry。
+- policy 不接受空 output key 或 output entry 下的深层 JSON pointer。
+
 ### `test_policy_allows_move_only_for_workflow_step_or_call_items`
 
 输入：

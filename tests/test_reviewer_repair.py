@@ -211,6 +211,31 @@ class ReviewerRepairContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ReviewerPatchPolicyError, "catalog_references require"):
             validate_reviewer_patch_policy(patch)
 
+    def test_policy_rejects_empty_or_nested_workflow_output_paths(self):
+        invalid_paths = [
+            "/workflow/outputs/",
+            "/workflow/outputs/clean_r1/value",
+        ]
+
+        for path in invalid_paths:
+            with self.subTest(path=path):
+                patch = ReviewerIRPatch.model_validate(
+                    {
+                        "summary": "Patch invalid workflow output path.",
+                        "actions": [
+                            {
+                                "operation": "replace",
+                                "path": path,
+                                "value": "qc.clean_r1",
+                                "reason": "Workflow outputs are direct string expressions.",
+                            }
+                        ],
+                    }
+                )
+
+                with self.assertRaises(ReviewerPatchPolicyError):
+                    validate_reviewer_patch_policy(patch)
+
     def test_policy_allows_move_only_for_workflow_step_or_call_items(self):
         patch = ReviewerIRPatch.model_validate(
             {

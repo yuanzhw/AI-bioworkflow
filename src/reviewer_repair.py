@@ -276,7 +276,7 @@ def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
     if operation == ReviewerPatchOperation.MOVE:
         return _is_workflow_step_or_call_path(path)
 
-    if path.startswith("/workflow/outputs/"):
+    if _is_workflow_output_path(path):
         return True
 
     if _TASK_OUTPUT_VALUE_PATTERN.match(path):
@@ -290,6 +290,10 @@ def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
 
 def _is_call_input_path(path: str) -> bool:
     return bool(re.match(r"^/workflow/(steps|calls)/[0-9]+/inputs/[^/]+$", path))
+
+
+def _is_workflow_output_path(path: str) -> bool:
+    return bool(re.match(r"^/workflow/outputs/[A-Za-z_][A-Za-z0-9_]*$", path))
 
 
 def _is_workflow_step_or_call_path(path: str) -> bool:
