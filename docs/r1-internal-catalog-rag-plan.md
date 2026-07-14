@@ -1,8 +1,10 @@
-# Internal Catalog RAG / Tool Retriever 开发计划
+# R1 Internal Catalog RAG / Tool Retriever 开发计划
 
 本文档描述项目内第一版 RAG 能力的范围、边界和实施步骤。这里的
 RAG 不指外部网页、论文或未知工具检索，而是指在项目已批准的
 Recipe / Tool Catalog 内做可解释召回，为自然语言 Planner 提供受控上下文。
+
+本文档是 RAG 开发序列的 R1，聚焦已落地的 approved catalog 内部检索能力。后续评估集、retrieval metrics、vector / hybrid backend 和 embedding fine-tuning 优先级由 [R2 Retrieval Evaluation Roadmap](./r2-retrieval-evaluation-roadmap.md) 维护。
 
 ## 背景
 
@@ -360,9 +362,9 @@ docs/test-cases.md
 
 其中 `src/catalog/retriever.py` 应尽量保持纯函数和无副作用，便于测试。
 
-## 建议实现步骤
+## R1 MVP 实现步骤
 
-### R1. Catalog Retriever 核心
+### M1. Catalog Retriever 核心
 
 交付：
 
@@ -378,7 +380,7 @@ docs/test-cases.md
 - 输出包含 `matched_terms`、`matched_fields` 和 `strategy`。
 - 空 query 返回清晰错误或 fallback 结果。
 
-### R2. Planner Prompt 集成
+### M2. Planner Prompt 集成
 
 交付：
 
@@ -393,7 +395,7 @@ docs/test-cases.md
 - Planner schema/catalog 错误分类不变。
 - `--input` 结构化路径不触发 retriever。
 
-### R3. Run Artifact 与事件
+### M3. Run Artifact 与事件
 
 交付：
 
@@ -407,7 +409,7 @@ docs/test-cases.md
 - snapshot artifacts 包含 retrieval result。
 - 失败路径不泄露 API key 或本地 credential path。
 
-### R4. 前端展示
+### M4. 前端展示
 
 交付：
 
@@ -420,7 +422,7 @@ docs/test-cases.md
 - TypeScript 类型更新。
 - 前端 build/lint 在依赖安装后通过。
 
-### R5. 文档与验收
+### M5. 文档与验收
 
 交付：
 
@@ -450,18 +452,15 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 - [x] 单测覆盖成功、fallback 和错误边界。
 - [x] 文档说明内部 RAG 与外部工具发现的边界。
 
-## 面试展示叙述
+## 后续序列
 
-推荐讲法：
+R1 的职责是建立受控、可解释、可展示的 approved catalog retrieval 层。它不评价向量检索是否优于词法检索，也不决定是否需要 embedding fine-tuning。
 
-> I added a retrieval layer over the approved bioinformatics catalog. It narrows
-> planner context and records why tools were retrieved, but it does not admit
-> new tools or bypass validation. The final Recipe Tool Plan still goes through
-> full Catalog validation, Workflow IR analysis, deterministic WDL rendering,
-> and syntax checking.
+后续 RAG 序列建议如下：
 
-中文版本：
-
-> 我把 RAG 做在正式工具目录内部。它帮助 Planner 缩小候选上下文，并记录为什么召回这些工具，但它不负责准入未知工具，也不能绕过完整 Catalog 校验。最终仍然走 Recipe Tool Plan、Workflow IR、Analyzer、确定性 WDL Renderer 和 Checker。
-
-这个定位能同时展示 RAG 能力、领域工具建模能力和工程边界意识。
+| 阶段 | 文档 | 目标 |
+| --- | --- | --- |
+| R1 | 本文档 | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
+| R2 | [Retrieval Evaluation Roadmap](./r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
+| R3 | 规划中 | 基于 R2 baseline 选择 vector 或 hybrid backend，并保持 artifact contract 不变 |
+| R4 | 规划中 | 在 catalog 和标注数据足够后再评估 reranker 或 embedding fine-tuning |

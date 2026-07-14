@@ -1,0 +1,247 @@
+# R2 Retrieval Evaluation Roadmap
+
+本文档记录 Approved Catalog Retriever 的评估与检索策略演进路线。它聚焦查询测试集、retrieval metrics、vector / hybrid retrieval 和 embedding fine-tuning 的优先级。
+
+本文档是 RAG 开发序列的 R2。第一版内部 Catalog RAG 的实现边界、输入输出契约和已完成清单由 [R1 Internal Catalog RAG / Tool Retriever](./r1-internal-catalog-rag-plan.md) 维护。本文档不重复 MVP 实现细节，只规划评估和后续 retriever backend 演进。
+
+## Current Retriever
+
+当前 retriever 是 `Approved Catalog Retriever`：
+
+```text
+natural language request
+  -> lexical retrieval over approved Recipe / Tool Catalog
+  -> retrieved recipes and tools
+  -> planner prompt context
+  -> Recipe Tool Plan
+  -> full Catalog validation
+```
+
+已具备能力：
+
+- 只读取本地 approved Recipe / Tool Catalog。
+- 使用确定性 lexical scoring。
+- 输出 `score`、`matched_terms`、`matched_fields`、`reason`。
+- Tool 结果包含 `trust_status`。
+- recipe 或 tool 召回无匹配时触发 fallback，并在 artifact 中记录 `fallback_used` / `fallback_reason`。
+- Retrieval artifact 会保存到 run snapshot，并可在前端展示。
+- 完整 Catalog validation 仍使用全量 approved catalog。
+
+## Why Evaluation Comes Before Vector Search
+
+向量数据库和 embedding 检索适合进入后续路线，但应建立在评估集之后。否则无法判断检索策略是否真正改善了 planner context。
+
+推荐顺序：
+
+```text
+retrieval query set
+  -> lexical baseline
+  -> vector retrieval
+  -> hybrid retrieval
+  -> reranker
+  -> embedding fine-tuning
+```
+
+## Retrieval Query Set
+
+查询测试集是一组人工标注的自然语言请求和期望召回结果。它不是生信原始数据，也不是 LLM 训练数据。
+
+第一版样本结构：
+
+```json
+{
+  "id": "rnaseq_deg_basic_en",
+  "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files.",
+  "expected_recipe": "rnaseq_differential_expression",
+  "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+  "expected_roles": {
+    "read_quality_control": ["fastp"],
+    "transcript_quantification": ["salmon"],
+    "gene_count_summary": ["tximport"],
+    "differential_expression": ["deseq2"],
+    "quality_report": ["multiqc"]
+  },
+  "notes": "Basic RNA-seq DEG request without explicit tool names."
+}
+```
+
+建议第一批 20 条，覆盖：
+
+- 英文 RNA-seq DEG 请求。
+- 中文 RNA-seq DEG 请求。
+- 缩写表达，例如 DEG、RNAseq、bulk RNA。
+- 明确工具名请求，例如 use Salmon and DESeq2。
+- 只描述分析目标但不说工具名。
+- Catalog 暂不支持的负例，例如 ChIP-seq、scRNA-seq、variant calling。
+- 模糊需求，例如 quality report、quantification、gene-level counts。
+- 参数相关请求，例如 paired-end reads、contrast、threads。
+
+建议文件：
+
+```text
+tests/fixtures/retrieval_queries.json
+```
+
+## Metrics
+
+第一版 eval 应保持轻量、可解释、可在本地稳定运行。
+
+| Metric | Definition | Purpose |
+| --- | --- | --- |
+| `Recipe Recall@K` | expected recipe 是否出现在 top-K recipes | 判断分析类型召回是否可靠 |
+| `Tool Recall@K` | expected tools 中有多少出现在 top-K tools | 判断候选工具是否完整 |
+| `MRR` | 第一个正确 recipe 或 tool 的 reciprocal rank | 判断排序质量 |
+| `Role Coverage` | expected_roles 中每个 role 是否至少有一个正确 tool | 判断 workflow step 覆盖 |
+| `Fallback Rate` | 触发 fallback 的 query 占比 | 判断 catalog 覆盖和检索置信度 |
+
+初始目标不是追求高分，而是建立可重复 baseline：
+
+```text
+lexical_v1 Recipe Recall@3
+lexical_v1 Tool Recall@8
+lexical_v1 Role Coverage
+lexical_v1 Fallback Rate
+```
+
+## Eval Script
+
+建议新增一个独立脚本或 unittest：
+
+```text
+scripts/evaluate_retrieval.py
+```
+
+或：
+
+```text
+tests/test_retrieval_evaluation.py
+```
+
+输出应包括：
+
+- 每条 query 的 retrieved recipes/tools。
+- missed expected recipe/tool。
+- aggregate metrics。
+- fallback queries。
+
+输出格式建议同时支持人类可读 summary 和 JSON artifact，便于后续前端或文档展示。
+
+## Vector / Hybrid Retriever
+
+在 baseline 建立后，再引入可替换 retriever backend。
+
+### Vector Retriever
+
+职责：
+
+- 将 recipe/tool metadata 构造成本地 catalog documents。
+- 对 description、aliases、inputs、outputs、params、steps role 建立 embedding。
+- 保留 metadata filtering，例如 tool id、version、`trust_status`、recipe id。
+
+边界：
+
+- 只检索 approved catalog。
+- 不发现外部工具。
+- 不改变 Catalog validation。
+- 不替换 runtime image。
+
+### Hybrid Retriever
+
+职责：
+
+- 融合 lexical score 和 vector similarity。
+- 保留 `matched_terms` / `matched_fields`，用于解释。
+- 输出与 lexical retriever 相同的 artifact contract。
+
+验收：
+
+- Hybrid retriever 在 query set 上优于或不低于 lexical baseline。
+- 如果某些 query 变差，应在 eval output 中可见。
+- Planner validation pass rate 不下降。
+
+## Embedding Fine-Tuning Priority
+
+Embedding model fine-tuning 暂不作为近期优先项。
+
+原因：
+
+- 当前 catalog 规模较小。
+- 人工标注 query 和 validated plan 数据不足。
+- 过早微调很难证明收益。
+- Fine-tuning 应以 eval 指标提升为目标，而不是单独作为模型实验。
+
+较合理的触发条件：
+
+- Approved Catalog 扩展到几十到上百个工具。
+- Query set 覆盖多个 workflow family。
+- 已积累 validated plans、missed retrieval cases 和人工修正记录。
+- Lexical / vector / hybrid baseline 已稳定。
+
+届时可评估：
+
+- local bi-encoder retriever。
+- reranker for top-K candidates。
+- domain-specific embedding fine-tuning。
+
+## Relationship To Frontend And Agent Workflow
+
+Retrieval eval 的结果可以被前端轻量展示，但前端不应重新计算指标。
+
+后端 Agent workflow 使用 retriever 的规则保持不变：
+
+- Retriever 提供 planner candidate context。
+- Full Catalog validation 仍是准入边界。
+- 结构化 compile path 不依赖 retriever。
+- Retrieval miss 不应导致系统绕过 approved catalog。
+
+## Deliverables
+
+建议 PR 顺序：
+
+1. **Retrieval query set**
+   - 添加 `tests/fixtures/retrieval_queries.json`。
+   - 覆盖中英文、缩写、工具名显式、工具名隐式、负例。
+
+2. **Retrieval eval baseline**
+   - 添加 eval 脚本或测试。
+   - 输出 Recall@K、MRR、Role Coverage、Fallback Rate。
+   - 文档记录 lexical baseline。
+
+3. **Retriever interface**
+   - 抽象 lexical backend。
+   - 保持现有 artifact contract。
+
+4. **Vector backend prototype**
+   - 加入本地 vector index 或轻量 embedding backend。
+   - 不影响结构化入口。
+
+5. **Hybrid scoring**
+   - 融合 lexical 和 vector。
+   - 用 eval 证明效果。
+
+## Verification
+
+只修改评估文档时无需跑完整测试。
+
+修改 retriever 或 eval 代码时运行：
+
+Linux / macOS：
+
+```bash
+.venv/bin/python -m unittest discover -v
+```
+
+Windows PowerShell：
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -v
+```
+
+如果新增前端展示 retrieval metrics，还应运行：
+
+```powershell
+cd web
+npm run lint
+npm run test:catalog-retrieval
+npm run build
+```
