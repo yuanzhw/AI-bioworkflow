@@ -23,7 +23,7 @@ natural language request
 - 使用确定性 lexical scoring。
 - 输出 `score`、`matched_terms`、`matched_fields`、`reason`。
 - Tool 结果包含 `trust_status`。
-- 低置信度时记录 fallback。
+- recipe 或 tool 召回无匹配时触发 fallback，并在 artifact 中记录 `fallback_used` / `fallback_reason`。
 - Retrieval artifact 会保存到 run snapshot，并可在前端展示。
 - 完整 Catalog validation 仍使用全量 approved catalog。
 
@@ -224,6 +224,14 @@ Retrieval eval 的结果可以被前端轻量展示，但前端不应重新计�
 只修改评估文档时无需跑完整测试。
 
 修改 retriever 或 eval 代码时运行：
+
+Linux / macOS：
+
+```bash
+.venv/bin/python -m unittest discover -v
+```
+
+Windows PowerShell：
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -v
