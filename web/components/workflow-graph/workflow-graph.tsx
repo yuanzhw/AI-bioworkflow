@@ -10,24 +10,17 @@ import {
   type Edge,
   type NodeMouseHandler,
 } from "@xyflow/react";
-import { GitBranch, Loader2 } from "lucide-react";
+import { AlertCircle, GitBranch } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { buildRunEventsUrl } from "@/lib/api";
-import {
-  isTerminalRunStatus,
-  mergeRunEvent,
-  parseRunEventMessage,
-  readPayloadString,
-  runEventTypes,
-} from "@/lib/run-events";
-import type { JsonObject, RunEvent, RunStatus } from "@/lib/types";
+import type { JsonObject } from "@/lib/types";
 import {
   buildWorkflowGraph,
   type WorkflowGraph,
   type WorkflowGraphEdge,
   type WorkflowGraphNode,
+  type WorkflowGraphUnresolvedReference,
 } from "@/lib/workflow-graph";
 import { cn } from "@/lib/utils";
 import { GraphEmptyState } from "./graph-empty-state";
@@ -42,14 +35,6 @@ const nodeTypes = {
   workflowGraphNode: WorkflowNode,
 };
 
-const streamLabels: Record<WorkflowGraphStreamState, string> = {
-  disabled: "无事件流",
-  connecting: "连接中",
-  connected: "读取事件",
-  closed: "事件结束",
-  error: "事件流中断",
-};
-
 const TOP_LEVEL_NODE_HEIGHT = 106;
 const TOP_LEVEL_NODE_WIDTH = 252;
 const SCATTER_HEADER_HEIGHT = 104;
@@ -61,8 +46,6 @@ const CHILD_NODE_X = 52;
 const CHILD_NODE_Y = 94;
 const COLUMN_GAP = 380;
 const ROW_GAP = 32;
-
-type WorkflowGraphStreamState = "disabled" | "connecting" | "connected" | "closed" | "error";
 
 type PositionedNode = WorkflowGraphReactNode & {
   parentId?: string;
@@ -78,28 +61,23 @@ type NodeLayout = {
 
 type GraphNodeView = {
   node: WorkflowGraphNode;
-  relatedEvents: RunEvent[];
   status: WorkflowGraphNodeStatus;
+  unresolvedCount: number;
 };
 
 export function WorkflowGraphPanel({
-  eventsUrl,
-  status,
   workflowIr,
 }: {
-  eventsUrl: string | null;
-  status: RunStatus;
   workflowIr: JsonObject;
 }) {
   const graph = useMemo(() => buildWorkflowGraph(workflowIr), [workflowIr]);
-  const { events, streamState } = useWorkflowGraphEvents(eventsUrl, status);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const graphNodesById = useMemo(
     () => new Map(graph.nodes.map((node) => [node.id, node])),
     [graph.nodes],
   );
-  const nodeViews = useMemo(() => buildNodeViews(graph, events, status), [events, graph, status]);
+  const nodeViews = useMemo(() => buildNodeViews(graph), [graph]);
   const { edges, nodes } = useMemo(
     () => toReactFlowElements(graph, nodeViews, selectedNodeId),
     [graph, nodeViews, selectedNodeId],
@@ -121,9 +99,21 @@ export function WorkflowGraphPanel({
 
   const selectedNode = selectedNodeId ? graphNodesById.get(selectedNodeId) ?? null : null;
   const selectedView = selectedNodeId ? nodeViews.get(selectedNodeId) : null;
+  const hasGraph = graph.nodes.length > 0;
+  const unresolvedCount = graph.unresolvedReferences.length;
   const handleNodeClick: NodeMouseHandler = (_, node) => {
     setSelectedNodeId(node.id);
   };
+  const graphStatusLabel = !hasGraph
+    ? "DAG 不可用"
+    : unresolvedCount
+      ? "引用待审阅"
+      : "结构可用";
+  const graphStatusVariant = !hasGraph
+    ? "outline"
+    : unresolvedCount
+      ? "destructive"
+      : "secondary";
 
   return (
     <section className="mt-6 rounded-md border bg-white p-5">
@@ -134,23 +124,24 @@ export function WorkflowGraphPanel({
             <h2 className="font-semibold">Workflow DAG</h2>
             <Badge variant="outline">{graph.nodes.length} nodes</Badge>
             <Badge variant="outline">{graph.edges.length} edges</Badge>
+            {hasGraph && unresolvedCount ? (
+              <Badge variant="destructive" className="gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {unresolvedCount} unresolved
+              </Badge>
+            ) : null}
           </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            基于 Workflow IR 的 inputs、steps、scatter 和 outputs 构建依赖图。
+            基于 Workflow IR 的 inputs、steps、scatter 和 outputs 构建依赖图；该图展示编译时结构，不代表真实任务执行状态。
           </p>
         </div>
-        <Badge
-          variant={streamState === "connected" ? "secondary" : "outline"}
-          className="gap-1.5"
-        >
-          {streamState === "connected" || streamState === "connecting" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : null}
-          {streamLabels[streamState]}
+        <Badge variant={graphStatusVariant} className="gap-1.5">
+          {hasGraph && unresolvedCount ? <AlertCircle className="h-3.5 w-3.5" /> : null}
+          {graphStatusLabel}
         </Badge>
       </div>
 
-      {graph.nodes.length ? (
+      {hasGraph ? (
         <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="h-[38rem] overflow-hidden rounded-md border bg-background xl:h-[42rem]">
             <ReactFlowProvider>
@@ -181,7 +172,6 @@ export function WorkflowGraphPanel({
           </div>
           <NodeDetailPanel
             node={selectedNode}
-            relatedEvents={selectedView?.relatedEvents ?? []}
             status={selectedView?.status ?? "unavailable"}
           />
         </div>
@@ -192,83 +182,16 @@ export function WorkflowGraphPanel({
   );
 }
 
-function useWorkflowGraphEvents(
-  eventsUrl: string | null,
-  status: RunStatus,
-): { events: RunEvent[]; streamState: WorkflowGraphStreamState } {
-  const [events, setEvents] = useState<RunEvent[]>([]);
-  const [streamState, setStreamState] = useState<WorkflowGraphStreamState>(
-    eventsUrl ? "connecting" : "disabled",
-  );
-
-  useEffect(() => {
-    if (!eventsUrl) {
-      setStreamState("disabled");
-      return undefined;
-    }
-
-    let isClosed = false;
-    const eventSource = new EventSource(buildRunEventsUrl(eventsUrl));
-    setStreamState("connecting");
-
-    eventSource.onopen = () => {
-      if (!isClosed) {
-        setStreamState("connected");
-      }
-    };
-
-    eventSource.onerror = () => {
-      if (!isClosed) {
-        setStreamState(isTerminalRunStatus(status) ? "closed" : "error");
-      }
-      if (isTerminalRunStatus(status)) {
-        eventSource.close();
-      }
-    };
-
-    const handlers = runEventTypes.map((eventType) => {
-      const handler = (message: MessageEvent<string>) => {
-        const parsed = parseRunEventMessage(message);
-        if (!parsed) {
-          return;
-        }
-
-        setEvents((currentEvents) => mergeRunEvent(currentEvents, parsed));
-        if (parsed.type === "run.completed") {
-          setStreamState("closed");
-          eventSource.close();
-        }
-      };
-      eventSource.addEventListener(eventType, handler);
-      return { eventType, handler };
-    });
-
-    return () => {
-      isClosed = true;
-      handlers.forEach(({ eventType, handler }) => {
-        eventSource.removeEventListener(eventType, handler);
-      });
-      eventSource.close();
-    };
-  }, [eventsUrl, status]);
-
-  return { events, streamState };
-}
-
-function buildNodeViews(
-  graph: WorkflowGraph,
-  events: RunEvent[],
-  runStatus: RunStatus,
-): Map<string, GraphNodeView> {
+function buildNodeViews(graph: WorkflowGraph): Map<string, GraphNodeView> {
   return new Map(
     graph.nodes.map((node) => {
-      const relatedEvents = events.filter((event) => eventBelongsToNode(event, node));
+      const unresolvedCount = countNodeUnresolvedReferences(node);
       return [
         node.id,
         {
           node,
-          relatedEvents,
-          status: getNodeStatus(relatedEvents, runStatus),
+          status: unresolvedCount ? "unresolved" : "available",
+          unresolvedCount,
         },
       ];
     }),
@@ -295,7 +218,7 @@ function toReactFlowElements(
       type: "workflowGraphNode",
       data: {
         graphNode,
-        eventCount: nodeView?.relatedEvents.length ?? 0,
+        unresolvedCount: nodeView?.unresolvedCount ?? 0,
         status: nodeView?.status ?? "unavailable",
       },
       position: {
@@ -352,6 +275,15 @@ function toReactFlowEdge(edge: WorkflowGraphEdge): Edge {
     type: "smoothstep",
     zIndex: edge.kind === "output" ? 3 : edge.kind === "dependency" ? 2 : 1,
   };
+}
+
+function countNodeUnresolvedReferences(node: WorkflowGraphNode): number {
+  const references: WorkflowGraphUnresolvedReference[] = [
+    ...(node.metadata.call?.unresolvedReferences ?? []),
+    ...(node.metadata.scatter?.unresolvedReferences ?? []),
+    ...(node.metadata.workflowOutput?.unresolvedReferences ?? []),
+  ];
+  return references.length;
 }
 
 function calculateNodeLayouts(graph: WorkflowGraph): Map<string, NodeLayout> {
@@ -558,51 +490,6 @@ function average(values: number[]): number | null {
   return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
-function getNodeStatus(
-  relatedEvents: RunEvent[],
-  runStatus: RunStatus,
-): WorkflowGraphNodeStatus {
-  if (!relatedEvents.length) {
-    return runStatus === "running" ? "pending" : "unavailable";
-  }
-
-  const latestEvent = relatedEvents[relatedEvents.length - 1];
-  const payloadStatus = readPayloadString(latestEvent.payload, "status");
-
-  if (latestEvent.type === "node.failed" || payloadStatus === "failed") {
-    return "failed";
-  }
-  if (latestEvent.type === "node.started") {
-    return "running";
-  }
-  if (latestEvent.type === "node.completed" || payloadStatus === "succeeded") {
-    return "completed";
-  }
-
-  return "pending";
-}
-
-function eventBelongsToNode(event: RunEvent, node: WorkflowGraphNode): boolean {
-  const identifiers = new Set([node.id, node.label, node.sourceStepId]);
-
-  if (event.node && identifiers.has(event.node)) {
-    return true;
-  }
-
-  return [
-    "call_id",
-    "input_id",
-    "node_id",
-    "output_id",
-    "source_step_id",
-    "step_id",
-    "workflow_node_id",
-  ].some((key) => {
-    const value = readPayloadString(event.payload, key);
-    return value !== null && identifiers.has(value);
-  });
-}
-
 function getEdgeColor(kind: WorkflowGraphEdge["kind"]): string {
   if (kind === "input") {
     return "#0f766e";
@@ -618,13 +505,10 @@ function shouldShowEdgeLabel(edge: WorkflowGraphEdge): boolean {
 }
 
 function getMiniMapColor(node: WorkflowGraphReactNode): string {
-  if (node.data.status === "failed") {
+  if (node.data.status === "unresolved") {
     return "#ef4444";
   }
-  if (node.data.status === "running") {
-    return "#2563eb";
-  }
-  if (node.data.status === "completed") {
+  if (node.data.status === "available") {
     return "#0f766e";
   }
   return "#94a3b8";

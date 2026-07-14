@@ -22,6 +22,7 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 - **Agentic 架构**：基于 LangGraph 串联 IR Normalizer、Analyzer、Repairer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
 - **可复用服务与 API**：CLI 与 FastAPI 复用同一套 workflow/catalog service，避免界面层复制编译逻辑。
 - **执行后端边界**：提供可配置的 Execution Backend 抽象和 Cromwell REST client，用 contract tests 覆盖提交、轮询、outputs/metadata 与失败语义。
+- **Run history 与 DAG 审阅**：Next.js 工作台接入真实 run snapshot、SSE 时间线、历史详情、Workflow IR DAG 和失败 run 回放。
 - **模块化设计**：高度解耦的 State、Prompts、Nodes 与 Tools 设计，极佳的代码可维护性。
 
 ## 🛠️ 快速开始
@@ -179,10 +180,12 @@ $env:AI_BIOWORKFLOW_API_PORT = "8020"
 .\.venv\Scripts\python.exe -m src.api.server
 ```
 
-### 7. 启动 Web 工作台
+### 7. 启动 Web 工作台与历史回放
 
 前端位于 `web/`，作为独立的 Next.js 应用运行。`/workspace?example=rnaseq-deg`
-的“运行示例”会调用 FastAPI `POST /api/compile`，并轮询 run snapshot 显示状态摘要。
+的“运行示例”会调用 FastAPI `POST /api/compile`，订阅 SSE 事件流，并轮询 run snapshot
+显示 Plan、Workflow IR、WDL、Diagnostics 和失败摘要。`/runs` 会读取持久化 run history，
+`/runs/[runId]` 可以刷新回放同一次 run 的 timeline、artifacts、diagnostics 和 Workflow IR DAG。
 本地演示时需要分别启动 FastAPI 和 Next.js。前端默认读取本地 FastAPI：
 
 ```text
@@ -201,6 +204,12 @@ npm install
 ```powershell
 npm run dev
 ```
+
+常用演示入口：
+
+- `http://127.0.0.1:3000/workspace?example=rnaseq-deg`
+- `http://127.0.0.1:3000/runs`
+- `http://127.0.0.1:3000/catalog`
 
 如果后端 API 地址不同，复制 `web/.env.example` 为 `web/.env.local` 并调整：
 
@@ -270,6 +279,12 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 
 👉 **[Workflow IR 规范与后端映射](./docs/workflow-ir.md)**
 
+Web 产品化拆解与当前 W6 收口计划详见：
+
+👉 **[W5 DAG 与历史详情工作拆解](./docs/w5-dag-history-plan.md)**
+
+👉 **[W6 部署与作品集打磨工作拆解](./docs/w6-portfolio-launch-plan.md)**
+
 ## 📅 未来路线图 (Roadmap)
 
 - [x] 搭建基础 LangGraph 状态机。
@@ -289,7 +304,8 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 - [x] 记录一份可复现的 [Cromwell e2e 验证摘要](./docs/p0-e2e-verification.md)，包括 workflow id、最终状态和 output keys。
 - [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
 - [x] 完成 W4 工作台：结构化示例 / 自然语言 run 创建、snapshot 轮询、SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态展示。
-- [ ] 建设 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)。
+- [x] 完成 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)：真实 run 列表、详情回放、Workflow IR DAG、结构状态和失败 run 摘要。
+- [ ] 完成 [W6 部署与作品集打磨](./docs/w6-portfolio-launch-plan.md)：在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证

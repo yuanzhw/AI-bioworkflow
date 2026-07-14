@@ -446,9 +446,9 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 - [x] 结构化入口不依赖 retriever。
 - [x] 自然语言 run 记录 retriever 事件。
 - [x] Run snapshot 暴露 retrieval artifact。
-- [ ] 前端能展示候选 recipe/tools 和 `trust_status`。
+- [x] 前端能展示候选 recipe/tools 和 `trust_status`。
 - [x] 单测覆盖成功、fallback 和错误边界。
-- [ ] 文档说明内部 RAG 与外部工具发现的边界。
+- [x] 文档说明内部 RAG 与外部工具发现的边界。
 
 ## 面试展示叙述
 

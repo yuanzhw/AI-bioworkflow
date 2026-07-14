@@ -7,6 +7,7 @@ import {
   FileJson,
   FlaskConical,
   GitBranch,
+  History,
   Layers3,
   Network,
   ShieldCheck,
@@ -96,20 +97,20 @@ const systemSurfaces: Array<{
   },
   {
     title: "Timeline",
-    description: "展示 run 从 created 到终态的生命周期事件。",
+    description: "基于持久化 SSE envelope 回放 run 生命周期事件。",
     icon: GitBranch,
   },
   {
     title: "DAG",
-    description: "查看 calls、scatter 分组、依赖边和节点详情。",
+    description: "查看 Workflow IR 的 calls、scatter、依赖边和结构状态。",
     icon: Network,
   },
 ];
 
 const stackRows = [
   ["编译器核心", "Python 3.13、LangGraph、Pydantic、Jinja2"],
-  ["API 层", "FastAPI、SQLite 持久化、SSE 事件回放"],
-  ["Web 外壳", "Next.js、TypeScript、Tailwind、shadcn-style 组件"],
+  ["API 层", "FastAPI、SQLite run history、SSE 事件回放"],
+  ["Web 外壳", "Next.js、TypeScript、Tailwind、React Flow"],
   ["工作流目标", "Workflow IR、WDL 1.0、WOMtool / miniwdl 校验"],
 ];
 
@@ -123,20 +124,26 @@ export default function Home() {
           <div className="w-full max-w-[calc(100vw-3rem)] sm:max-w-2xl">
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="secondary">可解释的生信 Workflow 生成与编译系统</Badge>
-              <Badge variant="outline">W3 产品外壳</Badge>
+              <Badge variant="outline">W5 Run history + DAG</Badge>
             </div>
             <h1 className="mt-6 text-4xl font-semibold tracking-normal text-foreground sm:text-5xl lg:text-6xl">
               AI-bioworkflow
             </h1>
             <p className="mt-6 max-w-xl break-words text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
               从自然语言需求到结构化计划、Workflow IR 与可验证 WDL，
-              展示工具目录、静态分析、确定性渲染和诊断回放。
+              展示工具目录、静态分析、确定性渲染、DAG 审阅和历史回放。
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
                 <Link href={workspaceHref}>
                   打开 RNA-seq 示例
                   <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/runs">
+                  <History className="h-4 w-4" />
+                  查看 Run 历史
                 </Link>
               </Button>
               <Button asChild variant="outline">
@@ -148,7 +155,7 @@ export default function Home() {
               {[
                 ["边界", "LLM 负责规划"],
                 ["契约", "Recipe Tool Plan -> Workflow IR"],
-                ["验证", "Analyzer + WDL checker"],
+                ["回放", "Timeline + DAG + Diagnostics"],
               ].map(([label, body]) => (
                 <div key={label} className="rounded-md border bg-white/88 p-4 shadow-sm backdrop-blur">
                   <div className="font-semibold text-primary">{label}</div>
@@ -239,11 +246,11 @@ export default function Home() {
           <div className="max-w-2xl">
             <h2 className="text-2xl font-semibold tracking-normal">系统视图</h2>
             <p className="mt-3 text-muted-foreground">
-              产品外壳围绕 workflow review 最重要的产物和可观测记录组织。
+              工作台与历史详情围绕 workflow review 最重要的产物和可观测记录组织。
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href={workspaceHref}>预览工作台</Link>
+            <Link href={workspaceHref}>打开工作台</Link>
           </Button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

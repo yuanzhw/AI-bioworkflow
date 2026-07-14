@@ -27,7 +27,7 @@ export default async function WorkspacePage({
           </Button>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-normal">Workflow 工作台</h1>
-            <Badge variant="secondary">W4 Workbench</Badge>
+            <Badge variant="secondary">W5 Workbench</Badge>
             <Badge variant="outline">真实 run 接入</Badge>
           </div>
           <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -39,7 +39,7 @@ export default async function WorkspacePage({
           <Button asChild variant="outline">
             <Link href="/runs">
               <History className="h-4 w-4" />
-              Run 历史
+              Run 历史回放
             </Link>
           </Button>
           <Button asChild variant="outline">

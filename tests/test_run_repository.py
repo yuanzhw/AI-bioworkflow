@@ -176,6 +176,40 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertIn("workflow_ir", {artifact.name for artifact in snapshot.artifacts.manifest})
             self.assertIn("wdl", {artifact.name for artifact in snapshot.artifacts.manifest})
 
+    def test_named_records_override_legacy_fixed_columns_in_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RunRepository(Path(temp_dir) / "runs.sqlite3")
+            repository.create_run(
+                run_id="run_001",
+                kind="natural_language",
+                request="Run demo.",
+                check_performed=False,
+                events_url="/api/runs/run_001/events",
+            )
+            repository.save_artifacts(
+                "run_001",
+                WorkflowArtifacts(
+                    catalog_retrieval={"strategy": "legacy"},
+                    plan={"workflow": {"recipe": "legacy"}},
+                    workflow_ir={"workflow": {"name": "LegacyDemo"}},
+                    wdl="version 1.0\nworkflow LegacyDemo {}",
+                ),
+            )
+
+            repository.save_json_artifact("run_001", "catalog_retrieval", {"strategy": "record"})
+            repository.save_json_artifact("run_001", "plan", {"workflow": {"recipe": "record"}})
+            repository.save_json_artifact("run_001", "workflow_ir", {})
+            repository.save_text_artifact("run_001", "wdl", "")
+
+            snapshot = repository.get_snapshot("run_001")
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.artifacts.catalog_retrieval, {"strategy": "record"})
+            self.assertEqual(snapshot.artifacts.extras["catalog_retrieval"], {"strategy": "record"})
+            self.assertEqual(snapshot.artifacts.plan, {"workflow": {"recipe": "record"}})
+            self.assertEqual(snapshot.artifacts.workflow_ir, {})
+            self.assertEqual(snapshot.artifacts.wdl, "")
+
     def test_named_extra_artifacts_are_exposed_in_snapshot(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repository = RunRepository(Path(temp_dir) / "runs.sqlite3")

@@ -32,7 +32,7 @@
   - 自然语言模式调用 `POST /api/runs`，planner 失败时展示后端持久化的失败诊断。
   - 前端会轮询 `GET /api/runs/{run_id}`，展示 run 状态、WDL 摘要、校验信息和诊断计数。
   - 前端会订阅 `GET /api/runs/{run_id}/events` SSE 事件流，展示 run 时间线。
-  - Plan / Workflow IR / WDL / Diagnostics tabs 来自真实 run snapshot。
+  - Catalog Retrieval / Plan / Workflow IR / WDL / Diagnostics tabs 来自真实 run snapshot。
   - 默认本地 API base URL 为 `http://127.0.0.1:8010`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
 
 ## 产品行为
@@ -46,7 +46,7 @@
 
 - 输入面板展示请求文本、运行模式、`check` 开关和当前 run 状态。
 - 执行时间线展示每个阶段的 pending / running / completed / failed 状态。
-- 产物查看区展示 Plan、IR、WDL 和 Diagnostics。
+- 产物查看区展示 Catalog Retrieval、Plan、IR、WDL 和 Diagnostics。
 - 失败状态保留已产生的事件和 diagnostics，体现可审计失败，而不是只显示通用错误提示。
 
 ## 任务拆分
@@ -116,6 +116,7 @@ SSE 断开但 run 未终态时，页面应显示连接状态，并允许自动�
 
 产物区从当前静态卡片改成真实 tabs：
 
+- **Catalog**：展示自然语言 run 的 top recipe/tools、`score`、`matched_terms`、`matched_fields`、`trust_status` 和 fallback 原因；结构化入口为空状态。
 - **Plan**：展示 Recipe Tool Plan JSON；结构化编译 payload 是 Recipe Tool Plan 时应可见。
 - **IR**：展示 Workflow IR JSON，优先使用 pretty JSON。
 - **WDL**：展示生成的 WDL 1.0 文本。
@@ -177,7 +178,7 @@ W4 已把工作台顶部、运行模式、时间线、artifact tabs 和失败态
   - 页面能从 accepted run 轮询到 `created` / `running` / `succeeded` / `failed` snapshot。
   - 运行卡片展示 run id、状态、WDL 摘要、校验信息、analysis error 计数和 repair action 计数。
   - Timeline 能实时显示 Compiler Graph 节点进度。
-  - Plan、Workflow IR、WDL 和 Diagnostics 来自真实 run snapshot tabs。
+  - Catalog Retrieval、Plan、Workflow IR、WDL 和 Diagnostics 来自真实 run snapshot tabs。
   - 自然语言模式在 planner 环境可用时能走 `POST /api/runs`；环境不可用时显示明确失败诊断。
   - 失败 run 仍保留已产生事件、artifact 和 diagnostics。
 
