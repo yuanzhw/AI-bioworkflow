@@ -279,9 +279,11 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 
 👉 **[Workflow IR 规范与后端映射](./docs/workflow-ir.md)**
 
-Web 产品化拆解与当前 W5 验收口径详见：
+Web 产品化拆解与当前 W6 收口计划详见：
 
 👉 **[W5 DAG 与历史详情工作拆解](./docs/w5-dag-history-plan.md)**
+
+👉 **[W6 部署与作品集打磨工作拆解](./docs/w6-portfolio-launch-plan.md)**
 
 ## 📅 未来路线图 (Roadmap)
 
@@ -303,7 +305,7 @@ Web 产品化拆解与当前 W5 验收口径详见：
 - [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
 - [x] 完成 W4 工作台：结构化示例 / 自然语言 run 创建、snapshot 轮询、SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态展示。
 - [x] 完成 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)：真实 run 列表、详情回放、Workflow IR DAG、结构状态和失败 run 摘要。
-- [ ] W6 部署与作品集打磨：在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航。
+- [ ] 完成 [W6 部署与作品集打磨](./docs/w6-portfolio-launch-plan.md)：在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证
