@@ -1905,6 +1905,28 @@ result 和 policy 边界。
 - P2 policy 允许 Reviewer 通过 list-item pointer 调整 step/call ordering。
 - 该权限不扩展到整体替换 `workflow.steps` 或修改 step 内部 task 选择。
 
+### `test_policy_rejects_move_outside_workflow_step_or_call_items`
+
+输入：
+
+- 分别尝试 `move`：
+  - `/workflow/outputs/clean_r1`
+  - `/workflow/steps/0/inputs/r2`
+  - `/tasks/fastp/outputs/clean_r1/value`
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 每个 patch 都抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- `move` 只服务于 `/workflow/steps/<index>` 或 `/workflow/calls/<index>` 的排序修复。
+- Reviewer 不能用 `move` 修改 workflow output、call input wiring 或 task output literal。
+
 ### `test_repair_result_requires_parsed_patch_or_rejection_reason`
 
 输入：

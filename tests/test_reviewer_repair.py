@@ -230,6 +230,32 @@ class ReviewerRepairContractTests(unittest.TestCase):
 
         self.assertIs(validated, patch)
 
+    def test_policy_rejects_move_outside_workflow_step_or_call_items(self):
+        move_paths = [
+            "/workflow/outputs/clean_r1",
+            "/workflow/steps/0/inputs/r2",
+            "/tasks/fastp/outputs/clean_r1/value",
+        ]
+
+        for path in move_paths:
+            with self.subTest(path=path):
+                patch = ReviewerIRPatch.model_validate(
+                    {
+                        "summary": "Move a non-ordering path.",
+                        "actions": [
+                            {
+                                "operation": "move",
+                                "from_path": path,
+                                "path": path,
+                                "reason": "MOVE is reserved for step or call item ordering.",
+                            }
+                        ],
+                    }
+                )
+
+                with self.assertRaises(ReviewerPatchPolicyError):
+                    validate_reviewer_patch_policy(patch)
+
     def test_repair_result_requires_parsed_patch_or_rejection_reason(self):
         patch = ReviewerIRPatch.model_validate(
             {

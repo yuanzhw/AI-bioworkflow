@@ -273,6 +273,9 @@ def _iter_action_paths(action: ReviewerPatchAction) -> list[tuple[str, str]]:
 
 
 def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
+    if operation == ReviewerPatchOperation.MOVE:
+        return _is_workflow_step_or_call_path(path)
+
     if path.startswith("/workflow/outputs/"):
         return True
 
@@ -280,9 +283,6 @@ def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
         return True
 
     if _is_call_input_path(path):
-        return True
-
-    if operation == ReviewerPatchOperation.MOVE and _is_workflow_step_or_call_path(path):
         return True
 
     return False
