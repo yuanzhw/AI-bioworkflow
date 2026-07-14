@@ -1744,6 +1744,143 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 
 - API 层后续可以将未知 catalog 资源稳定映射为 404。
 
+## `tests/test_reviewer_repair.py`
+
+该文件验证 P2 Reviewer IR 修复闭环的第一批契约模型和 patch policy skeleton。
+它不调用真实 LLM provider，也不接入 Compiler Graph 路由；只固定 request、patch、
+result 和 policy 边界。
+
+### `test_reviewer_repair_request_accepts_workflow_ir_and_minimal_catalog_context`
+
+输入：
+
+- 一个最小 Workflow IR。
+- failure stage：`analyzer`。
+- Analyzer diagnostic：`call 'qc' is missing input 'r2'`。
+- 当前 workflow 已使用的 approved recipe/tool metadata。
+
+执行：
+
+- 构造 `ReviewerRepairRequest`。
+
+期望输出：
+
+- request 保留 `failure_stage == analyzer`。
+- `workflow_ir` 被校验为 Workflow IR model。
+- catalog context 只包含当前 workflow 的 approved tool metadata。
+- constraints 默认包含允许的 patch operation。
+
+覆盖点：
+
+- Reviewer 请求使用结构化数据，而不是在节点之间传递自由 prompt 文本。
+- P2 初版只向 Reviewer 暴露当前 workflow 已使用的 approved catalog metadata。
+
+### `test_reviewer_patch_model_rejects_invalid_shape`
+
+输入：
+
+- operation 为 `rewrite`。
+- path 不是绝对 JSON pointer。
+- confidence 为 `1.5`。
+
+执行：
+
+- 构造 `ReviewerIRPatch`。
+
+期望输出：
+
+- 抛出 `ValidationError`。
+
+覆盖点：
+
+- Reviewer patch 必须先通过 schema validation。
+
+### `test_policy_accepts_allowed_workflow_ir_patch`
+
+输入：
+
+- 一个给 `/workflow/steps/0/inputs/r2` 增加 wiring 的 patch。
+- catalog reference：`fastp:1.3.3`。
+- 当前 workflow approved catalog context。
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- policy validation 返回原 patch。
+
+覆盖点：
+
+- P2 policy 允许 Reviewer 在 Workflow IR 内修复 call input wiring。
+- catalog reference 必须来自当前 workflow approved context。
+
+### `test_policy_rejects_wdl_catalog_runtime_and_resource_edits`
+
+输入：
+
+- 分别尝试 patch：
+  - `/current_wdl`
+  - `/catalog/tools/fastp`
+  - `/tasks/fastp/command`
+  - `/tasks/fastp/runtime/docker`
+  - `/tasks/fastp/runtime/cpu`
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 每个 patch 都抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- Reviewer 不能修改最终 WDL、Catalog、command template、runtime image 或 resource
+  sizing fields。
+
+### `test_policy_rejects_catalog_references_outside_current_workflow_context`
+
+输入：
+
+- patch 本身只改 `/workflow/outputs/clean_r1`。
+- `catalog_references` 包含当前 workflow context 外的 `star:2.7.11b`。
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- Reviewer 不能借由 catalog references 引入未传入的候选工具上下文。
+
+### `test_repair_result_requires_parsed_patch_or_rejection_reason`
+
+输入：
+
+- `patch_proposed` result。
+- 缺失 patch 的 `patch_proposed` result。
+- 缺失 `rejection_reason` 的 `policy_rejected` result。
+
+执行：
+
+- 构造 `ReviewerRepairResult`。
+
+期望输出：
+
+- 合法 `patch_proposed` 保留 parsed patch。
+- 缺失 patch 或 rejection reason 的结果抛出 `ValidationError`。
+
+覆盖点：
+
+- P2 只持久化 parsed patch 与 rejection reason，不把 raw Reviewer output 作为默认
+  artifact。
+
 ## `tests/test_graph.py`
 
 该文件验证 Compiler Graph、Analyzer、Renderer 和 deterministic repairer 的交互。
@@ -3573,6 +3710,7 @@ npm run test:catalog-retrieval
 - Analyzer 对引用、optional input、scatter output 类型提升的处理。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。
+- Reviewer repair request / patch / result 契约模型与 P2 patch policy skeleton。
 - Workflow service 对结构化编译入口、自然语言规划后编译入口和 API 友好结果对象的封装。
 - FastAPI DTO 对 workflow、catalog 和 event envelope 的输入输出契约。
 - FastAPI endpoints 对 W0 workflow/catalog services 的复用、HTTP 状态映射和响应序列化。
@@ -3588,7 +3726,8 @@ npm run test:catalog-retrieval
 - 多 recipe、多工具候选和更复杂 tool selection。
 - 参数范围错误以外的更多 Tool Catalog schema 边界。
 - nested scatter、conditional step、subworkflow 等 roadmap feature。
-- Reviewer LLM / Resource Agent / Bioinfo Reviewer 等规划中 Agent。
+- Reviewer provider、Compiler Graph 路由、Run observability、Resource Agent 和
+  Bioinfo Reviewer 等规划中 Agent。
 - Nextflow 或其他 backend。
 - 真实自然语言模型调用的在线集成测试。
 - Next.js 工作台、DAG 可视化和 run history 的浏览器级视觉回归测试。
