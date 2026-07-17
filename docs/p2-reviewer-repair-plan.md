@@ -134,7 +134,8 @@ P2 应引入明确的 request、patch 和 result model，而不是在 compiler n
 - `policy_rejected`
 - `model_error`
 
-只有在经过脱敏且不包含 secrets 时，才可以把 raw Reviewer output 作为诊断材料保存。
+P2 初版不保存 raw Reviewer output；只持久化脱敏后的 parsed patch data、
+`rejection_reason` 和必要 diagnostics。
 
 ## Patch Policy
 
@@ -311,12 +312,13 @@ Windows PowerShell：
 - [ ] 最终 diagnostics 能说明成功、拒绝、次数耗尽或 model error。
 - [ ] 测试覆盖成功、拒绝、no-op、次数耗尽和 Reviewer 不可用路径。
 
-## 待确认问题
+## 已确认的 P2.1 决策
 
-- Reviewer 尝试次数应复用现有 `repair_count`，还是拆成
-  `deterministic_repair_count` 和 `reviewer_repair_count`？
-- P2 初版是否只支持 Analyzer failures，第二个 PR 再支持 Checker failures；还是从
-  一开始就用同一套 policy 支持两者？
-- 是否需要保存 raw Reviewer output，还是只持久化脱敏后的 parsed patch data？
-- 哪些最小 Catalog context 足够支撑 P2，同时又不会重复当前 Catalog Retriever
-  payload？
+- Contract 同时保留 `analyzer` 与 `checker` failure stage，便于后续扩展；实现路由
+  先覆盖 Analyzer failure，Checker / WDL validation failure 在后续 PR 接入。
+- Reviewer provider 结果只持久化脱敏后的 parsed patch、`rejection_reason` 和
+  diagnostics；不默认保存 raw Reviewer output。
+- `catalog_context` 只传当前 workflow 已使用的 approved recipe/tool metadata，
+  不复用完整 Catalog Retriever payload，也不提供候选工具重选上下文。
+- Reviewer 尝试次数后续实现宜拆成 deterministic 与 Reviewer 计数，便于 run
+  diagnostics 和前端展示区分两类修复来源。
