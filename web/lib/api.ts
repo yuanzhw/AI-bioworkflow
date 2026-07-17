@@ -17,6 +17,26 @@ export const apiBaseUrl =
 
 export const apiDocsUrl = `${apiBaseUrl}/docs`;
 
+export function formatApiError(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  const message = error.message;
+  const lowerMessage = message.toLowerCase();
+  const isConnectionFailure =
+    lowerMessage.includes("fetch failed") ||
+    lowerMessage.includes("failed to fetch") ||
+    lowerMessage.includes("econnrefused") ||
+    lowerMessage.includes("networkerror");
+
+  if (isConnectionFailure) {
+    return `FastAPI 服务暂时不可达（${apiBaseUrl}）。请确认 API 在线后重试。`;
+  }
+
+  return message || fallback;
+}
+
 type JsonRequestInit = RequestInit & {
   next?: {
     revalidate?: number;

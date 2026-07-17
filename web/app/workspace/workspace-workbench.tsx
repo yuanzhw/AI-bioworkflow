@@ -23,7 +23,9 @@ import { Button } from "@/components/ui/button";
 import {
   createNaturalLanguageRun,
   createStructuredCompileRun,
+  formatApiError,
   getRunSnapshot,
+  apiDocsUrl,
 } from "@/lib/api";
 import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
 import { rnaseqExamplePrompt, rnaseqRecipePlan, rnaseqRecipeSteps } from "@/lib/examples";
@@ -114,10 +116,7 @@ function getStatusIcon(status: RunStatus, isPolling: boolean) {
 }
 
 function formatRunError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "请求处理失败，请稍后重试。";
+  return formatApiError(error, "请求处理失败，请稍后重试。");
 }
 
 function validationLabel(diagnostics: DiagnosticReport): string {
@@ -369,9 +368,16 @@ export function WorkspaceWorkbench({
           </div>
 
           {submitErrorMessage ? (
-            <div className="mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-background p-4 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
-              <span className="break-words">{submitErrorMessage}</span>
+            <div className="mt-4 rounded-md border border-destructive/40 bg-background p-4">
+              <div className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
+                <span className="break-words">{submitErrorMessage}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href={apiDocsUrl}>查看 API 文档</Link>
+                </Button>
+              </div>
             </div>
           ) : null}
         </section>
@@ -405,9 +411,16 @@ export function WorkspaceWorkbench({
           </div>
 
           {pollErrorMessage ? (
-            <div className="mt-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-background p-4 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
-              <span className="break-words">Run 状态查询失败：{pollErrorMessage}</span>
+            <div className="mt-4 rounded-md border border-destructive/40 bg-background p-4">
+              <div className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
+                <span className="break-words">Run 状态查询失败：{pollErrorMessage}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/runs">查看历史</Link>
+                </Button>
+              </div>
             </div>
           ) : null}
 

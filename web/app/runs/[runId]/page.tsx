@@ -18,7 +18,7 @@ import { CatalogRetrievalSummary } from "@/components/run/catalog-retrieval-summ
 import { RunEventsTimeline } from "@/components/run/run-events-timeline";
 import { RunFailureSummary } from "@/components/run/run-failure-summary";
 import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
-import { getRunSnapshot } from "@/lib/api";
+import { apiDocsUrl, formatApiError, getRunSnapshot } from "@/lib/api";
 import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
 import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
@@ -95,7 +95,7 @@ function getRequestLabel(request: string | JsonObject | null): string {
 
 function formatError(error: unknown): string {
   console.error("Failed to load run detail.", error);
-  return "Run 详情暂时无法读取，请确认 FastAPI 服务正在运行，或从历史列表重新进入。";
+  return formatApiError(error, "Run 详情暂时无法读取，请确认 FastAPI 服务正在运行，或从历史列表重新进入。");
 }
 
 function StatItem({ label, value }: { label: string; value: string }) {
@@ -140,7 +140,7 @@ function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
               {statusLabels[snapshot.status]}
             </Badge>
             <Badge variant="outline">{kindLabel}</Badge>
-            <Badge variant="secondary">W5 详情回放</Badge>
+            <Badge variant="secondary">可回放详情</Badge>
           </div>
           <h1 className="mt-4 break-words text-3xl font-semibold tracking-normal">
             Run 详情回放
@@ -262,6 +262,17 @@ export default async function RunDetailPage({
             <p className="mt-3 break-words text-sm leading-6 text-muted-foreground">
               {errorMessage}
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href={rnaseqDemoWorkspaceHref}>
+                  <RotateCcw className="h-4 w-4" />
+                  运行示例
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={apiDocsUrl}>查看 API 文档</Link>
+              </Button>
+            </div>
           </div>
         </div>
       )}

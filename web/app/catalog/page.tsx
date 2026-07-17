@@ -1,10 +1,10 @@
-import { ArrowLeft, CheckCircle2, Container, Database, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Container, Database, RotateCcw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiDocsUrl } from "@/lib/api";
-import { rnaseqRecipeSteps } from "@/lib/examples";
+import { rnaseqDemoWorkspaceHref, rnaseqRecipeSteps } from "@/lib/examples";
 
 const tools = [
   ["fastp", "读段质量控制", "quay.io/biocontainers/fastp"],
@@ -24,17 +24,24 @@ export default function CatalogPage() {
         </Link>
       </Button>
 
-      <div className="mb-8 max-w-3xl">
-        <div className="flex flex-wrap gap-3">
-          <Badge variant="secondary">W3 静态预览</Badge>
-          <Badge variant="outline">示例数据</Badge>
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="max-w-3xl">
+          <div className="flex flex-wrap gap-3">
+            <Badge variant="secondary">W6 Catalog boundary</Badge>
+            <Badge variant="outline">RNA-seq 示例</Badge>
+          </div>
+          <h1 className="mt-4 text-3xl font-semibold tracking-normal">Recipe 与 Tool Catalog 预览</h1>
+          <p className="mt-3 leading-7 text-muted-foreground">
+            Catalog 是生信步骤、准入工具、命令模板、输出 schema 和 runtime container 的正式边界。
+            当前页面用 RNA-seq DEG 示例解释目录契约；工作台和历史页会展示这些边界如何约束 Plan、IR 和 WDL。
+          </p>
         </div>
-        <h1 className="mt-4 text-3xl font-semibold tracking-normal">Recipe 与 Tool Catalog 预览</h1>
-        <p className="mt-3 leading-7 text-muted-foreground">
-          Catalog 是生信步骤、准入工具、命令模板、输出 schema 和 runtime container 的正式边界。
-          当前页面使用 RNA-seq 示例说明目录页的信息结构；真实 recipe / tool 数据会在后续从
-          FastAPI catalog endpoints 读取。
-        </p>
+        <Button asChild variant="outline">
+          <Link href={rnaseqDemoWorkspaceHref}>
+            <RotateCcw className="h-4 w-4" />
+            运行 RNA-seq 示例
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -90,7 +97,7 @@ export default function CatalogPage() {
           <div>
             <h2 className="font-semibold">Catalog 页面边界</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              W3 先固定页面信息架构，避免把工具选择逻辑放进前端。
+              页面只解释 Catalog 契约；工具选择、命令模板和容器来源仍由后端 Catalog 约束。
             </p>
           </div>
           <Button asChild variant="outline">
@@ -120,9 +127,9 @@ export default function CatalogPage() {
             </p>
           </div>
           <div className="rounded-md border bg-background p-4">
-            <div className="font-semibold text-primary">后续接入</div>
+            <div className="font-semibold text-primary">API contract</div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              从 `/api/recipes` 和 `/api/tools` 读取真实 catalog，并支持工具详情页。
+              `/api/recipes` 和 `/api/tools` 保留为 Catalog 查询入口；前端不推断或替换工具定义。
             </p>
           </div>
         </div>
