@@ -14,7 +14,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listRuns } from "@/lib/api";
+import { apiDocsUrl, formatApiError, listRuns } from "@/lib/api";
 import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 import type { RunListResponse, RunStatus, RunSummary } from "@/lib/types";
 
@@ -94,7 +94,7 @@ function formatDateTime(value: string | null): string {
 
 function formatError(error: unknown): string {
   console.error("Failed to load run history.", error);
-  return "Run 历史记录暂时无法读取，请确认 FastAPI 服务正在运行后重试。";
+  return formatApiError(error, "Run 历史记录暂时无法读取，请确认 FastAPI 服务正在运行后重试。");
 }
 
 function buildRunsHref(status: RunStatus | "all", page = 1): string {
@@ -265,7 +265,7 @@ export default async function RunsPage({
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
           <div className="flex flex-wrap gap-3">
-            <Badge variant="secondary">W5 历史列表</Badge>
+            <Badge variant="secondary">W6 demo readiness</Badge>
             <Badge variant="outline">真实 run 数据</Badge>
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-normal">Run 回放与审计</h1>
@@ -314,6 +314,17 @@ export default async function RunsPage({
                 历史记录读取失败
               </div>
               <p className="mt-2 break-words text-sm leading-6 text-muted-foreground">{errorMessage}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link href={rnaseqDemoWorkspaceHref}>
+                    <RotateCcw className="h-4 w-4" />
+                    运行示例
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={apiDocsUrl}>查看 API 文档</Link>
+                </Button>
+              </div>
             </div>
           ) : runList ? (
             <RunsList firstPageHref={buildRunsHref(selectedFilter)} response={runList} />
