@@ -256,6 +256,9 @@ def validate_reviewer_patch_policy(
 
 def _validate_action_policy(action: ReviewerPatchAction) -> list[str]:
     violations = []
+    if action.operation == ReviewerPatchOperation.MOVE:
+        violations.extend(_validate_move_policy(action))
+
     for label, path in _iter_action_paths(action):
         if _is_forbidden_path(path):
             violations.append(f"{label} path '{path}' crosses a forbidden Reviewer repair boundary")
@@ -263,6 +266,18 @@ def _validate_action_policy(action: ReviewerPatchAction) -> list[str]:
         if not _is_allowed_path(path, action.operation):
             violations.append(f"{label} path '{path}' is outside the P2 Reviewer patch allowlist")
     return violations
+
+
+def _validate_move_policy(action: ReviewerPatchAction) -> list[str]:
+    source_collection = _workflow_step_or_call_collection(action.from_path or "")
+    target_collection = _workflow_step_or_call_collection(action.path)
+    if source_collection is None or target_collection is None:
+        return []
+    if source_collection != target_collection:
+        return [
+            "move patch actions must stay within the same workflow steps or calls collection"
+        ]
+    return []
 
 
 def _iter_action_paths(action: ReviewerPatchAction) -> list[tuple[str, str]]:
@@ -297,7 +312,14 @@ def _is_workflow_output_path(path: str) -> bool:
 
 
 def _is_workflow_step_or_call_path(path: str) -> bool:
-    return bool(re.match(r"^/workflow/(steps|calls)/[0-9]+$", path))
+    return _workflow_step_or_call_collection(path) is not None
+
+
+def _workflow_step_or_call_collection(path: str) -> str | None:
+    match = re.match(r"^/workflow/(steps|calls)/[0-9]+$", path)
+    if match is None:
+        return None
+    return match.group(1)
 
 
 def _is_forbidden_path(path: str) -> bool:

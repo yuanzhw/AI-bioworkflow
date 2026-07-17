@@ -1948,6 +1948,27 @@ result 和 policy 边界。
 - `move` 只服务于 `/workflow/steps/<index>` 或 `/workflow/calls/<index>` 的排序修复。
 - Reviewer 不能用 `move` 修改 workflow output、call input wiring 或 task output literal。
 
+### `test_policy_rejects_move_between_workflow_steps_and_calls`
+
+输入：
+
+- 分别尝试 `move`：
+  - `from_path = /workflow/steps/1`，`path = /workflow/calls/0`
+  - `from_path = /workflow/calls/1`，`path = /workflow/steps/0`
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 每个 patch 都抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- `move` 只能在同一个 workflow collection 内调整排序。
+- Reviewer 不能在 canonical `workflow.steps` 和 compatibility `workflow.calls` 之间移动结构。
+
 ### `test_repair_result_requires_parsed_patch_or_rejection_reason`
 
 输入：

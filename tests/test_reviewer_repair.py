@@ -281,6 +281,31 @@ class ReviewerRepairContractTests(unittest.TestCase):
                 with self.assertRaises(ReviewerPatchPolicyError):
                     validate_reviewer_patch_policy(patch)
 
+    def test_policy_rejects_move_between_workflow_steps_and_calls(self):
+        moves = [
+            ("/workflow/steps/1", "/workflow/calls/0"),
+            ("/workflow/calls/1", "/workflow/steps/0"),
+        ]
+
+        for from_path, path in moves:
+            with self.subTest(from_path=from_path, path=path):
+                patch = ReviewerIRPatch.model_validate(
+                    {
+                        "summary": "Move across workflow collections.",
+                        "actions": [
+                            {
+                                "operation": "move",
+                                "from_path": from_path,
+                                "path": path,
+                                "reason": "Cross-collection moves are structural changes.",
+                            }
+                        ],
+                    }
+                )
+
+                with self.assertRaisesRegex(ReviewerPatchPolicyError, "same workflow"):
+                    validate_reviewer_patch_policy(patch)
+
     def test_repair_result_requires_parsed_patch_or_rejection_reason(self):
         patch = ReviewerIRPatch.model_validate(
             {
