@@ -198,8 +198,10 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("fastp -i ~{r1} \\\n    -I ~{r2}", wdl)
         self.assertIn("-I ~{r2} \\\n    -o clean_R1.fq.gz", wdl)
         self.assertIn("-O clean_R2.fq.gz \\\n    --html fastp.html", wdl)
+        self.assertIn('index_path="~{index}"; case "$index_path" in *.tar.gz|*.tgz)', wdl)
+        self.assertIn('tar -xzf "$index_path" -C salmon_index_input', wdl)
         self.assertIn("salmon quant \\\n    -l ~{lib_type}", wdl)
-        self.assertIn("-l ~{lib_type} \\\n    -i ~{index}", wdl)
+        self.assertIn('-l ~{lib_type} \\\n    -i "$index_path"', wdl)
         self.assertIn("run_deseq2.R \\\n    --counts ~{counts}", wdl)
 
     def test_reference_prep_plan_resolves_to_valid_renderable_ir(self):

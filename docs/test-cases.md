@@ -1303,6 +1303,8 @@ OK (skipped=2)
   - `File multiqc_report = report.multiqc_report`
   - `quant_files = quantify.quant_file`
   - Salmon 默认 library type 渲染为 `lib_type = "A"` 和 `-l ~{lib_type}`
+  - Salmon index 输入先进入 `index_path`，当输入是 `.tar.gz` / `.tgz` 时会解包到工作目录；非归档路径继续直接传给 `salmon quant`
+  - `salmon quant` 使用 `-i "$index_path"`，覆盖 reference prep 归档输出与既有预解包 index 目录两种输入形态
   - `--contrast ~{contrast}`
   - `contrast = "condition"`
   - fastp paired-end 参数片段以 shell 续行形式渲染，例如 `-I ~{r2} \`
