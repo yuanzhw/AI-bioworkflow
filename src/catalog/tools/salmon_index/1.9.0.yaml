@@ -1,0 +1,36 @@
+id: salmon_index
+version: "1.9.0"
+aliases:
+  - Salmon index
+  - transcriptome index
+  - RNA-seq reference index
+description: Build a Salmon transcriptome index archive from a transcriptome FASTA.
+
+inputs:
+  transcriptome_fasta:
+    type: File
+    required: true
+    description: Transcriptome FASTA file.
+
+params:
+  kmer_size:
+    type: Int
+    default: 31
+    min: 1
+    description: K-mer size passed to salmon index.
+
+outputs:
+  index_archive:
+    type: File
+    value: '"salmon_index.tar.gz"'
+
+command_template: |
+  salmon index
+  -t ~{transcriptome_fasta}
+  -i salmon_index
+  -k ~{kmer_size} && tar -czf salmon_index.tar.gz salmon_index
+
+runtime:
+  docker: quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0
+  cpu: 4
+  memory: 8G

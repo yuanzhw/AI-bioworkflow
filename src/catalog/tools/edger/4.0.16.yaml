@@ -1,0 +1,54 @@
+id: edger
+version: "4.0.16"
+aliases:
+  - edgeR
+  - differential expression
+  - DEG
+  - quasi-likelihood differential expression
+description: Differential expression analysis from a gene count matrix using edgeR quasi-likelihood testing.
+
+inputs:
+  counts:
+    type: File
+    required: true
+    description: Gene count matrix with a gene_id column.
+  sample_groups:
+    type: File
+    required: true
+    description: Sample metadata table with sample_id and group labels.
+
+params:
+  contrast:
+    type: String
+    default: condition
+    description: Sample metadata column to use as the two-group contrast.
+  min_count:
+    type: Int
+    default: 10
+    min: 0
+    description: Minimum count used for expression filtering.
+  fdr:
+    type: Float
+    default: 0.05
+    min: 0
+    max: 1
+    description: FDR threshold used to annotate significant rows.
+
+outputs:
+  deg_table:
+    type: File
+    value: '"differential_expression.tsv"'
+
+command_template: |
+  run_edger.R
+  --counts ~{counts}
+  --sample-groups ~{sample_groups}
+  --contrast ~{contrast}
+  --min-count ~{min_count}
+  --fdr ~{fdr}
+  --output differential_expression.tsv
+
+runtime:
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/edger:4.0.16-r1
+  cpu: 4
+  memory: 16G

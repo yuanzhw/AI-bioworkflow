@@ -1,0 +1,28 @@
+id: gtf_tx2gene
+version: "1.0.0"
+aliases:
+  - tx2gene
+  - GTF transcript to gene mapping
+  - transcript gene map
+description: Extract a tx2gene table from transcript_id and gene_id attributes in a GTF file.
+
+inputs:
+  annotation_gtf:
+    type: File
+    required: true
+    description: Gene annotation GTF file.
+
+outputs:
+  tx2gene:
+    type: File
+    value: '"tx2gene.tsv"'
+
+command_template: |
+  run_gtf_tx2gene.py
+  --annotation-gtf ~{annotation_gtf}
+  --output tx2gene.tsv
+
+runtime:
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/gtf_tx2gene:1.0.0-r1
+  cpu: 1
+  memory: 1G

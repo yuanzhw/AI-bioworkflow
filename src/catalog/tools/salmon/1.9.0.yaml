@@ -40,9 +40,9 @@ outputs:
       - multiqc_input
 
 command_template: |
-  salmon quant
+  index_path="~{index}"; case "$index_path" in *.tar.gz|*.tgz) mkdir -p salmon_index_input; tar -xzf "$index_path" -C salmon_index_input; index_path="$(find salmon_index_input -mindepth 1 -maxdepth 1 -type d | head -n 1)"; [ -n "$index_path" ] || { echo "failed to locate unpacked Salmon index directory" >&2; exit 1; };; esac; salmon quant
   -l ~{lib_type}
-  -i ~{index}
+  -i "$index_path"
   -1 ~{r1}
   -2 ~{r2}
   -p ~{thread}

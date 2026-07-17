@@ -46,6 +46,33 @@ class CatalogRetrieverTests(unittest.TestCase):
         self.assertEqual(deseq2["trust_status"], "catalog-approved")
         self.assertIn("Matched approved catalog tool", deseq2["reason"])
 
+    def test_retrieves_reference_prep_and_de_alternative_tools(self):
+        reference_result = retrieve_catalog_context(
+            (
+                "Prepare an RNA-seq reference by building a Salmon transcriptome "
+                "index from FASTA and extracting tx2gene from a GTF annotation."
+            ),
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=3,
+            top_k_tools=8,
+        )
+
+        recipe_ids = {recipe["id"] for recipe in reference_result["recipes"]}
+        tool_ids = {tool["id"] for tool in reference_result["tools"]}
+        self.assertIn("rnaseq_reference_preparation", recipe_ids)
+        self.assertTrue({"salmon_index", "gtf_tx2gene"}.issubset(tool_ids), reference_result)
+
+        de_result = retrieve_catalog_context(
+            "Use edgeR or limma voom for bulk RNA-seq differential expression.",
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=3,
+            top_k_tools=10,
+        )
+        de_tool_ids = {tool["id"] for tool in de_result["tools"]}
+        self.assertTrue({"edger", "limma_voom"}.issubset(de_tool_ids), de_result)
+
     def test_tokenizer_supports_rnaseq_variants_and_cjk_ngrams(self):
         tokens = tokenize_for_retrieval("做差异表达 RNAseq")
 

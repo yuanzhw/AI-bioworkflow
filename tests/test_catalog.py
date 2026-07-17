@@ -104,6 +104,47 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
     }
 
 
+def sample_rnaseq_reference_prep_plan() -> dict[str, Any]:
+    return {
+        "workflow": {
+            "name": "RNASeqReferencePrep",
+            "recipe": "rnaseq_reference_preparation",
+            "inputs": {
+                "transcriptome_fasta": "File",
+                "annotation_gtf": "File",
+            },
+            "tool_calls": [
+                {
+                    "id": "index",
+                    "step": "build_salmon_index",
+                    "tool": "salmon_index",
+                    "version": "1.9.0",
+                    "inputs": {
+                        "transcriptome_fasta": "transcriptome_fasta",
+                    },
+                    "params": {
+                        "kmer_size": 31,
+                    },
+                },
+                {
+                    "id": "mapping",
+                    "step": "extract_tx2gene",
+                    "tool": "gtf_tx2gene",
+                    "version": "1.0.0",
+                    "inputs": {
+                        "annotation_gtf": "annotation_gtf",
+                    },
+                    "params": {},
+                },
+            ],
+            "outputs": {
+                "transcriptome_index": "index.index_archive",
+                "tx2gene": "mapping.tx2gene",
+            },
+        }
+    }
+
+
 class CatalogDefinitionTests(unittest.TestCase):
     def test_catalog_file_path_matches_tool_id_and_version(self):
         for yaml_path in sorted(CATALOG_TOOLS_DIR.rglob("*.yaml")):
@@ -157,9 +198,67 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("fastp -i ~{r1} \\\n    -I ~{r2}", wdl)
         self.assertIn("-I ~{r2} \\\n    -o clean_R1.fq.gz", wdl)
         self.assertIn("-O clean_R2.fq.gz \\\n    --html fastp.html", wdl)
+        self.assertIn('index_path="~{index}"; case "$index_path" in *.tar.gz|*.tgz)', wdl)
+        self.assertIn('tar -xzf "$index_path" -C salmon_index_input', wdl)
         self.assertIn("salmon quant \\\n    -l ~{lib_type}", wdl)
-        self.assertIn("-l ~{lib_type} \\\n    -i ~{index}", wdl)
+        self.assertIn('-l ~{lib_type} \\\n    -i "$index_path"', wdl)
         self.assertIn("run_deseq2.R \\\n    --counts ~{counts}", wdl)
+
+    def test_reference_prep_plan_resolves_to_valid_renderable_ir(self):
+        workflow_ir = resolve_tool_plan(
+            sample_rnaseq_reference_prep_plan(),
+            self.recipe_catalog,
+            self.tool_catalog,
+        )
+        report = analyze_workflow_ir(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertEqual(workflow_ir.workflow.name, "RNASeqReferencePrep")
+        self.assertIn("salmon_index_index", workflow_ir.tasks)
+        self.assertIn("gtf_tx2gene_mapping", workflow_ir.tasks)
+
+        wdl = render_wdl(workflow_ir)
+        self.assertIn("call salmon_index_index as index", wdl)
+        self.assertIn("call gtf_tx2gene_mapping as mapping", wdl)
+        self.assertIn("salmon index \\\n    -t ~{transcriptome_fasta}", wdl)
+        self.assertIn("-k ~{kmer_size} && tar -czf salmon_index.tar.gz salmon_index", wdl)
+        self.assertIn("run_gtf_tx2gene.py \\\n    --annotation-gtf ~{annotation_gtf}", wdl)
+        self.assertIn("File transcriptome_index = index.index_archive", wdl)
+        self.assertIn("File tx2gene = mapping.tx2gene", wdl)
+
+    def test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl(self):
+        alternatives = [
+            ("edger", "4.0.16", "edger_deg", "run_edger.R"),
+            ("limma_voom", "3.58.1", "limma_voom_deg", "run_limma_voom.R"),
+        ]
+
+        for tool_id, version, task_name, command in alternatives:
+            with self.subTest(tool=tool_id):
+                plan = copy.deepcopy(sample_rnaseq_tool_plan())
+                deg_call = next(
+                    tool_call
+                    for tool_call in plan["workflow"]["tool_calls"]
+                    if tool_call["step"] == "differential_expression"
+                )
+                deg_call["tool"] = tool_id
+                deg_call["version"] = version
+                deg_call["params"] = {
+                    "contrast": "condition",
+                    "min_count": 1,
+                    "fdr": 0.1,
+                }
+
+                workflow_ir = resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
+                report = analyze_workflow_ir(workflow_ir)
+                wdl = render_wdl(workflow_ir)
+
+                self.assertTrue(report.is_valid, report.errors)
+                self.assertIn(task_name, workflow_ir.tasks)
+                self.assertIn(f"call {task_name} as deg", wdl)
+                self.assertIn(command, wdl)
+                self.assertIn("min_count = 1", wdl)
+                self.assertIn("fdr = 0.1", wdl)
+                self.assertIn("File deg_table = deg.deg_table", wdl)
 
     def test_tool_spec_requires_runtime_docker(self):
         with self.assertRaisesRegex(ValueError, "must define runtime.docker"):

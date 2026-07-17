@@ -1,0 +1,88 @@
+{
+  "workflow": {
+    "name": "RNASeqDEGEdgeR",
+    "recipe": "rnaseq_differential_expression",
+    "inputs": {
+      "sample_ids": "Array[String]",
+      "raw_r1s": "Array[File]",
+      "raw_r2s": "Array[File]",
+      "transcriptome_index": "File",
+      "tx2gene": "File",
+      "sample_groups": "File"
+    },
+    "tool_calls": [
+      {
+        "id": "qc",
+        "step": "qc",
+        "tool": "fastp",
+        "version": "1.3.3",
+        "inputs": {
+          "r1": "raw_r1s",
+          "r2": "raw_r2s"
+        },
+        "params": {
+          "thread": 4
+        }
+      },
+      {
+        "id": "quantify",
+        "step": "quantify",
+        "tool": "salmon",
+        "version": "1.9.0",
+        "inputs": {
+          "r1": "qc.clean_r1",
+          "r2": "qc.clean_r2",
+          "index": "transcriptome_index"
+        },
+        "params": {
+          "thread": 8
+        }
+      },
+      {
+        "id": "summarize",
+        "step": "summarize_transcripts",
+        "tool": "tximport",
+        "version": "1.30.0",
+        "inputs": {
+          "quant_files": "quantify.quant_file",
+          "sample_ids": "sample_ids",
+          "tx2gene": "tx2gene"
+        },
+        "params": {}
+      },
+      {
+        "id": "deg",
+        "step": "differential_expression",
+        "tool": "edger",
+        "version": "4.0.16",
+        "inputs": {
+          "counts": "summarize.gene_counts",
+          "sample_groups": "sample_groups"
+        },
+        "params": {
+          "contrast": "condition",
+          "min_count": 1,
+          "fdr": 0.1
+        }
+      },
+      {
+        "id": "report",
+        "step": "qc_report",
+        "tool": "multiqc",
+        "version": "1.21",
+        "inputs": {
+          "report_files": [
+            "qc.html_report",
+            "qc.json_report",
+            "quantify.log_file"
+          ]
+        },
+        "params": {}
+      }
+    ],
+    "outputs": {
+      "deg_table": "deg.deg_table",
+      "multiqc_report": "report.multiqc_report"
+    }
+  }
+}
