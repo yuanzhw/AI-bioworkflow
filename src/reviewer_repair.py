@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from src.schema import WorkflowIR
+from src.schema import IDENTIFIER_PATTERN, WorkflowIR
 
 
 class ReviewerFailureStage(StrEnum):
@@ -230,7 +230,16 @@ class ReviewerPatchPolicyError(ValueError):
     """Raised when a Reviewer patch attempts to cross the P2 policy boundary."""
 
 
-_TASK_OUTPUT_VALUE_PATTERN = re.compile(r"^/tasks/[^/]+/outputs/[^/]+/value$")
+_IR_IDENTIFIER_SEGMENT_PATTERN = IDENTIFIER_PATTERN.pattern.removeprefix("^").removesuffix("$")
+_TASK_OUTPUT_VALUE_PATTERN = re.compile(
+    rf"^/tasks/{_IR_IDENTIFIER_SEGMENT_PATTERN}/outputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}/value$"
+)
+_CALL_INPUT_PATH_PATTERN = re.compile(
+    rf"^/workflow/(steps|calls)/[0-9]+/inputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}$"
+)
+_WORKFLOW_OUTPUT_PATH_PATTERN = re.compile(
+    rf"^/workflow/outputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}$"
+)
 _FORBIDDEN_TOP_LEVEL_SEGMENTS = {
     "catalog",
     "current_wdl",
@@ -326,11 +335,11 @@ def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
 
 
 def _is_call_input_path(path: str) -> bool:
-    return bool(re.match(r"^/workflow/(steps|calls)/[0-9]+/inputs/[^/]+$", path))
+    return bool(_CALL_INPUT_PATH_PATTERN.match(path))
 
 
 def _is_workflow_output_path(path: str) -> bool:
-    return bool(re.match(r"^/workflow/outputs/[A-Za-z_][A-Za-z0-9_]*$", path))
+    return bool(_WORKFLOW_OUTPUT_PATH_PATTERN.match(path))
 
 
 def _is_workflow_step_or_call_path(path: str) -> bool:

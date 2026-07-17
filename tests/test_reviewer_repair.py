@@ -204,6 +204,12 @@ class ReviewerRepairContractTests(unittest.TestCase):
                         "path": "/workflow/steps/0/inputs/r2",
                         "value": "raw_r2",
                         "reason": "The existing workflow input satisfies the missing task input.",
+                    },
+                    {
+                        "operation": "replace",
+                        "path": "/tasks/fastp/outputs/clean_r1/value",
+                        "value": "\"clean_R1.fq.gz\"",
+                        "reason": "Repair the task output literal expression.",
                     }
                 ],
                 "diagnostic_references": ["call 'qc' is missing input 'r2'"],
@@ -286,6 +292,33 @@ class ReviewerRepairContractTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ReviewerPatchPolicyError, "catalog_references require"):
             validate_reviewer_patch_policy(patch)
+
+    def test_policy_rejects_non_identifier_ir_path_segments(self):
+        invalid_paths = [
+            "/tasks/foo-bar/outputs/x/value",
+            "/tasks/foo/outputs/x-y/value",
+            "/workflow/steps/0/inputs/read-1",
+            "/workflow/calls/0/inputs/read-1",
+        ]
+
+        for path in invalid_paths:
+            with self.subTest(path=path):
+                patch = ReviewerIRPatch.model_validate(
+                    {
+                        "summary": "Patch an invalid identifier path segment.",
+                        "actions": [
+                            {
+                                "operation": "replace",
+                                "path": path,
+                                "value": "raw_r2",
+                                "reason": "Policy should reject invalid Workflow IR identifiers.",
+                            }
+                        ],
+                    }
+                )
+
+                with self.assertRaises(ReviewerPatchPolicyError):
+                    validate_reviewer_patch_policy(patch)
 
     def test_policy_rejects_empty_or_nested_workflow_output_paths(self):
         invalid_paths = [

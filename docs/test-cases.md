@@ -1827,6 +1827,7 @@ result 和 policy 边界。
 输入：
 
 - 一个给 `/workflow/steps/0/inputs/r2` 增加 wiring 的 patch。
+- 一个修复 `/tasks/fastp/outputs/clean_r1/value` task output literal 的 patch。
 - catalog reference：`fastp:1.3.3`。
 - 当前 workflow approved catalog context。
 
@@ -1841,6 +1842,7 @@ result 和 policy 边界。
 覆盖点：
 
 - P2 policy 允许 Reviewer 在 Workflow IR 内修复 call input wiring。
+- P2 policy 允许 Reviewer 修复已有 task output 的 literal expression。
 - catalog reference 必须来自当前 workflow approved context。
 
 ### `test_policy_rejects_wdl_catalog_runtime_and_resource_edits`
@@ -1910,6 +1912,30 @@ result 和 policy 边界。
 
 - patch 引用 catalog metadata 时必须同时提供当前 workflow 的 approved context；
   不能因为调用方漏传 context 而跳过 membership 校验。
+
+### `test_policy_rejects_non_identifier_ir_path_segments`
+
+输入：
+
+- 分别尝试 patch：
+  - `/tasks/foo-bar/outputs/x/value`
+  - `/tasks/foo/outputs/x-y/value`
+  - `/workflow/steps/0/inputs/read-1`
+  - `/workflow/calls/0/inputs/read-1`
+
+执行：
+
+- 调用 `validate_reviewer_patch_policy(...)`。
+
+期望输出：
+
+- 每个 patch 都抛出 `ReviewerPatchPolicyError`。
+
+覆盖点：
+
+- Reviewer policy 的 allowlist path segment 与 `WorkflowIR` identifier 规则一致。
+- 不允许 policy 先接受带非法 task、output 或 call input 名称的 patch，再让 schema
+  validation 在后续阶段失败。
 
 ### `test_policy_rejects_empty_or_nested_workflow_output_paths`
 
