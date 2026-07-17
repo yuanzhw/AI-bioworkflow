@@ -1,0 +1,204 @@
+[
+  {
+    "id": "rnaseq_deg_basic_en",
+    "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files with QC, transcript quantification, gene-level counts, and a workflow summary report.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Basic supported RNA-seq DEG request without explicit tool names."
+  },
+  {
+    "id": "rnaseq_deg_explicit_tools_en",
+    "query": "Build a workflow using fastp, Salmon, tximport, DESeq2, and MultiQC for bulk RNA-seq differential expression.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported request with every approved RNA-seq tool named explicitly."
+  },
+  {
+    "id": "rnaseq_deg_cn_mixed_tools",
+    "query": "为 bulk RNAseq 样本做差异表达分析，使用 fastp 清理 FASTQ、Salmon 定量、tximport 汇总到 gene counts、DESeq2 输出 DEG 表，并生成 MultiQC 报告。",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Chinese request with common English tool names and RNAseq abbreviation."
+  },
+  {
+    "id": "rnaseq_deg_abbrev_en",
+    "query": "Create a DEG workflow for bulk RNAseq paired-end reads, including adapter trimming, transcript quantification, transcript-to-gene summarization, and a QC report.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Uses DEG and RNAseq shorthand while describing all major roles."
+  },
+  {
+    "id": "rnaseq_deg_no_tool_names_en",
+    "query": "Identify differentially expressed genes from RNA sequencing FASTQs and create a workflow-level quality-control summary.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported natural-language request that does not name specific tools."
+  },
+  {
+    "id": "rnaseq_deg_salmon_deseq2_en",
+    "query": "Use Salmon quantification and DESeq2 for differential expression on paired-end bulk RNA-seq data, starting from raw FASTQs.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"]
+    },
+    "notes": "Explicitly names Salmon and DESeq2; tximport is expected for transcript-to-gene counts."
+  },
+  {
+    "id": "rnaseq_quant_gene_counts_en",
+    "query": "Quantify bulk RNA-seq reads and produce a transcript-to-gene count matrix from quant.sf files.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["salmon", "tximport"],
+    "expected_roles": {
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"]
+    },
+    "notes": "Partial supported request focused on quantification and gene-level counts."
+  },
+  {
+    "id": "rnaseq_quality_report_en",
+    "query": "Prepare a quality report for paired FASTQ RNA-seq samples with adapter trimming and a workflow summary.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Partial supported request focused on read QC and reporting."
+  },
+  {
+    "id": "rnaseq_params_threads_contrast_en",
+    "query": "Run RNA-seq DEG analysis with 8 threads for quantification and a DESeq2 contrast named condition.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["salmon", "tximport", "deseq2"],
+    "expected_roles": {
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"]
+    },
+    "notes": "Supported request with parameter hints for threads and contrast."
+  },
+  {
+    "id": "rnaseq_inputs_metadata_en",
+    "query": "Differential expression from sample metadata, a tx2gene mapping table, and a Salmon transcriptome index for paired-end RNA-seq.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "tximport", "deseq2"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"]
+    },
+    "notes": "Supported request emphasizing recipe inputs instead of step names."
+  },
+  {
+    "id": "rnaseq_gene_counts_cn_mixed",
+    "query": "从 Salmon quant.sf 生成 gene-level counts，再做 DESeq2 差异分析和 QC 汇总。",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["tximport", "deseq2", "multiqc"],
+    "expected_roles": {
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Chinese partial request for post-quantification summary and DEG."
+  },
+  {
+    "id": "rnaseq_multiqc_logs_en",
+    "query": "Aggregate fastp JSON and HTML reports plus Salmon logs into MultiQC for an RNA-seq DEG workflow.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["fastp", "salmon", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "expression_quantification": ["salmon"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported request focused on tagged QC outputs and workflow summary."
+  },
+  {
+    "id": "unsupported_chipseq_peak_calling_en",
+    "query": "Run ChIP-seq peak calling with MACS2 and generate peak annotation tracks.",
+    "supported": false,
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: ChIP-seq is outside the current approved catalog."
+  },
+  {
+    "id": "unsupported_scrnaseq_clustering_en",
+    "query": "Analyze single-cell RNA-seq UMI counts with normalization, clustering, marker genes, and UMAP plots.",
+    "supported": false,
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: scRNA-seq is not represented by the current bulk RNA-seq recipe."
+  },
+  {
+    "id": "unsupported_variant_calling_en",
+    "query": "Call germline variants from WES BAM files and produce a filtered VCF.",
+    "supported": false,
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: variant calling tools are not in the approved catalog."
+  },
+  {
+    "id": "unsupported_metagenomics_cn",
+    "query": "做宏基因组物种注释和丰度分析，输出 taxonomy profile 和可视化报告。",
+    "supported": false,
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: metagenomics is outside the current approved catalog."
+  }
+]

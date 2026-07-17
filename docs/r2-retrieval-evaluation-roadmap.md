@@ -52,18 +52,24 @@ retrieval query set
 {
   "id": "rnaseq_deg_basic_en",
   "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files.",
+  "supported": true,
   "expected_recipe": "rnaseq_differential_expression",
   "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
   "expected_roles": {
     "read_quality_control": ["fastp"],
-    "transcript_quantification": ["salmon"],
-    "gene_count_summary": ["tximport"],
+    "expression_quantification": ["salmon"],
+    "transcript_to_gene_count_summary": ["tximport"],
     "differential_expression": ["deseq2"],
-    "quality_report": ["multiqc"]
+    "quality_control_summary": ["multiqc"]
   },
   "notes": "Basic RNA-seq DEG request without explicit tool names."
 }
 ```
+
+`supported: false` 用于当前 approved Catalog 暂不支持的负例。负例不定义
+`expected_recipe`、`expected_tools` 或 `expected_roles`，因此不会拉低当前
+RNA-seq baseline recall；它们单独用于观察 fallback、误召回和未来 Catalog
+扩展需求。
 
 建议第一批 20 条，覆盖：
 
@@ -77,6 +83,24 @@ retrieval query set
 - 参数相关请求，例如 paired-end reads、contrast、threads。
 
 建议文件：
+
+```text
+tests/fixtures/retrieval_queries.json
+```
+
+### R2a Current-Catalog Baseline Scope
+
+R2 不要求先扩充工具数量。第一步先基于当前 approved Catalog 建立可重复
+baseline：
+
+- 12 条当前支持范围内的 RNA-seq DEG / QC / quantification / reporting 查询。
+- 4 条 unsupported negative queries，覆盖 ChIP-seq、scRNA-seq、variant
+  calling 和 metagenomics。
+- 指标仅声明为 current-catalog baseline，不代表多 workflow family 检索能力。
+- 后续增加更多 approved tools / recipes 后，再扩展到 20-40 条跨领域 query，
+  并用同一 eval contract 比较 lexical、vector 和 hybrid backend。
+
+当前 fixture：
 
 ```text
 tests/fixtures/retrieval_queries.json
@@ -105,15 +129,10 @@ lexical_v1 Fallback Rate
 
 ## Eval Script
 
-建议新增一个独立脚本或 unittest：
+当前新增独立脚本与 unittest：
 
 ```text
 scripts/evaluate_retrieval.py
-```
-
-或：
-
-```text
 tests/test_retrieval_evaluation.py
 ```
 
@@ -125,6 +144,37 @@ tests/test_retrieval_evaluation.py
 - fallback queries。
 
 输出格式建议同时支持人类可读 summary 和 JSON artifact，便于后续前端或文档展示。
+
+当前命令：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py
+```
+
+初始 `lexical_v1` current-catalog baseline：
+
+| Metric | Value |
+| --- | ---: |
+| Query count | 16 |
+| Supported queries | 12 |
+| Unsupported queries | 4 |
+| Recipe Recall@3 | 1.0000 |
+| Recipe MRR | 1.0000 |
+| Tool Recall@8 | 0.9722 |
+| Tool MRR | 1.0000 |
+| Role Coverage | 0.9722 |
+| Fallback Rate | 0.0625 |
+| Supported Fallback Rate | 0.0000 |
+| Unsupported Fallback Rate | 0.2500 |
+
+已知 baseline 观察：
+
+- `rnaseq_params_threads_contrast_en` 未召回 `tximport`，说明参数型 query
+  可能需要更强的 recipe-step 或 role-aware expansion。
+- `unsupported_chipseq_peak_calling_en`、`unsupported_scrnaseq_clustering_en`
+  和 `unsupported_variant_calling_en` 产生 direct lexical match，说明当前
+  lexical fallback 不是 unsupported intent detector；负例评估只用于暴露风险，
+  不改变 full Catalog validation 边界。
 
 ## Vector / Hybrid Retriever
 

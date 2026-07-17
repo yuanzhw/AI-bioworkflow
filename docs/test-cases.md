@@ -1608,6 +1608,133 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 
 - Retriever 在进入 scoring 前拒绝不可分析的空 query。
 
+## `tests/test_retrieval_evaluation.py`
+
+该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
+fixture，调用当前 Approved Catalog Retriever，并计算 current-catalog
+baseline metrics。Fixture 不扩展正式 Catalog，也不伪造工具；unsupported
+负例单独统计，不污染当前 RNA-seq supported recall。
+
+### `test_loads_current_catalog_query_fixture`
+
+输入：
+
+- `tests/fixtures/retrieval_queries.json`。
+
+执行：
+
+- 调用 `load_retrieval_queries(...)`。
+
+期望输出：
+
+- fixture 共 16 条 query。
+- 12 条 `supported == True`，4 条 `supported == False`。
+- 第一条 query id 为 `rnaseq_deg_basic_en`。
+- 第一条 query 的 expected tools 包含 `fastp`。
+
+覆盖点：
+
+- R2 query set schema 可被稳定读取。
+- 当前 baseline 明确区分 supported RNA-seq 查询和 unsupported 负例。
+
+### `test_evaluates_current_catalog_baseline`
+
+输入：
+
+- 当前正式 Tool Catalog。
+- 当前正式 Recipe Catalog。
+- `tests/fixtures/retrieval_queries.json`。
+
+执行：
+
+- 调用 `evaluate_retrieval_queries(...)`。
+
+期望输出：
+
+- `strategy == "lexical_v1"`。
+- `top_k_recipes == 3`。
+- `top_k_tools == 8`。
+- `query_count == 16`。
+- `supported_query_count == 12`。
+- `unsupported_query_count == 4`。
+- 每个 metric 均为 0 到 1 之间的稳定数值。
+
+覆盖点：
+
+- 当前 Catalog 可以生成可重复 retrieval baseline。
+- Baseline artifact 包含 per-query retrieval、miss、fallback 与 aggregate metrics。
+
+### `test_computes_supported_metrics_and_tracks_unsupported_matches`
+
+输入：
+
+- 三条 synthetic query：
+  - supported hit。
+  - supported miss。
+  - unsupported direct match。
+- fake retriever 返回固定 recipes、tools 和 fallback 状态。
+
+执行：
+
+- 调用 `evaluate_retrieval_queries(..., retriever=fake_retriever)`。
+
+期望输出：
+
+- `recipe_recall_at_k == 0.5`。
+- `recipe_mrr == 0.5`。
+- `tool_recall_at_k == 0.25`。
+- `tool_mrr == 0.5`。
+- `role_coverage == 0.25`。
+- `fallback_rate == 0.3333`。
+- `supported_fallback_rate == 0.5`。
+- `unsupported_fallback_rate == 0.0`。
+- `unsupported_direct_match_query_ids == ["q3"]`。
+
+覆盖点：
+
+- Supported queries 参与 recall / MRR / role coverage。
+- Unsupported queries 不污染 supported recall，但会暴露 direct-match 风险。
+- Fallback rate 按 all / supported / unsupported 三个视角记录。
+
+### `test_rejects_unsupported_queries_with_expected_hits`
+
+输入：
+
+- 一条 `supported == False` 但定义了 `expected_recipe` 的 query dict。
+
+执行：
+
+- 调用 `RetrievalQuery.from_dict(...)`。
+
+期望输出：
+
+- 抛出 `ValueError`。
+- 错误消息包含 `unsupported queries must not define expected hits`。
+
+覆盖点：
+
+- Unsupported negative cases 不能同时声明正例答案，避免 baseline 指标语义混乱。
+
+### `test_rejects_non_object_fixture_entries`
+
+输入：
+
+- `tests/fixtures/invalid_non_object_queries.json`，其中 JSON array 第一项不是 object。
+
+执行：
+
+- 调用 `load_retrieval_queries(...)`。
+
+期望输出：
+
+- 抛出 `ValueError`。
+- 错误消息包含 `entry at index 0 must be an object`。
+
+覆盖点：
+
+- Query fixture loader 对格式错误的 entry 返回清晰错误，而不是泄漏底层
+  `AttributeError`。
+
 ## `tests/test_catalog_service.py`
 
 该文件验证 W0 catalog 查询服务。服务层返回 JSON-ready 的 recipe/tool 记录，供 FastAPI 的 catalog 查询端点复用。
