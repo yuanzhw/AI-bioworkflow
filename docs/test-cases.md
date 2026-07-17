@@ -1969,13 +1969,17 @@ result 和 policy 边界。
 - `move` 只能在同一个 workflow collection 内调整排序。
 - Reviewer 不能在 canonical `workflow.steps` 和 compatibility `workflow.calls` 之间移动结构。
 
-### `test_repair_result_requires_parsed_patch_or_rejection_reason`
+### `test_repair_result_enforces_status_payload_invariants`
 
 输入：
 
 - `patch_proposed` result。
+- `policy_rejected` result。
+- `no_action` result。
 - 缺失 patch 的 `patch_proposed` result。
 - 缺失 `rejection_reason` 的 `policy_rejected` result。
+- 携带不匹配 payload 的 result，例如 `patch_proposed` 携带 `rejection_reason`、
+  `policy_rejected` 携带 `patch`，以及其他状态携带 `patch` 或 `rejection_reason`。
 
 执行：
 
@@ -1984,12 +1988,16 @@ result 和 policy 边界。
 期望输出：
 
 - 合法 `patch_proposed` 保留 parsed patch。
-- 缺失 patch 或 rejection reason 的结果抛出 `ValidationError`。
+- 合法 `policy_rejected` 保留 rejection reason。
+- 合法 `no_action` 可以保留 diagnostics，但不携带 patch 或 rejection reason。
+- 缺失必填 payload 或携带不匹配 payload 的结果抛出 `ValidationError`。
 
 覆盖点：
 
 - P2 只持久化 parsed patch 与 rejection reason，不把 raw Reviewer output 作为默认
   artifact。
+- Reviewer result 的 `status` 与 payload 保持一一对应，避免下游按状态分支时遇到
+  歧义载荷。
 
 ## `tests/test_graph.py`
 

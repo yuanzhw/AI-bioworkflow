@@ -306,7 +306,7 @@ class ReviewerRepairContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(ReviewerPatchPolicyError, "same workflow"):
                     validate_reviewer_patch_policy(patch)
 
-    def test_repair_result_requires_parsed_patch_or_rejection_reason(self):
+    def test_repair_result_enforces_status_payload_invariants(self):
         patch = ReviewerIRPatch.model_validate(
             {
                 "summary": "Repair output expression.",
@@ -324,11 +324,53 @@ class ReviewerRepairContractTests(unittest.TestCase):
         result = ReviewerRepairResult(status=ReviewerRepairStatus.PATCH_PROPOSED, patch=patch)
         self.assertEqual(result.patch.summary, "Repair output expression.")
 
+        rejected = ReviewerRepairResult(
+            status=ReviewerRepairStatus.POLICY_REJECTED,
+            rejection_reason="Patch attempted to edit a forbidden path.",
+        )
+        self.assertEqual(rejected.rejection_reason, "Patch attempted to edit a forbidden path.")
+
+        no_action = ReviewerRepairResult(
+            status=ReviewerRepairStatus.NO_ACTION,
+            diagnostics=["No safe patch was identified."],
+        )
+        self.assertIsNone(no_action.patch)
+
         with self.assertRaises(ValidationError):
             ReviewerRepairResult(status=ReviewerRepairStatus.PATCH_PROPOSED)
 
         with self.assertRaises(ValidationError):
             ReviewerRepairResult(status=ReviewerRepairStatus.POLICY_REJECTED)
+
+        invalid_payloads = [
+            {
+                "status": ReviewerRepairStatus.PATCH_PROPOSED,
+                "patch": patch,
+                "rejection_reason": "Policy rejected the patch.",
+            },
+            {
+                "status": ReviewerRepairStatus.POLICY_REJECTED,
+                "patch": patch,
+                "rejection_reason": "Policy rejected the patch.",
+            },
+            {
+                "status": ReviewerRepairStatus.NO_ACTION,
+                "patch": patch,
+            },
+            {
+                "status": ReviewerRepairStatus.INVALID_REQUEST,
+                "rejection_reason": "Request was malformed.",
+            },
+            {
+                "status": ReviewerRepairStatus.MODEL_ERROR,
+                "patch": patch,
+            },
+        ]
+
+        for payload in invalid_payloads:
+            with self.subTest(status=payload["status"]):
+                with self.assertRaises(ValidationError):
+                    ReviewerRepairResult(**payload)
 
 
 if __name__ == "__main__":

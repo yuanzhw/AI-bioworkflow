@@ -197,10 +197,18 @@ class ReviewerRepairResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_status_payload(self) -> ReviewerRepairResult:
-        if self.status == ReviewerRepairStatus.PATCH_PROPOSED and self.patch is None:
-            raise ValueError("patch_proposed results must include a parsed patch")
-        if self.status == ReviewerRepairStatus.POLICY_REJECTED and not self.rejection_reason:
-            raise ValueError("policy_rejected results must include a rejection_reason")
+        if self.status == ReviewerRepairStatus.PATCH_PROPOSED:
+            if self.patch is None:
+                raise ValueError("patch_proposed results must include a parsed patch")
+            if self.rejection_reason is not None:
+                raise ValueError("patch_proposed results must not include a rejection_reason")
+        elif self.status == ReviewerRepairStatus.POLICY_REJECTED:
+            if self.patch is not None:
+                raise ValueError("policy_rejected results must not include a patch")
+            if not self.rejection_reason:
+                raise ValueError("policy_rejected results must include a rejection_reason")
+        elif self.patch is not None or self.rejection_reason is not None:
+            raise ValueError("patch and rejection_reason are only allowed for their matching result status")
         return self
 
 
