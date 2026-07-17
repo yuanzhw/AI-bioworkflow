@@ -219,7 +219,7 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("call salmon_index_index as index", wdl)
         self.assertIn("call gtf_tx2gene_mapping as mapping", wdl)
         self.assertIn("salmon index \\\n    -t ~{transcriptome_fasta}", wdl)
-        self.assertIn("tar -czf salmon_index.tar.gz salmon_index", wdl)
+        self.assertIn("-k ~{kmer_size} && tar -czf salmon_index.tar.gz salmon_index", wdl)
         self.assertIn("run_gtf_tx2gene.py \\\n    --annotation-gtf ~{annotation_gtf}", wdl)
         self.assertIn("File transcriptome_index = index.index_archive", wdl)
         self.assertIn("File tx2gene = mapping.tx2gene", wdl)

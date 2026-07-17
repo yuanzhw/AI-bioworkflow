@@ -28,8 +28,7 @@ command_template: |
   salmon index
   -t ~{transcriptome_fasta}
   -i salmon_index
-  -k ~{kmer_size}
-  tar -czf salmon_index.tar.gz salmon_index
+  -k ~{kmer_size} && tar -czf salmon_index.tar.gz salmon_index
 
 runtime:
   docker: quay.io/biocontainers/salmon:1.9.0--h7e5ed60_0
