@@ -104,7 +104,7 @@ def _default_forbidden_path_descriptions() -> list[str]:
         "final WDL text",
         "Tool Catalog or Recipe Catalog data",
         "task command templates",
-        "runtime container images",
+        "task runtime settings, including container images and resource fields",
         "resource sizing fields",
     ]
 
