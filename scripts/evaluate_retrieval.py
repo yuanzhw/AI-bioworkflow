@@ -22,7 +22,7 @@ from src.catalog.retrieval_eval import (
 from src.recipes.loader import load_recipe_catalog
 
 
-DEFAULT_QUERY_FIXTURE = Path("tests/fixtures/retrieval_queries.json")
+DEFAULT_QUERY_FIXTURE = PROJECT_ROOT / "tests" / "fixtures" / "retrieval_queries.json"
 
 
 def parse_args() -> argparse.Namespace:

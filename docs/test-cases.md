@@ -1715,6 +1715,26 @@ baseline metrics。Fixture 不扩展正式 Catalog，也不伪造工具；unsupp
 
 - Unsupported negative cases 不能同时声明正例答案，避免 baseline 指标语义混乱。
 
+### `test_rejects_non_object_fixture_entries`
+
+输入：
+
+- `tests/fixtures/invalid_non_object_queries.json`，其中 JSON array 第一项不是 object。
+
+执行：
+
+- 调用 `load_retrieval_queries(...)`。
+
+期望输出：
+
+- 抛出 `ValueError`。
+- 错误消息包含 `entry at index 0 must be an object`。
+
+覆盖点：
+
+- Query fixture loader 对格式错误的 entry 返回清晰错误，而不是泄漏底层
+  `AttributeError`。
+
 ## `tests/test_catalog_service.py`
 
 该文件验证 W0 catalog 查询服务。服务层返回 JSON-ready 的 recipe/tool 记录，供 FastAPI 的 catalog 查询端点复用。

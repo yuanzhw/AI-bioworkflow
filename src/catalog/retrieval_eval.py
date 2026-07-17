@@ -67,11 +67,23 @@ def load_retrieval_queries(path: str | Path) -> list[RetrievalQuery]:
     data = json.loads(fixture_path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise ValueError("retrieval query fixture must contain a JSON array")
-    queries = [RetrievalQuery.from_dict(item) for item in data]
-    ids = [query.id for query in queries]
-    duplicate_ids = sorted({query_id for query_id in ids if ids.count(query_id) > 1})
+
+    queries: list[RetrievalQuery] = []
+    seen_ids: set[str] = set()
+    duplicate_ids: list[str] = []
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ValueError(f"retrieval query entry at index {index} must be an object")
+        query = RetrievalQuery.from_dict(item)
+        if query.id in seen_ids:
+            duplicate_ids.append(query.id)
+        else:
+            seen_ids.add(query.id)
+        queries.append(query)
+
     if duplicate_ids:
-        raise ValueError(f"duplicate retrieval query ids: {', '.join(duplicate_ids)}")
+        duplicate_summary = ", ".join(sorted(set(duplicate_ids)))
+        raise ValueError(f"duplicate retrieval query ids: {duplicate_summary}")
     return queries
 
 

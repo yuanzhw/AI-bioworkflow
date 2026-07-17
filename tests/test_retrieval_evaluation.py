@@ -11,7 +11,7 @@ from src.catalog.retrieval_eval import (
 from src.recipes import load_recipe_catalog
 
 
-FIXTURE_PATH = Path("tests/fixtures/retrieval_queries.json")
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "retrieval_queries.json"
 
 
 def fake_retriever(
@@ -147,6 +147,10 @@ class RetrievalEvaluationTests(unittest.TestCase):
                     "expected_roles": {},
                 }
             )
+
+    def test_rejects_non_object_fixture_entries(self):
+        with self.assertRaisesRegex(ValueError, "entry at index 0 must be an object"):
+            load_retrieval_queries(FIXTURE_PATH.with_name("invalid_non_object_queries.json"))
 
 
 if __name__ == "__main__":
