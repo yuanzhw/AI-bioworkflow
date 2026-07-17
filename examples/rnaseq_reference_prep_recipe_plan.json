@@ -1,0 +1,38 @@
+{
+  "workflow": {
+    "name": "RNASeqReferencePrep",
+    "recipe": "rnaseq_reference_preparation",
+    "inputs": {
+      "transcriptome_fasta": "File",
+      "annotation_gtf": "File"
+    },
+    "tool_calls": [
+      {
+        "id": "index",
+        "step": "build_salmon_index",
+        "tool": "salmon_index",
+        "version": "1.9.0",
+        "inputs": {
+          "transcriptome_fasta": "transcriptome_fasta"
+        },
+        "params": {
+          "kmer_size": 31
+        }
+      },
+      {
+        "id": "mapping",
+        "step": "extract_tx2gene",
+        "tool": "gtf_tx2gene",
+        "version": "1.0.0",
+        "inputs": {
+          "annotation_gtf": "annotation_gtf"
+        },
+        "params": {}
+      }
+    ],
+    "outputs": {
+      "transcriptome_index": "index.index_archive",
+      "tx2gene": "mapping.tx2gene"
+    }
+  }
+}

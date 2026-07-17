@@ -1317,6 +1317,72 @@ OK (skipped=2)
 - params 字面量格式化。
 - scatter 输出数组汇总到 MultiQC。
 
+### `test_reference_prep_plan_resolves_to_valid_renderable_ir`
+
+输入：
+
+- `sample_rnaseq_reference_prep_plan()`
+- 当前正式 Tool Catalog
+- 当前正式 Recipe Catalog
+
+执行：
+
+1. 调用 `resolve_tool_plan(...)` 将 RNA-seq reference prep Recipe Tool Plan 转为 Workflow IR。
+2. 调用 `analyze_workflow_ir(...)` 做静态分析。
+3. 调用 `render_wdl(...)` 生成 WDL。
+
+期望输出：
+
+- Analyzer 返回 `is_valid=True`。
+- Workflow 名称为 `RNASeqReferencePrep`。
+- IR 中包含 task：`salmon_index_index` 和 `gtf_tx2gene_mapping`。
+- WDL 中包含：
+  - `call salmon_index_index as index`
+  - `call gtf_tx2gene_mapping as mapping`
+  - `salmon index`
+  - `tar -czf salmon_index.tar.gz salmon_index`
+  - `run_gtf_tx2gene.py`
+  - `File transcriptome_index = index.index_archive`
+  - `File tx2gene = mapping.tx2gene`
+
+覆盖点：
+
+- 新增 RNA-seq reference prep recipe 可以通过正式 Catalog resolver。
+- Salmon index 和 GTF tx2gene helper 生成的 task 定义可被 Analyzer 与 WDL renderer 接受。
+- Reference prep 输出与现有 DEG recipe 所需的 `transcriptome_index` / `tx2gene` 概念衔接。
+
+### `test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl`
+
+输入：
+
+- 复制 `sample_rnaseq_tool_plan()`。
+- 将 `differential_expression` step 的 tool 分别替换为：
+  - `edger` `4.0.16`
+  - `limma_voom` `3.58.1`
+- 为替代工具提供 `contrast`、`min_count` 和 `fdr` 参数。
+
+执行：
+
+1. 调用 `resolve_tool_plan(...)`。
+2. 调用 `analyze_workflow_ir(...)`。
+3. 调用 `render_wdl(...)`。
+
+期望输出：
+
+- Analyzer 返回 `is_valid=True`。
+- WDL 中分别包含：
+  - `call edger_deg as deg` 和 `run_edger.R`
+  - `call limma_voom_deg as deg` 和 `run_limma_voom.R`
+  - `min_count = 1`
+  - `fdr = 0.1`
+  - `File deg_table = deg.deg_table`
+
+覆盖点：
+
+- `rnaseq_differential_expression` recipe 的 `differential_expression` step 支持 DESeq2、edgeR 和 limma-voom 替代后端。
+- 替代工具仍通过完整 Recipe / Tool Catalog 校验，而不是由 Planner 自由选择未批准工具。
+- 不改变 Workflow IR 或 WDL renderer 架构即可扩展同一 recipe step 的工具集合。
+
 ### `test_tool_spec_requires_runtime_docker`
 
 输入：
@@ -1545,6 +1611,31 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 
 - R1 retriever 可以从正式 catalog 中召回 RNA-seq DEG 所需 recipe 和关键工具。
 - 输出契约使用稳定 JSON key，便于后续 Planner、API、SSE 和前端复用。
+
+### `test_retrieves_reference_prep_and_de_alternative_tools`
+
+输入：
+
+- Reference prep query：描述从 transcriptome FASTA 构建 Salmon index，并从 GTF annotation 提取 tx2gene。
+- Differential expression query：描述使用 edgeR 或 limma voom 做 bulk RNA-seq differential expression。
+- 当前正式 Recipe Catalog。
+- 当前正式 Tool Catalog。
+
+执行：
+
+- 调用 `retrieve_catalog_context(...)`。
+
+期望输出：
+
+- Reference prep query 的 recipe 结果包含 `rnaseq_reference_preparation`。
+- Reference prep query 的 tool 结果包含 `salmon_index` 和 `gtf_tx2gene`。
+- Differential expression query 的 tool 结果包含 `edger` 和 `limma_voom`。
+
+覆盖点：
+
+- Approved Catalog Retriever 可以召回新增 reference prep recipe 和工具。
+- RAG / retrieval baseline 能覆盖同一 DE role 下的替代工具选择。
+- 新增 catalog 条目具备 aliases、description 和 role 词汇，便于自然语言 Planner 构造候选上下文。
 
 ### `test_tokenizer_supports_rnaseq_variants_and_cjk_ngrams`
 
@@ -3566,6 +3657,8 @@ npm run test:catalog-retrieval
 - Recipe Tool Plan schema 与 recipe/catalog 校验。
 - Catalog runtime docker 必填约束。
 - Recipe Tool Plan 到 Workflow IR 的 resolver 主路径。
+- RNA-seq reference prep recipe、Salmon index 和 tx2gene helper 的 Catalog resolver / WDL renderer 路径。
+- RNA-seq DEG recipe 中 DESeq2、edgeR 和 limma-voom 替代 differential expression 后端。
 - Catalog 查询服务的 recipe/tool JSON-ready 输出。
 - Approved Catalog Retriever 的词法召回、CJK tokenization、fallback 原因和 JSON-ready 输出契约。
 - 自然语言 run 对 catalog retrieval artifact 的持久化、snapshot 暴露和 SSE 事件回放顺序。

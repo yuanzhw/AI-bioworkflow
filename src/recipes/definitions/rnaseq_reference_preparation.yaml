@@ -1,0 +1,27 @@
+id: rnaseq_reference_preparation
+name: RNA-seq reference preparation
+description: Build RNA-seq reference artifacts for Salmon quantification and transcript-to-gene summarization.
+aliases:
+  - RNA-seq reference prep
+  - Salmon index and tx2gene
+  - transcriptome reference preparation
+  - tx2gene from GTF
+
+required_inputs:
+  transcriptome_fasta:
+    type: File
+    description: Transcriptome FASTA used to build a Salmon index.
+  annotation_gtf:
+    type: File
+    description: Gene annotation GTF containing transcript_id and gene_id attributes.
+
+steps:
+  - id: build_salmon_index
+    role: transcriptome_index_build
+    allowed_tools:
+      - salmon_index
+
+  - id: extract_tx2gene
+    role: transcript_to_gene_mapping
+    allowed_tools:
+      - gtf_tx2gene
