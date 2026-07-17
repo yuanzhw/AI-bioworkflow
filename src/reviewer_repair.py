@@ -149,7 +149,21 @@ class ReviewerPatchAction(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_move_source(self) -> ReviewerPatchAction:
+    def validate_operation_payload(self) -> ReviewerPatchAction:
+        value_was_provided = "value" in self.model_fields_set
+        value_required = self.operation in {
+            ReviewerPatchOperation.ADD,
+            ReviewerPatchOperation.REPLACE,
+        }
+        value_forbidden = self.operation in {
+            ReviewerPatchOperation.REMOVE,
+            ReviewerPatchOperation.MOVE,
+        }
+
+        if value_required and self.value is None:
+            raise ValueError("add and replace patch actions require a non-null value")
+        if value_forbidden and value_was_provided:
+            raise ValueError("remove and move patch actions must not include value")
         if self.operation == ReviewerPatchOperation.MOVE and not self.from_path:
             raise ValueError("move patch actions require from_path")
         if self.operation != ReviewerPatchOperation.MOVE and self.from_path is not None:

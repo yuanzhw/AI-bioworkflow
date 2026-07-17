@@ -118,6 +118,82 @@ class ReviewerRepairContractTests(unittest.TestCase):
                 }
             )
 
+    def test_reviewer_patch_action_enforces_operation_payload_invariants(self):
+        patch = ReviewerIRPatch.model_validate(
+            {
+                "summary": "Valid action payloads.",
+                "actions": [
+                    {
+                        "operation": "add",
+                        "path": "/workflow/steps/0/inputs/r2",
+                        "value": "raw_r2",
+                        "reason": "Add a missing call input.",
+                    },
+                    {
+                        "operation": "replace",
+                        "path": "/workflow/outputs/clean_r1",
+                        "value": "qc.clean_r1",
+                        "reason": "Replace the workflow output expression.",
+                    },
+                    {
+                        "operation": "remove",
+                        "path": "/workflow/outputs/old_output",
+                        "reason": "Remove an invalid workflow output.",
+                    },
+                    {
+                        "operation": "move",
+                        "from_path": "/workflow/steps/1",
+                        "path": "/workflow/steps/0",
+                        "reason": "Move the upstream call before the dependent call.",
+                    },
+                ],
+            }
+        )
+        self.assertEqual(len(patch.actions), 4)
+
+        invalid_actions = [
+            {
+                "operation": "add",
+                "path": "/workflow/steps/0/inputs/r2",
+                "reason": "Missing value.",
+            },
+            {
+                "operation": "replace",
+                "path": "/workflow/outputs/clean_r1",
+                "value": None,
+                "reason": "Null value.",
+            },
+            {
+                "operation": "remove",
+                "path": "/workflow/outputs/old_output",
+                "value": "old.step",
+                "reason": "Remove must not include value.",
+            },
+            {
+                "operation": "remove",
+                "path": "/workflow/outputs/old_output",
+                "value": None,
+                "reason": "Explicit null value is still a provided value.",
+            },
+            {
+                "operation": "move",
+                "from_path": "/workflow/steps/1",
+                "path": "/workflow/steps/0",
+                "value": "unused",
+                "reason": "Move must not include value.",
+            },
+        ]
+
+        for action in invalid_actions:
+            with self.subTest(operation=action["operation"], reason=action["reason"]):
+                with self.assertRaises(ValidationError):
+                    ReviewerIRPatch.model_validate(
+                        {
+                            "summary": "Invalid action payload.",
+                            "actions": [action],
+                        }
+                    )
+
     def test_policy_accepts_allowed_workflow_ir_patch(self):
         patch = ReviewerIRPatch.model_validate(
             {

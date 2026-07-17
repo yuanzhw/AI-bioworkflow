@@ -1795,6 +1795,33 @@ result 和 policy 边界。
 
 - Reviewer patch 必须先通过 schema validation。
 
+### `test_reviewer_patch_action_enforces_operation_payload_invariants`
+
+输入：
+
+- 合法 action：
+  - `add` / `replace` 携带非 null `value`。
+  - `remove` 不携带 `value`。
+  - `move` 携带 `from_path`，不携带 `value`。
+- 非法 action：
+  - `add` 缺失 `value`。
+  - `replace` 携带 null `value`。
+  - `remove` / `move` 携带 `value`，包括显式 null。
+
+执行：
+
+- 构造 `ReviewerIRPatch`。
+
+期望输出：
+
+- 合法 action payload 通过 schema validation。
+- 缺失必需 `value` 或携带不允许 `value` 的 action 抛出 `ValidationError`。
+
+覆盖点：
+
+- Reviewer patch action 的 operation 与 payload 保持一一对应，避免把不明确的
+  patch 留到 apply 或 policy 阶段才失败。
+
 ### `test_policy_accepts_allowed_workflow_ir_patch`
 
 输入：
