@@ -3,10 +3,10 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { apiDocsUrl } from "@/lib/api";
+import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 
-const primaryDemoHref = "/workspace?example=rnaseq-deg";
 const navLinks = [
-  { label: "运行示例", href: primaryDemoHref },
+  { label: "运行示例", href: rnaseqDemoWorkspaceHref },
   { label: "Run 历史", href: "/runs" },
   { label: "Catalog", href: "/catalog" },
   { label: "系统视图", href: "/#surfaces" },
@@ -32,7 +32,7 @@ export function SiteHeader() {
         </nav>
         <div className="flex items-center gap-2">
           <Button asChild size="sm" className="h-9">
-            <Link href={primaryDemoHref} aria-label="运行 RNA-seq 示例">
+            <Link href={rnaseqDemoWorkspaceHref} aria-label="运行 RNA-seq 示例">
               <PlayCircle className="h-4 w-4" />
               <span className="hidden sm:inline">运行示例</span>
             </Link>

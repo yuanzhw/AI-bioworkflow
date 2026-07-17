@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiDocsUrl } from "@/lib/api";
-import { rnaseqExamplePrompt, rnaseqRecipeSteps } from "@/lib/examples";
+import { rnaseqDemoWorkspaceHref, rnaseqExamplePrompt, rnaseqRecipeSteps } from "@/lib/examples";
 
 const pipelineStages = [
   {
@@ -115,14 +115,13 @@ const stackRows = [
 ];
 
 export default function Home() {
-  const workspaceHref = "/workspace?example=rnaseq-deg";
   const demoRoutes: Array<{
     title: string;
     href: string;
   }> = [
     {
       title: "运行 RNA-seq 示例",
-      href: workspaceHref,
+      href: rnaseqDemoWorkspaceHref,
     },
     {
       title: "回看 Run 历史",
@@ -154,7 +153,7 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
-                <Link href={workspaceHref}>
+                <Link href={rnaseqDemoWorkspaceHref}>
                   运行 RNA-seq 示例
                   <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -289,7 +288,7 @@ export default function Home() {
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href={workspaceHref}>打开工作台</Link>
+            <Link href={rnaseqDemoWorkspaceHref}>打开工作台</Link>
           </Button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

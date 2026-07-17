@@ -15,6 +15,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { listRuns } from "@/lib/api";
+import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 import type { RunListResponse, RunStatus, RunSummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -207,7 +208,7 @@ function RunsList({
           运行一次 RNA-seq 示例后，这里会显示持久化 run 摘要。
         </p>
         <Button asChild className="mt-5">
-          <Link href="/workspace?example=rnaseq-deg">
+          <Link href={rnaseqDemoWorkspaceHref}>
             <RotateCcw className="h-4 w-4" />
             打开工作台
           </Link>
@@ -273,7 +274,7 @@ export default async function RunsPage({
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/workspace?example=rnaseq-deg">
+          <Link href={rnaseqDemoWorkspaceHref}>
             <RotateCcw className="h-4 w-4" />
             运行 RNA-seq 示例
           </Link>

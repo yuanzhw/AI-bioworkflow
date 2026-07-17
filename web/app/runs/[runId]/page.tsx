@@ -20,6 +20,7 @@ import { RunFailureSummary } from "@/components/run/run-failure-summary";
 import { WorkflowGraphPanel } from "@/components/workflow-graph/workflow-graph";
 import { getRunSnapshot } from "@/lib/api";
 import { hasCatalogRetrieval } from "@/lib/catalog-retrieval";
+import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -156,7 +157,7 @@ function RunDetail({ snapshot }: { snapshot: WorkflowRunSnapshotResponse }) {
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/workspace?example=rnaseq-deg">
+            <Link href={rnaseqDemoWorkspaceHref}>
               <RotateCcw className="h-4 w-4" />
               运行示例
             </Link>
