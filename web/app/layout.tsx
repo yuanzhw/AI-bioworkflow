@@ -6,9 +6,9 @@ import "@xyflow/react/dist/style.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI-bioworkflow",
+  title: "AI-bioworkflow | Bioinformatics Workflow Compiler",
   description:
-    "可解释的生信 Workflow 生成与编译系统，从自然语言需求到 Recipe Tool Plan、Workflow IR 和可验证 WDL。",
+    "面向作品集展示的生信 workflow compiler demo，从 Recipe Tool Plan、Workflow IR 到可验证 WDL，并提供 run timeline、DAG 和失败回放。",
 };
 
 export default function RootLayout({

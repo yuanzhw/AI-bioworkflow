@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiDocsUrl } from "@/lib/api";
-import { rnaseqExamplePrompt } from "@/lib/examples";
+import { rnaseqDemoExampleSlug, rnaseqExamplePrompt } from "@/lib/examples";
 import { WorkspaceWorkbench } from "./workspace-workbench";
 
 export default async function WorkspacePage({
@@ -13,7 +13,7 @@ export default async function WorkspacePage({
   searchParams: Promise<{ example?: string }>;
 }) {
   const params = await searchParams;
-  const isExample = params.example === "rnaseq-deg";
+  const isExample = params.example === rnaseqDemoExampleSlug;
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
