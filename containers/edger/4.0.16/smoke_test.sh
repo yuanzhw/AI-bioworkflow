@@ -27,6 +27,14 @@ treat_1	treated
 treat_2	treated
 TSV
 
+cat >"$workdir/sample_groups_three_groups.tsv" <<'TSV'
+sample_id	condition
+ctrl_1	control
+ctrl_2	control
+treat_1	treated
+treat_2	rescue
+TSV
+
 run_edger.R \
   --counts "$workdir/counts.tsv" \
   --sample-groups "$workdir/sample_groups.tsv" \
@@ -37,3 +45,17 @@ run_edger.R \
 
 grep -q '^gene_id' "$workdir/differential_expression.tsv"
 grep -q '^gene_a' "$workdir/differential_expression.tsv"
+
+if run_edger.R \
+  --counts "$workdir/counts.tsv" \
+  --sample-groups "$workdir/sample_groups_three_groups.tsv" \
+  --contrast condition \
+  --min-count 1 \
+  --fdr 0.05 \
+  --output "$workdir/three_group_result.tsv" \
+  2>"$workdir/three_group.stderr"; then
+  echo "expected run_edger.R to reject contrast columns with more than two groups" >&2
+  exit 1
+fi
+
+grep -q 'exactly two groups' "$workdir/three_group.stderr"

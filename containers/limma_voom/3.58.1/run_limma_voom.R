@@ -49,8 +49,8 @@ if (any(is.na(sample_groups$sample_id))) {
 }
 
 group <- factor(sample_groups[[contrast_column]])
-if (length(levels(group)) < 2) {
-  stop("contrast column must contain at least two groups", call. = FALSE)
+if (length(levels(group)) != 2) {
+  stop("contrast column must contain exactly two groups", call. = FALSE)
 }
 
 y <- DGEList(counts = count_matrix, group = group)
