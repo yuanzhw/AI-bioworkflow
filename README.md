@@ -269,9 +269,49 @@ Recipe Tool Plan 示例：
 
 `tool_calls[].inputs` 的值既可以是单个表达式字符串，也可以是表达式数组。数组会被编译成 WDL `Array[...]` 输入；例如 MultiQC 的 `report_files` 可以写成 `["qc.html_report", "qc.json_report", "quantify.log_file"]`，scatter 内产生的多个 `Array[File]` 会在渲染时自动展开为 `flatten([...])`。Catalog output 也可以用 `tags: [multiqc_input]` 标记可汇总文件；MultiQC 未显式提供 `report_files` 时会自动收集前序带标签输出。
 
-## 🏗️ 架构与开发指南
+## 🏗️ 架构总览与开发指南
 
-对于希望了解本项目底层实现原理、LangGraph 状态图设计，或有志于参与二次开发的工程师，请务必阅读我们的开发文档：
+系统提供自然语言和结构化输入两条入口，但最终都进入同一条以 Workflow IR
+为核心的编译链。自然语言入口先生成结构化 Recipe Tool Plan；结构化入口可以直接
+提交 Recipe Tool Plan 或 Workflow IR，不依赖 Planner API key。
+
+```mermaid
+flowchart TD
+    NL["自然语言需求"] --> ORCH["Orchestration Graph<br/>Planner + Catalog Retrieval"]
+    ORCH --> PLAN["Recipe Tool Plan"]
+    STRUCT["结构化输入<br/>Recipe Tool Plan / Workflow IR"] --> NORMALIZER["IR Normalizer<br/>Schema + Catalog Validation"]
+    PLAN --> NORMALIZER
+    NORMALIZER --> IR["Workflow IR<br/>Canonical DAG Contract"]
+    IR --> ANALYZER["Analyzer"]
+    ANALYZER --> RENDERER["Deterministic<br/>WDL Renderer"]
+    ANALYZER -- "有界修复" --> REPAIRER["Deterministic Repairer"]
+    REPAIRER -- "重新分析" --> ANALYZER
+    RENDERER --> CHECKER["WDL Checker"]
+    CHECKER --> OUTPUTS["Run Events + Artifacts<br/>Plan / IR / WDL / Diagnostics"]
+    IR -. "结构审阅" .-> DAG["Workflow IR DAG"]
+```
+
+Web 层与编译器核心通过显式 API 和 application service 隔离：
+
+```mermaid
+flowchart LR
+    WEB["Next.js<br/>Demo / Workbench / History / DAG"] -- "创建与查询" --> API["FastAPI<br/>Run + Catalog API"]
+    API -- "Snapshot + SSE" --> WEB
+    API --> SERVICE["Python Application Service"]
+    CLI["CLI"] --> SERVICE
+    SERVICE --> CORE["Orchestration Graph<br/>Compiler Graph"]
+    CORE --> RECORDS["SQLite Run Records<br/>Events + Artifacts + Diagnostics"]
+    RECORDS --> API
+```
+
+关键边界：
+
+- 当前公开演示主路径中，LLM Planner 只把自然语言需求规划为 Recipe Tool Plan，不直接生成最终 WDL。
+- FastAPI 与 CLI 复用 Python application service；API 不通过 shell 调用 CLI。
+- Next.js 只提交请求并展示 API 返回的事件和产物，不生成或修复 Plan、Workflow IR 或 WDL。
+- DAG 从 Workflow IR 派生，用于审阅 step、scatter 和依赖关系，不表示真实 workflow call 的运行状态。
+
+对于希望了解底层实现、LangGraph 状态图设计或参与二次开发的工程师，请阅读：
 
 👉 **[查看 DEVELOPMENT.md 开发指南](./DEVELOPMENT.md)**
 
@@ -280,6 +320,8 @@ Workflow IR 的结构、表达式规则、scatter 语义和 WDL 后端映射详�
 👉 **[Workflow IR 规范与后端映射](./docs/workflow-ir.md)**
 
 Web 产品化拆解与当前 W6 收口计划详见：
+
+👉 **[W4 工作台工作拆解](./docs/w4-workbench-plan.md)**
 
 👉 **[W5 DAG 与历史详情工作拆解](./docs/w5-dag-history-plan.md)**
 

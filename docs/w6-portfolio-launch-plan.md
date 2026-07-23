@@ -153,6 +153,16 @@ README 应提供：
 4. **W6 deployment docs**：部署说明、环境变量、CORS 和公开 demo 注意事项。
 5. **W6 screenshots and final QA**：截图/录屏资产、README 导航和最终 lint/build/test。
 
+当前实施进度：
+
+| 阶段 | 状态 | 实施记录 |
+| --- | --- | --- |
+| W6 portfolio landing polish | 已完成 | 首页和导航已形成 demo hub，稳定入口覆盖 RNA-seq 示例、run history、Catalog 和 API 文档。 |
+| W6 demo readiness | 已完成 | 工作台、历史、详情和 Catalog 已统一恢复入口，并补充 API 不可达等可读失败状态。 |
+| W6 architecture visuals | 进行中 | README 架构图和系统边界叙事正在收口，重点说明确定性编译链、服务复用与 DAG 结构语义。 |
+| W6 deployment docs | 待开始 | 等待架构叙事合并后处理部署、环境变量、CORS 和公开 demo 数据边界。 |
+| W6 screenshots and final QA | 待开始 | 在部署说明稳定后统一制作展示资产并执行最终前端 QA。 |
+
 如果某个 PR 只改文档，可以不运行前端 build，但应至少检查 Markdown 链接和文案一致性。涉及前端代码的 PR 应运行前端验证。
 
 ## W6 不做
