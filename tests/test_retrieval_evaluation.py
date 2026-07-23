@@ -57,11 +57,38 @@ class RetrievalEvaluationTests(unittest.TestCase):
     def test_loads_current_catalog_query_fixture(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
 
-        self.assertEqual(len(queries), 16)
-        self.assertEqual(sum(1 for query in queries if query.supported), 12)
+        self.assertEqual(len(queries), 24)
+        self.assertEqual(sum(1 for query in queries if query.supported), 20)
         self.assertEqual(sum(1 for query in queries if not query.supported), 4)
         self.assertEqual(queries[0].id, "rnaseq_deg_basic_en")
         self.assertIn("fastp", queries[0].expected_tools)
+        self.assertIn(
+            "rnaseq_reference_prep_basic_en",
+            {query.id for query in queries},
+        )
+        self.assertIn(
+            "rnaseq_deg_alternative_backends_en",
+            {query.id for query in queries},
+        )
+        queries_by_id = {query.id: query for query in queries}
+        explicit_deseq2 = queries_by_id["rnaseq_deg_explicit_tools_en"]
+        self.assertIn("deseq2", explicit_deseq2.expected_tools)
+        self.assertEqual(
+            explicit_deseq2.expected_roles["differential_expression"],
+            ["deseq2"],
+        )
+        chinese_explicit_deseq2 = queries_by_id["rnaseq_deg_cn_mixed_tools"]
+        self.assertIn("deseq2", chinese_explicit_deseq2.expected_tools)
+        self.assertEqual(
+            chinese_explicit_deseq2.expected_roles["differential_expression"],
+            ["deseq2"],
+        )
+        generic_deg = queries_by_id["rnaseq_deg_abbrev_en"]
+        self.assertNotIn("deseq2", generic_deg.expected_tools)
+        self.assertEqual(
+            generic_deg.expected_roles["differential_expression"],
+            ["deseq2", "edger", "limma_voom"],
+        )
 
     def test_evaluates_current_catalog_baseline(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
@@ -75,10 +102,10 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["strategy"], "lexical_v1")
         self.assertEqual(result["top_k_recipes"], 3)
         self.assertEqual(result["top_k_tools"], 8)
-        self.assertEqual(result["query_count"], 16)
-        self.assertEqual(result["supported_query_count"], 12)
+        self.assertEqual(result["query_count"], 24)
+        self.assertEqual(result["supported_query_count"], 20)
         self.assertEqual(result["unsupported_query_count"], 4)
-        self.assertEqual(len(result["queries"]), 16)
+        self.assertEqual(len(result["queries"]), 24)
         for metric in result["metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
@@ -127,13 +154,20 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["tool_recall_at_k"], 0.25)
         self.assertEqual(result["metrics"]["tool_mrr"], 0.5)
         self.assertEqual(result["metrics"]["role_coverage"], 0.25)
+        self.assertEqual(result["metrics"]["planner_context_tool_recall"], 0.5)
+        self.assertEqual(result["metrics"]["planner_context_role_coverage"], 0.5)
         self.assertEqual(result["metrics"]["fallback_rate"], 0.3333)
         self.assertEqual(result["metrics"]["supported_fallback_rate"], 0.5)
         self.assertEqual(result["metrics"]["unsupported_fallback_rate"], 0.0)
         self.assertEqual(result["fallback_query_ids"], ["q2"])
         self.assertEqual(result["unsupported_direct_match_query_ids"], ["q3"])
+        self.assertIn("deseq2", result["queries"][0]["planner_context_tools"])
         self.assertEqual(result["queries"][1]["missed_expected_tools"], ["deseq2"])
         self.assertEqual(result["queries"][1]["missed_roles"], ["differential_expression"])
+        self.assertEqual(
+            result["queries"][1]["planner_context_missed_expected_tools"],
+            ["deseq2"],
+        )
 
     def test_rejects_unsupported_queries_with_expected_hits(self):
         with self.assertRaisesRegex(ValueError, "unsupported queries must not define expected hits"):

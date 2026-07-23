@@ -4,15 +4,15 @@
     "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files with QC, transcript quantification, gene-level counts, and a workflow summary report.",
     "supported": true,
     "expected_recipe": "rnaseq_differential_expression",
-    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
     "expected_roles": {
       "read_quality_control": ["fastp"],
       "expression_quantification": ["salmon"],
       "transcript_to_gene_count_summary": ["tximport"],
-      "differential_expression": ["deseq2"],
+      "differential_expression": ["deseq2", "edger", "limma_voom"],
       "quality_control_summary": ["multiqc"]
     },
-    "notes": "Basic supported RNA-seq DEG request without explicit tool names."
+    "notes": "Basic supported RNA-seq DEG request without explicit DE backend names."
   },
   {
     "id": "rnaseq_deg_explicit_tools_en",
@@ -27,7 +27,7 @@
       "differential_expression": ["deseq2"],
       "quality_control_summary": ["multiqc"]
     },
-    "notes": "Supported request with every approved RNA-seq tool named explicitly."
+    "notes": "Supported request with all requested pipeline tools named explicitly, including DESeq2."
   },
   {
     "id": "rnaseq_deg_cn_mixed_tools",
@@ -49,27 +49,27 @@
     "query": "Create a DEG workflow for bulk RNAseq paired-end reads, including adapter trimming, transcript quantification, transcript-to-gene summarization, and a QC report.",
     "supported": true,
     "expected_recipe": "rnaseq_differential_expression",
-    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
     "expected_roles": {
       "read_quality_control": ["fastp"],
       "expression_quantification": ["salmon"],
       "transcript_to_gene_count_summary": ["tximport"],
-      "differential_expression": ["deseq2"],
+      "differential_expression": ["deseq2", "edger", "limma_voom"],
       "quality_control_summary": ["multiqc"]
     },
-    "notes": "Uses DEG and RNAseq shorthand while describing all major roles."
+    "notes": "Uses DEG and RNAseq shorthand without naming a specific DE backend."
   },
   {
     "id": "rnaseq_deg_no_tool_names_en",
     "query": "Identify differentially expressed genes from RNA sequencing FASTQs and create a workflow-level quality-control summary.",
     "supported": true,
     "expected_recipe": "rnaseq_differential_expression",
-    "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+    "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
     "expected_roles": {
       "read_quality_control": ["fastp"],
       "expression_quantification": ["salmon"],
       "transcript_to_gene_count_summary": ["tximport"],
-      "differential_expression": ["deseq2"],
+      "differential_expression": ["deseq2", "edger", "limma_voom"],
       "quality_control_summary": ["multiqc"]
     },
     "notes": "Supported natural-language request that does not name specific tools."
@@ -130,14 +130,14 @@
     "query": "Differential expression from sample metadata, a tx2gene mapping table, and a Salmon transcriptome index for paired-end RNA-seq.",
     "supported": true,
     "expected_recipe": "rnaseq_differential_expression",
-    "expected_tools": ["fastp", "salmon", "tximport", "deseq2"],
+    "expected_tools": ["fastp", "salmon", "tximport"],
     "expected_roles": {
       "read_quality_control": ["fastp"],
       "expression_quantification": ["salmon"],
       "transcript_to_gene_count_summary": ["tximport"],
-      "differential_expression": ["deseq2"]
+      "differential_expression": ["deseq2", "edger", "limma_voom"]
     },
-    "notes": "Supported request emphasizing recipe inputs instead of step names."
+    "notes": "Supported request emphasizing recipe inputs instead of step names; any approved DE backend is acceptable."
   },
   {
     "id": "rnaseq_gene_counts_cn_mixed",
@@ -164,6 +164,96 @@
       "quality_control_summary": ["multiqc"]
     },
     "notes": "Supported request focused on tagged QC outputs and workflow summary."
+  },
+  {
+    "id": "rnaseq_reference_prep_basic_en",
+    "query": "Prepare RNA-seq reference artifacts by building a Salmon transcriptome index from FASTA and extracting tx2gene from a GTF annotation.",
+    "supported": true,
+    "expected_recipe": "rnaseq_reference_preparation",
+    "expected_tools": ["salmon_index", "gtf_tx2gene"],
+    "expected_roles": {
+      "transcriptome_index_build": ["salmon_index"],
+      "transcript_to_gene_mapping": ["gtf_tx2gene"]
+    },
+    "notes": "Supported reference preparation request covering both new reference prep tools."
+  },
+  {
+    "id": "rnaseq_reference_prep_cn_mixed",
+    "query": "准备 RNA-seq reference：从 transcriptome FASTA 构建 Salmon index，并从 GTF 提取 tx2gene 映射表。",
+    "supported": true,
+    "expected_recipe": "rnaseq_reference_preparation",
+    "expected_tools": ["salmon_index", "gtf_tx2gene"],
+    "expected_roles": {
+      "transcriptome_index_build": ["salmon_index"],
+      "transcript_to_gene_mapping": ["gtf_tx2gene"]
+    },
+    "notes": "Chinese reference preparation request with English tool and artifact names."
+  },
+  {
+    "id": "rnaseq_salmon_index_only_en",
+    "query": "Build a Salmon index archive from a transcriptome FASTA for RNA-seq quantification.",
+    "supported": true,
+    "expected_recipe": "rnaseq_reference_preparation",
+    "expected_tools": ["salmon_index"],
+    "expected_roles": {
+      "transcriptome_index_build": ["salmon_index"]
+    },
+    "notes": "Partial reference preparation request focused on Salmon index construction."
+  },
+  {
+    "id": "rnaseq_gtf_tx2gene_only_en",
+    "query": "Extract a transcript-to-gene mapping table from a GTF annotation for tximport.",
+    "supported": true,
+    "expected_recipe": "rnaseq_reference_preparation",
+    "expected_tools": ["gtf_tx2gene"],
+    "expected_roles": {
+      "transcript_to_gene_mapping": ["gtf_tx2gene"]
+    },
+    "notes": "Partial reference preparation request focused on tx2gene extraction."
+  },
+  {
+    "id": "rnaseq_deg_edger_en",
+    "query": "Use edgeR quasi-likelihood testing for bulk RNA-seq differential expression from a gene count matrix.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["edger"],
+    "expected_roles": {
+      "differential_expression": ["edger"]
+    },
+    "notes": "Supported request naming edgeR as the differential expression backend."
+  },
+  {
+    "id": "rnaseq_deg_limma_voom_en",
+    "query": "Run limma voom differential expression for bulk RNA-seq gene counts and sample group metadata.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["limma_voom"],
+    "expected_roles": {
+      "differential_expression": ["limma_voom"]
+    },
+    "notes": "Supported request naming limma-voom as the differential expression backend."
+  },
+  {
+    "id": "rnaseq_deg_alternative_backends_en",
+    "query": "Evaluate bulk RNA-seq differential expression with edgeR or limma voom instead of DESeq2.",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["edger", "limma_voom"],
+    "expected_roles": {
+      "differential_expression": ["edger", "limma_voom"]
+    },
+    "notes": "Supported request naming both newly approved DE alternatives."
+  },
+  {
+    "id": "rnaseq_deg_alternative_backends_cn",
+    "query": "bulk RNA-seq 差异表达不想用 DESeq2，想试 edgeR 或 limma voom。",
+    "supported": true,
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["edger", "limma_voom"],
+    "expected_roles": {
+      "differential_expression": ["edger", "limma_voom"]
+    },
+    "notes": "Chinese request for alternative differential expression backends."
   },
   {
     "id": "unsupported_chipseq_peak_calling_en",

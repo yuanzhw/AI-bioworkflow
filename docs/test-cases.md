@@ -1704,9 +1704,9 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
-fixture，调用当前 Approved Catalog Retriever，并计算 current-catalog
-baseline metrics。Fixture 不扩展正式 Catalog，也不伪造工具；unsupported
-负例单独统计，不污染当前 RNA-seq supported recall。
+fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
+catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统计，
+不污染当前 RNA-seq supported recall。
 
 ### `test_loads_current_catalog_query_fixture`
 
@@ -1720,15 +1720,21 @@ baseline metrics。Fixture 不扩展正式 Catalog，也不伪造工具；unsupp
 
 期望输出：
 
-- fixture 共 16 条 query。
-- 12 条 `supported == True`，4 条 `supported == False`。
+- fixture 共 24 条 query。
+- 20 条 `supported == True`，4 条 `supported == False`。
 - 第一条 query id 为 `rnaseq_deg_basic_en`。
 - 第一条 query 的 expected tools 包含 `fastp`。
+- fixture 包含 `rnaseq_reference_prep_basic_en`。
+- fixture 包含 `rnaseq_deg_alternative_backends_en`。
+- 显式指定 DESeq2 的 query 将 `deseq2` 记录为 required expected tool。
+- 未指定 differential expression backend 的 query 允许 `deseq2`、`edger`
+  或 `limma_voom` 任一 approved tool 覆盖该 role。
 
 覆盖点：
 
 - R2 query set schema 可被稳定读取。
 - 当前 baseline 明确区分 supported RNA-seq 查询和 unsupported 负例。
+- Fixture 标注明确区分显式 tool intent 和通用 role intent。
 
 ### `test_evaluates_current_catalog_baseline`
 
@@ -1747,8 +1753,8 @@ baseline metrics。Fixture 不扩展正式 Catalog，也不伪造工具；unsupp
 - `strategy == "lexical_v1"`。
 - `top_k_recipes == 3`。
 - `top_k_tools == 8`。
-- `query_count == 16`。
-- `supported_query_count == 12`。
+- `query_count == 24`。
+- `supported_query_count == 20`。
 - `unsupported_query_count == 4`。
 - 每个 metric 均为 0 到 1 之间的稳定数值。
 
@@ -1778,14 +1784,20 @@ baseline metrics。Fixture 不扩展正式 Catalog，也不伪造工具；unsupp
 - `tool_recall_at_k == 0.25`。
 - `tool_mrr == 0.5`。
 - `role_coverage == 0.25`。
+- `planner_context_tool_recall == 0.5`。
+- `planner_context_role_coverage == 0.5`。
 - `fallback_rate == 0.3333`。
 - `supported_fallback_rate == 0.5`。
 - `unsupported_fallback_rate == 0.0`。
 - `unsupported_direct_match_query_ids == ["q3"]`。
+- 第一条 query 的 `planner_context_tools` 包含 `deseq2`。
+- 第二条 query 的 `planner_context_missed_expected_tools == ["deseq2"]`。
 
 覆盖点：
 
 - Supported queries 参与 recall / MRR / role coverage。
+- Planner context metrics 会把 retrieved recipe 的 allowed tools 纳入候选上下文，
+  区分 raw retrieval miss 和 Planner prompt candidate coverage。
 - Unsupported queries 不污染 supported recall，但会暴露 direct-match 风险。
 - Fallback rate 按 all / supported / unsupported 三个视角记录。
 

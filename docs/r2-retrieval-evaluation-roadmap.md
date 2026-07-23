@@ -54,15 +54,15 @@ retrieval query set
   "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files.",
   "supported": true,
   "expected_recipe": "rnaseq_differential_expression",
-  "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
+  "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
   "expected_roles": {
     "read_quality_control": ["fastp"],
     "expression_quantification": ["salmon"],
     "transcript_to_gene_count_summary": ["tximport"],
-    "differential_expression": ["deseq2"],
+    "differential_expression": ["deseq2", "edger", "limma_voom"],
     "quality_control_summary": ["multiqc"]
   },
-  "notes": "Basic RNA-seq DEG request without explicit tool names."
+  "notes": "Basic RNA-seq DEG request without explicit DE backend names."
 }
 ```
 
@@ -71,13 +71,15 @@ retrieval query set
 RNA-seq baseline recall；它们单独用于观察 fallback、误召回和未来 Catalog
 扩展需求。
 
-建议第一批 20 条，覆盖：
+当前 query set 覆盖：
 
 - 英文 RNA-seq DEG 请求。
 - 中文 RNA-seq DEG 请求。
 - 缩写表达，例如 DEG、RNAseq、bulk RNA。
 - 明确工具名请求，例如 use Salmon and DESeq2。
 - 只描述分析目标但不说工具名。
+- RNA-seq reference preparation，例如 Salmon index 和 GTF -> tx2gene。
+- edgeR 和 limma-voom 等 differential expression 替代后端。
 - Catalog 暂不支持的负例，例如 ChIP-seq、scRNA-seq、variant calling。
 - 模糊需求，例如 quality report、quantification、gene-level counts。
 - 参数相关请求，例如 paired-end reads、contrast、threads。
@@ -106,6 +108,22 @@ baseline：
 tests/fixtures/retrieval_queries.json
 ```
 
+### R2b Expanded RNA-seq Catalog Baseline
+
+在 Catalog 增加 `rnaseq_reference_preparation`、`salmon_index`、`gtf_tx2gene`、
+`edger` 和 `limma_voom` 后，query set 扩展为：
+
+- 20 条当前支持范围内的 RNA-seq DEG / reference prep / QC / quantification /
+  reporting 查询。
+- 4 条 unsupported negative queries，继续覆盖 ChIP-seq、scRNA-seq、variant
+  calling 和 metagenomics。
+- 泛化 differential expression query 不再硬性要求 `deseq2`；它们通过
+  `expected_roles.differential_expression` 表达 `deseq2`、`edger` 或
+  `limma_voom` 任一 approved backend 均可覆盖该 role。
+- 显式指定 differential expression backend 的 query 仍将对应 tool 记录在
+  `expected_tools` 中，并且只允许该 tool 覆盖
+  `expected_roles.differential_expression`。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -116,6 +134,8 @@ tests/fixtures/retrieval_queries.json
 | `Tool Recall@K` | expected tools 中有多少出现在 top-K tools | 判断候选工具是否完整 |
 | `MRR` | 第一个正确 recipe 或 tool 的 reciprocal rank | 判断排序质量 |
 | `Role Coverage` | expected_roles 中每个 role 是否至少有一个正确 tool | 判断 workflow step 覆盖 |
+| `Planner Context Tool Recall` | raw retrieved tools 加上 retrieved recipes 的 allowed tools 后覆盖多少 expected tools | 判断 Planner prompt 候选上下文是否完整 |
+| `Planner Context Role Coverage` | Planner candidate context 是否覆盖每个 expected role | 区分 raw retriever miss 和 prompt context 可用性 |
 | `Fallback Rate` | 触发 fallback 的 query 占比 | 判断 catalog 覆盖和检索置信度 |
 
 初始目标不是追求高分，而是建立可重复 baseline：
@@ -124,6 +144,7 @@ tests/fixtures/retrieval_queries.json
 lexical_v1 Recipe Recall@3
 lexical_v1 Tool Recall@8
 lexical_v1 Role Coverage
+lexical_v1 Planner Context Role Coverage
 lexical_v1 Fallback Rate
 ```
 
@@ -151,26 +172,32 @@ tests/test_retrieval_evaluation.py
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py
 ```
 
-初始 `lexical_v1` current-catalog baseline：
+当前 `lexical_v1` expanded RNA-seq catalog baseline：
 
 | Metric | Value |
 | --- | ---: |
-| Query count | 16 |
-| Supported queries | 12 |
+| Query count | 24 |
+| Supported queries | 20 |
 | Unsupported queries | 4 |
 | Recipe Recall@3 | 1.0000 |
-| Recipe MRR | 1.0000 |
-| Tool Recall@8 | 0.9722 |
-| Tool MRR | 1.0000 |
-| Role Coverage | 0.9722 |
-| Fallback Rate | 0.0625 |
+| Recipe MRR | 0.9500 |
+| Tool Recall@8 | 0.9708 |
+| Tool MRR | 0.9600 |
+| Role Coverage | 0.9733 |
+| Planner Context Tool Recall | 1.0000 |
+| Planner Context Role Coverage | 1.0000 |
+| Fallback Rate | 0.0417 |
 | Supported Fallback Rate | 0.0000 |
 | Unsupported Fallback Rate | 0.2500 |
 
 已知 baseline 观察：
 
-- `rnaseq_params_threads_contrast_en` 未召回 `tximport`，说明参数型 query
-  可能需要更强的 recipe-step 或 role-aware expansion。
+- `rnaseq_deg_no_tool_names_en` 和 `rnaseq_params_threads_contrast_en` 的 raw
+  tool retrieval 未直接召回 `tximport`，说明 query 只描述目标或参数时，
+  lexical tool recall 仍会漏掉中间步骤。
+- Planner Context Tool Recall 和 Planner Context Role Coverage 均为 1.0000，
+  说明当 top recipe 召回正确时，Planner prompt 中通过 recipe allowed tools
+  补齐的候选上下文仍覆盖所需工具和 role。
 - `unsupported_chipseq_peak_calling_en`、`unsupported_scrnaseq_clustering_en`
   和 `unsupported_variant_calling_en` 产生 direct lexical match，说明当前
   lexical fallback 不是 unsupported intent detector；负例评估只用于暴露风险，
