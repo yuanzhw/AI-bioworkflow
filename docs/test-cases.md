@@ -2272,6 +2272,145 @@ result 和 policy 边界。
 - Reviewer result 的 `status` 与 payload 保持一一对应，避免下游按状态分支时遇到
   歧义载荷。
 
+## `tests/test_reviewer_patcher.py`
+
+该文件验证 P2.2 Reviewer patch application layer。该层不调用 LLM provider，
+也不接入 Compiler Graph 路由；它只负责把已解析、policy-checked 的
+`ReviewerIRPatch` 安全应用到 Workflow IR copy，并在返回前重新通过
+`WorkflowIR` schema validation。
+
+### `test_apply_reviewer_patch_updates_allowed_workflow_ir_paths`
+
+输入：
+
+- 一个缺少 `r2` call input 的 Workflow IR。
+- patch actions：
+  - 给 `/workflow/steps/0/inputs/r2` 增加 `raw_r2`。
+  - 替换 `/workflow/outputs/clean_r1`。
+  - 替换 `/tasks/fastp/outputs/clean_r1/value`。
+- 当前 workflow approved catalog context。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 返回 `WorkflowIR` model。
+- `workflow.steps` 中的 call input 被修复。
+- compatibility `workflow.calls` 被同步更新。
+- workflow output 和 task output literal 被更新。
+- 原始 IR dict 不包含新增的 `r2`。
+
+覆盖点：
+
+- P2.2 应用层可以应用当前 allowlist 内的 wiring、workflow output 和 task output
+  literal patch。
+- patch 应用在 copy 上执行，不原地修改原始 Workflow IR。
+
+### `test_apply_reviewer_patch_removes_workflow_output_without_mutating_original`
+
+输入：
+
+- 一个包含 `legacy_report` workflow output 的 Workflow IR。
+- `remove` action 指向 `/workflow/outputs/legacy_report`。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 返回 IR 中不再包含 `legacy_report`。
+- 原始 IR 仍保留 `legacy_report`。
+
+覆盖点：
+
+- `remove` 支持 allowlist 内的 object entry 删除。
+- 删除失败不会通过共享引用污染原始 IR。
+
+### `test_apply_reviewer_patch_moves_workflow_steps_and_syncs_calls`
+
+输入：
+
+- 一个 step 顺序为 `align -> qc` 的 Workflow IR。
+- `move` action：`from_path = /workflow/steps/1`，`path = /workflow/steps/0`。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 返回 IR 中 `workflow.steps` 顺序为 `qc -> align`。
+- compatibility `workflow.calls` 同步为 `qc -> align`。
+- 原始 IR 的第一步仍是 `align`。
+
+覆盖点：
+
+- Reviewer patch application 支持 workflow step ordering 修复。
+- canonical `workflow.steps` 修改后会刷新 compatibility `workflow.calls`。
+
+### `test_apply_reviewer_patch_rejects_forbidden_path_without_mutating_original`
+
+输入：
+
+- patch 尝试替换 `/tasks/fastp/runtime/docker`。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 抛出 `ReviewerPatchPolicyError`。
+- 原始 runtime docker 不变。
+
+覆盖点：
+
+- application layer 会先执行 Reviewer patch policy validation。
+- forbidden path 不会进入实际修改阶段。
+
+### `test_apply_reviewer_patch_rejects_missing_replace_target_without_mutating_original`
+
+输入：
+
+- patch 尝试 `replace` 不存在的 `/workflow/steps/0/inputs/r2`。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 抛出 `ReviewerPatchApplicationError`。
+- 原始 call input 不包含 `r2`。
+
+覆盖点：
+
+- `add` 与 `replace` 的 application 语义保持区分。
+- 应用失败时原始 IR 保持不变。
+
+### `test_apply_reviewer_patch_rejects_schema_invalid_candidate_without_mutating_original`
+
+输入：
+
+- patch 尝试把 `/workflow/outputs/clean_r1` 替换为数组值。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 抛出 `ReviewerPatchApplicationError`，错误说明 candidate 不是合法 Workflow IR。
+- 原始 workflow output 仍是字符串表达式。
+
+覆盖点：
+
+- patch 应用完成后仍必须重新通过 `WorkflowIR` schema validation。
+- schema-invalid candidate 不会被交给 graph re-entry。
+
 ## `tests/test_graph.py`
 
 该文件验证 Compiler Graph、Analyzer、Renderer 和 deterministic repairer 的交互。
