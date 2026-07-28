@@ -327,6 +327,10 @@ Web 产品化拆解与当前 W6 收口计划详见：
 
 👉 **[W6 部署与作品集打磨工作拆解](./docs/w6-portfolio-launch-plan.md)**
 
+部署拓扑、环境变量、CORS、SQLite 数据边界和回滚流程详见：
+
+👉 **[部署与运维手册](./docs/deployment.md)**
+
 ## 📅 未来路线图 (Roadmap)
 
 - [x] 搭建基础 LangGraph 状态机。

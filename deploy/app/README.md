@@ -51,7 +51,12 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 8010
 AI_BIOWORKFLOW_DB_PATH=/data/ai-bioworkflow/ai-bioworkflow.sqlite3
 AI_BIOWORKFLOW_RUN_BACKEND=disabled
 WDL_VALIDATOR=miniwdl
-DEEPSEEK_API_KEY=<仅自然语言规划需要>
+
+# 仅当前后端跨 origin 部署时需要。
+# AI_BIOWORKFLOW_CORS_ORIGINS=https://portfolio.example.com
+
+# 仅自然语言规划需要；结构化示例不需要。
+# DEEPSEEK_API_KEY=<your-deepseek-api-key>
 ```
 
 如果需要在容器替换后保留 run 历史记录，应持久化挂载
@@ -120,7 +125,12 @@ AI_BIOWORKFLOW_WEB_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-bio
 ```text
 AI_BIOWORKFLOW_RUN_BACKEND=disabled
 WDL_VALIDATOR=miniwdl
-DEEPSEEK_API_KEY=<your-deepseek-api-key>
+
+# 仅当前后端跨 origin 部署时需要。
+# AI_BIOWORKFLOW_CORS_ORIGINS=https://portfolio.example.com
+
+# 仅自然语言规划需要；结构化示例不需要。
+# DEEPSEEK_API_KEY=<your-deepseek-api-key>
 ```
 
 启动或更新应用：
