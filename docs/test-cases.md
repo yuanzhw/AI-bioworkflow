@@ -1801,6 +1801,32 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 - Unsupported queries 不污染 supported recall，但会暴露 direct-match 风险。
 - Fallback rate 按 all / supported / unsupported 三个视角记录。
 
+### `test_deduplicates_planner_context_tool_ids_from_multiple_versions`
+
+输入：
+
+- 一条 supported synthetic query。
+- fake retriever 返回两个不同版本的 `salmon`，随后返回 `fastp`。
+- retrieved recipe 的 allowed tools 可以补齐 `deseq2`。
+
+执行：
+
+- 调用
+  `evaluate_retrieval_queries(..., retriever=multi_version_fake_retriever)`。
+
+期望输出：
+
+- `planner_context_tools` 保持首次召回顺序，以 `salmon`、`fastp` 开头。
+- `planner_context_tools` 仅包含一次 `salmon`。
+- `planner_context_tool_recall == 1.0`。
+- `planner_context_role_coverage == 1.0`。
+
+覆盖点：
+
+- 同一 tool ID 的多个 Catalog 版本不会在 tool-level Planner context artifact
+  中产生重复项。
+- 去重不改变 Planner context recall 或 role coverage。
+
 ### `test_rejects_unsupported_queries_with_expected_hits`
 
 输入：

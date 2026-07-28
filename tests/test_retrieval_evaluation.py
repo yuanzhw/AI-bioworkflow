@@ -49,6 +49,27 @@ def fake_retriever(
     }
 
 
+def multi_version_fake_retriever(
+    query: str,
+    _tool_catalog,
+    _recipe_catalog,
+    _top_k_recipes: int,
+    _top_k_tools: int,
+) -> dict[str, Any]:
+    return {
+        "query": query,
+        "strategy": "fake_multi_version_v1",
+        "recipes": [{"id": "rnaseq_differential_expression"}],
+        "tools": [
+            {"id": "salmon", "version": "1.9.0"},
+            {"id": "salmon", "version": "1.10.0"},
+            {"id": "fastp", "version": "1.3.3"},
+        ],
+        "fallback_used": False,
+        "fallback_reason": None,
+    }
+
+
 class RetrievalEvaluationTests(unittest.TestCase):
     def setUp(self):
         self.tool_catalog = load_tool_catalog()
@@ -168,6 +189,34 @@ class RetrievalEvaluationTests(unittest.TestCase):
             result["queries"][1]["planner_context_missed_expected_tools"],
             ["deseq2"],
         )
+
+    def test_deduplicates_planner_context_tool_ids_from_multiple_versions(self):
+        queries = [
+            RetrievalQuery(
+                id="multi-version",
+                query="multi-version tool results",
+                supported=True,
+                expected_recipe="rnaseq_differential_expression",
+                expected_tools=["salmon", "deseq2"],
+                expected_roles={
+                    "expression_quantification": ["salmon"],
+                    "differential_expression": ["deseq2"],
+                },
+            )
+        ]
+
+        result = evaluate_retrieval_queries(
+            queries,
+            self.tool_catalog,
+            self.recipe_catalog,
+            retriever=multi_version_fake_retriever,
+        )
+
+        planner_context_tools = result["queries"][0]["planner_context_tools"]
+        self.assertEqual(planner_context_tools[:2], ["salmon", "fastp"])
+        self.assertEqual(planner_context_tools.count("salmon"), 1)
+        self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
+        self.assertEqual(result["metrics"]["planner_context_role_coverage"], 1.0)
 
     def test_rejects_unsupported_queries_with_expected_hits(self):
         with self.assertRaisesRegex(ValueError, "unsupported queries must not define expected hits"):

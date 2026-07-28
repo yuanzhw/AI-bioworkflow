@@ -268,8 +268,14 @@ def _planner_context_tool_ids(
     retrieved_tool_ids: list[str],
     recipe_catalog: RecipeCatalog,
 ) -> list[str]:
-    tool_ids = list(retrieved_tool_ids)
-    seen = set(tool_ids)
+    tool_ids: list[str] = []
+    seen: set[str] = set()
+    for tool_id in retrieved_tool_ids:
+        if tool_id in seen:
+            continue
+        tool_ids.append(tool_id)
+        seen.add(tool_id)
+
     for recipe_id in retrieved_recipe_ids:
         try:
             recipe = recipe_catalog.get(recipe_id)
