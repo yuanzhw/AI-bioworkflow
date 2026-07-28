@@ -2141,7 +2141,6 @@ result 和 policy 边界。
   - `/tasks/foo-bar/outputs/x/value`
   - `/tasks/foo/outputs/x-y/value`
   - `/workflow/steps/0/inputs/read-1`
-  - `/workflow/calls/0/inputs/read-1`
 
 执行：
 
@@ -2178,7 +2177,7 @@ result 和 policy 边界。
 - `workflow.outputs` 是 `dict[str, str]`，Reviewer 只能直接修改单个 output entry。
 - policy 不接受空 output key 或 output entry 下的深层 JSON pointer。
 
-### `test_policy_allows_move_only_for_workflow_step_or_call_items`
+### `test_policy_allows_move_only_for_workflow_step_items`
 
 输入：
 
@@ -2196,10 +2195,10 @@ result 和 policy 边界。
 
 覆盖点：
 
-- P2 policy 允许 Reviewer 通过 list-item pointer 调整 step/call ordering。
+- P2 policy 允许 Reviewer 通过 list-item pointer 调整 canonical step ordering。
 - 该权限不扩展到整体替换 `workflow.steps` 或修改 step 内部 task 选择。
 
-### `test_policy_rejects_move_outside_workflow_step_or_call_items`
+### `test_policy_rejects_move_outside_workflow_step_items`
 
 输入：
 
@@ -2218,16 +2217,15 @@ result 和 policy 边界。
 
 覆盖点：
 
-- `move` 只服务于 `/workflow/steps/<index>` 或 `/workflow/calls/<index>` 的排序修复。
+- `move` 只服务于 `/workflow/steps/<index>` 的排序修复。
 - Reviewer 不能用 `move` 修改 workflow output、call input wiring 或 task output literal。
 
-### `test_policy_rejects_move_between_workflow_steps_and_calls`
+### `test_policy_rejects_all_workflow_calls_patch_operations`
 
 输入：
 
-- 分别尝试 `move`：
-  - `from_path = /workflow/steps/1`，`path = /workflow/calls/0`
-  - `from_path = /workflow/calls/1`，`path = /workflow/steps/0`
+- 分别尝试针对 `/workflow/calls/...` 的 `add`、`replace`、`remove` 和 `move`
+  patch。
 
 执行：
 
@@ -2235,12 +2233,12 @@ result 和 policy 边界。
 
 期望输出：
 
-- 每个 patch 都抛出 `ReviewerPatchPolicyError`。
+- 四种 operation 都抛出 `ReviewerPatchPolicyError`。
 
 覆盖点：
 
-- `move` 只能在同一个 workflow collection 内调整排序。
-- Reviewer 不能在 canonical `workflow.steps` 和 compatibility `workflow.calls` 之间移动结构。
+- `workflow.steps` 是 Reviewer 唯一可修改的 canonical DAG。
+- `workflow.calls` 是只读 compatibility view，不能被 Reviewer patch 修改或排序。
 
 ### `test_repair_result_enforces_status_payload_invariants`
 
@@ -2370,6 +2368,26 @@ result 和 policy 边界。
 
 - application layer 会先执行 Reviewer patch policy validation。
 - forbidden path 不会进入实际修改阶段。
+
+### `test_apply_reviewer_patch_rejects_compatibility_calls_path_without_mutating_original`
+
+输入：
+
+- patch 尝试替换 `/workflow/calls/0/inputs/r1`。
+
+执行：
+
+- 调用 `apply_reviewer_patch(...)`。
+
+期望输出：
+
+- 抛出 `ReviewerPatchPolicyError`。
+- 原始 `workflow.steps` 和 `workflow.calls` wiring 都保持不变。
+
+覆盖点：
+
+- application layer 不接受 compatibility `workflow.calls` patch。
+- Reviewer 只能修改 canonical `workflow.steps`，再由应用层单向同步 `workflow.calls`。
 
 ### `test_apply_reviewer_patch_rejects_missing_replace_target_without_mutating_original`
 

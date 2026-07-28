@@ -240,6 +240,28 @@ class ReviewerPatcherTests(unittest.TestCase):
             "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
         )
 
+    def test_apply_reviewer_patch_rejects_compatibility_calls_path_without_mutating_original(self):
+        original = sample_workflow_ir()
+        patch = ReviewerIRPatch.model_validate(
+            {
+                "summary": "Attempt to patch the compatibility calls view.",
+                "actions": [
+                    {
+                        "operation": "replace",
+                        "path": "/workflow/calls/0/inputs/r1",
+                        "value": "raw_r2",
+                        "reason": "Only canonical workflow steps may be patched.",
+                    }
+                ],
+            }
+        )
+
+        with self.assertRaises(ReviewerPatchPolicyError):
+            apply_reviewer_patch(original, patch)
+
+        self.assertEqual(original["workflow"]["steps"][0]["inputs"]["r1"], "raw_r1")
+        self.assertEqual(original["workflow"]["calls"][0]["inputs"]["r1"], "raw_r1")
+
     def test_apply_reviewer_patch_rejects_missing_replace_target_without_mutating_original(self):
         original = sample_workflow_ir()
         patch = ReviewerIRPatch.model_validate(
