@@ -93,7 +93,6 @@ def _default_allowed_operations() -> list[ReviewerPatchOperation]:
 def _default_allowed_path_descriptions() -> list[str]:
     return [
         "/workflow/steps ordering and call input wiring",
-        "/workflow/calls compatibility call input wiring",
         "/workflow/outputs expressions",
         "/tasks/<task>/outputs/<output>/value literal repairs",
     ]
@@ -123,6 +122,7 @@ class ReviewerRepairConstraints(BaseModel):
     notes: list[str] = Field(
         default_factory=lambda: [
             "Reviewer may only propose Workflow IR patches.",
+            "workflow.steps is canonical; workflow.calls is compatibility-only and must not be patched.",
             "Accepted patches must be revalidated by schema, Analyzer, Renderer, and Checker.",
         ]
     )
@@ -235,8 +235,9 @@ _TASK_OUTPUT_VALUE_PATTERN = re.compile(
     rf"^/tasks/{_IR_IDENTIFIER_SEGMENT_PATTERN}/outputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}/value$"
 )
 _CALL_INPUT_PATH_PATTERN = re.compile(
-    rf"^/workflow/(steps|calls)/[0-9]+/inputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}$"
+    rf"^/workflow/steps/[0-9]+/inputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}$"
 )
+_WORKFLOW_STEP_PATH_PATTERN = re.compile(r"^/workflow/steps/[0-9]+$")
 _WORKFLOW_OUTPUT_PATH_PATTERN = re.compile(
     rf"^/workflow/outputs/{_IR_IDENTIFIER_SEGMENT_PATTERN}$"
 )
@@ -287,9 +288,6 @@ def validate_reviewer_patch_policy(
 
 def _validate_action_policy(action: ReviewerPatchAction) -> list[str]:
     violations = []
-    if action.operation == ReviewerPatchOperation.MOVE:
-        violations.extend(_validate_move_policy(action))
-
     for label, path in _iter_action_paths(action):
         if _is_forbidden_path(path):
             violations.append(f"{label} path '{path}' crosses a forbidden Reviewer repair boundary")
@@ -297,18 +295,6 @@ def _validate_action_policy(action: ReviewerPatchAction) -> list[str]:
         if not _is_allowed_path(path, action.operation):
             violations.append(f"{label} path '{path}' is outside the P2 Reviewer patch allowlist")
     return violations
-
-
-def _validate_move_policy(action: ReviewerPatchAction) -> list[str]:
-    source_collection = _workflow_step_or_call_collection(action.from_path or "")
-    target_collection = _workflow_step_or_call_collection(action.path)
-    if source_collection is None or target_collection is None:
-        return []
-    if source_collection != target_collection:
-        return [
-            "move patch actions must stay within the same workflow steps or calls collection"
-        ]
-    return []
 
 
 def _iter_action_paths(action: ReviewerPatchAction) -> list[tuple[str, str]]:
@@ -320,7 +306,7 @@ def _iter_action_paths(action: ReviewerPatchAction) -> list[tuple[str, str]]:
 
 def _is_allowed_path(path: str, operation: ReviewerPatchOperation) -> bool:
     if operation == ReviewerPatchOperation.MOVE:
-        return _is_workflow_step_or_call_path(path)
+        return bool(_WORKFLOW_STEP_PATH_PATTERN.match(path))
 
     if _is_workflow_output_path(path):
         return True
@@ -340,17 +326,6 @@ def _is_call_input_path(path: str) -> bool:
 
 def _is_workflow_output_path(path: str) -> bool:
     return bool(_WORKFLOW_OUTPUT_PATH_PATTERN.match(path))
-
-
-def _is_workflow_step_or_call_path(path: str) -> bool:
-    return _workflow_step_or_call_collection(path) is not None
-
-
-def _workflow_step_or_call_collection(path: str) -> str | None:
-    match = re.match(r"^/workflow/(steps|calls)/[0-9]+$", path)
-    if match is None:
-        return None
-    return match.group(1)
 
 
 def _is_forbidden_path(path: str) -> bool:

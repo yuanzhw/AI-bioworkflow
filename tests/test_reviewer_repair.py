@@ -298,7 +298,6 @@ class ReviewerRepairContractTests(unittest.TestCase):
             "/tasks/foo-bar/outputs/x/value",
             "/tasks/foo/outputs/x-y/value",
             "/workflow/steps/0/inputs/read-1",
-            "/workflow/calls/0/inputs/read-1",
         ]
 
         for path in invalid_paths:
@@ -345,7 +344,7 @@ class ReviewerRepairContractTests(unittest.TestCase):
                 with self.assertRaises(ReviewerPatchPolicyError):
                     validate_reviewer_patch_policy(patch)
 
-    def test_policy_allows_move_only_for_workflow_step_or_call_items(self):
+    def test_policy_allows_move_only_for_workflow_step_items(self):
         patch = ReviewerIRPatch.model_validate(
             {
                 "summary": "Move a call to satisfy dependencies.",
@@ -364,7 +363,7 @@ class ReviewerRepairContractTests(unittest.TestCase):
 
         self.assertIs(validated, patch)
 
-    def test_policy_rejects_move_outside_workflow_step_or_call_items(self):
+    def test_policy_rejects_move_outside_workflow_step_items(self):
         move_paths = [
             "/workflow/outputs/clean_r1",
             "/workflow/steps/0/inputs/r2",
@@ -381,7 +380,7 @@ class ReviewerRepairContractTests(unittest.TestCase):
                                 "operation": "move",
                                 "from_path": path,
                                 "path": path,
-                                "reason": "MOVE is reserved for step or call item ordering.",
+                                "reason": "MOVE is reserved for workflow step ordering.",
                             }
                         ],
                     }
@@ -390,29 +389,43 @@ class ReviewerRepairContractTests(unittest.TestCase):
                 with self.assertRaises(ReviewerPatchPolicyError):
                     validate_reviewer_patch_policy(patch)
 
-    def test_policy_rejects_move_between_workflow_steps_and_calls(self):
-        moves = [
-            ("/workflow/steps/1", "/workflow/calls/0"),
-            ("/workflow/calls/1", "/workflow/steps/0"),
+    def test_policy_rejects_all_workflow_calls_patch_operations(self):
+        actions = [
+            {
+                "operation": "add",
+                "path": "/workflow/calls/0/inputs/r2",
+                "value": "raw_r2",
+                "reason": "Compatibility calls must not be patched.",
+            },
+            {
+                "operation": "replace",
+                "path": "/workflow/calls/0/inputs/r1",
+                "value": "raw_r2",
+                "reason": "Compatibility calls must not be patched.",
+            },
+            {
+                "operation": "remove",
+                "path": "/workflow/calls/0/inputs/r1",
+                "reason": "Compatibility calls must not be patched.",
+            },
+            {
+                "operation": "move",
+                "from_path": "/workflow/calls/1",
+                "path": "/workflow/calls/0",
+                "reason": "Compatibility calls must not be reordered.",
+            },
         ]
 
-        for from_path, path in moves:
-            with self.subTest(from_path=from_path, path=path):
+        for action in actions:
+            with self.subTest(operation=action["operation"]):
                 patch = ReviewerIRPatch.model_validate(
                     {
-                        "summary": "Move across workflow collections.",
-                        "actions": [
-                            {
-                                "operation": "move",
-                                "from_path": from_path,
-                                "path": path,
-                                "reason": "Cross-collection moves are structural changes.",
-                            }
-                        ],
+                        "summary": "Attempt to patch compatibility calls.",
+                        "actions": [action],
                     }
                 )
 
-                with self.assertRaisesRegex(ReviewerPatchPolicyError, "same workflow"):
+                with self.assertRaisesRegex(ReviewerPatchPolicyError, "outside the P2"):
                     validate_reviewer_patch_policy(patch)
 
     def test_repair_result_enforces_status_payload_invariants(self):
