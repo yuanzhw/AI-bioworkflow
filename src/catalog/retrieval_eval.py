@@ -147,6 +147,12 @@ def evaluate_retrieval_queries(
             "tool_recall_at_k": _mean(result["tool_recall"] for result in tool_results),
             "tool_mrr": _mean(result["first_expected_tool_reciprocal_rank"] for result in tool_results),
             "role_coverage": _mean(result["role_coverage"] for result in role_results),
+            "planner_context_tool_recall": _mean(
+                result["planner_context_tool_recall"] for result in tool_results
+            ),
+            "planner_context_role_coverage": _mean(
+                result["planner_context_role_coverage"] for result in role_results
+            ),
             "fallback_rate": _rate(len(fallback_query_ids), len(per_query)),
             "supported_fallback_rate": _rate(
                 len(supported_fallback_query_ids),
@@ -181,10 +187,19 @@ def _evaluate_one_query(
     )
     retrieved_recipe_ids = [str(recipe["id"]) for recipe in retrieval.get("recipes", [])]
     retrieved_tool_ids = [str(tool["id"]) for tool in retrieval.get("tools", [])]
+    planner_context_tool_ids = _planner_context_tool_ids(
+        retrieved_recipe_ids,
+        retrieved_tool_ids,
+        recipe_catalog,
+    )
 
     expected_recipe_rank = _rank_of(query.expected_recipe, retrieved_recipe_ids)
     expected_tool_ranks = {
         tool_id: _rank_of(tool_id, retrieved_tool_ids)
+        for tool_id in query.expected_tools
+    }
+    planner_context_tool_ranks = {
+        tool_id: _rank_of(tool_id, planner_context_tool_ids)
         for tool_id in query.expected_tools
     }
     recalled_tools = [
@@ -193,7 +208,21 @@ def _evaluate_one_query(
     missed_tools = [
         tool_id for tool_id, rank in expected_tool_ranks.items() if rank is None
     ]
+    planner_context_recalled_tools = [
+        tool_id
+        for tool_id, rank in planner_context_tool_ranks.items()
+        if rank is not None
+    ]
+    planner_context_missed_tools = [
+        tool_id
+        for tool_id, rank in planner_context_tool_ranks.items()
+        if rank is None
+    ]
     role_coverage = _role_coverage(query.expected_roles, retrieved_tool_ids)
+    planner_context_role_coverage = _role_coverage(
+        query.expected_roles,
+        planner_context_tool_ids,
+    )
 
     return {
         "id": query.id,
@@ -204,6 +233,7 @@ def _evaluate_one_query(
         "expected_roles": query.expected_roles,
         "retrieved_recipes": retrieved_recipe_ids,
         "retrieved_tools": retrieved_tool_ids,
+        "planner_context_tools": planner_context_tool_ids,
         "expected_recipe_recalled": expected_recipe_rank is not None,
         "expected_recipe_rank": expected_recipe_rank,
         "expected_recipe_reciprocal_rank": _reciprocal_rank(expected_recipe_rank),
@@ -214,14 +244,50 @@ def _evaluate_one_query(
         "missed_expected_tools": missed_tools,
         "tool_recall": _rate(len(recalled_tools), len(query.expected_tools)),
         "first_expected_tool_reciprocal_rank": _first_reciprocal_rank(expected_tool_ranks.values()),
+        "planner_context_recalled_expected_tools": planner_context_recalled_tools,
+        "planner_context_missed_expected_tools": planner_context_missed_tools,
+        "planner_context_tool_recall": _rate(
+            len(planner_context_recalled_tools),
+            len(query.expected_tools),
+        ),
         "covered_roles": role_coverage["covered_roles"],
         "missed_roles": role_coverage["missed_roles"],
         "role_coverage": role_coverage["coverage"],
+        "planner_context_covered_roles": planner_context_role_coverage["covered_roles"],
+        "planner_context_missed_roles": planner_context_role_coverage["missed_roles"],
+        "planner_context_role_coverage": planner_context_role_coverage["coverage"],
         "fallback_used": bool(retrieval.get("fallback_used")),
         "fallback_reason": retrieval.get("fallback_reason"),
         "strategy": retrieval.get("strategy"),
         "notes": query.notes,
     }
+
+
+def _planner_context_tool_ids(
+    retrieved_recipe_ids: list[str],
+    retrieved_tool_ids: list[str],
+    recipe_catalog: RecipeCatalog,
+) -> list[str]:
+    tool_ids: list[str] = []
+    seen: set[str] = set()
+    for tool_id in retrieved_tool_ids:
+        if tool_id in seen:
+            continue
+        tool_ids.append(tool_id)
+        seen.add(tool_id)
+
+    for recipe_id in retrieved_recipe_ids:
+        try:
+            recipe = recipe_catalog.get(recipe_id)
+        except KeyError:
+            continue
+        for step in recipe.steps:
+            for tool_id in step.allowed_tools:
+                if tool_id in seen:
+                    continue
+                tool_ids.append(tool_id)
+                seen.add(tool_id)
+    return tool_ids
 
 
 def _role_coverage(

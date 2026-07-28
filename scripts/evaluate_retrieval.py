@@ -101,6 +101,8 @@ def _format_summary(evaluation: dict[str, Any]) -> str:
         f"Tool Recall@{evaluation['top_k_tools']}: {metrics['tool_recall_at_k']:.4f}",
         f"Tool MRR: {metrics['tool_mrr']:.4f}",
         f"Role Coverage: {metrics['role_coverage']:.4f}",
+        f"Planner Context Tool Recall: {metrics['planner_context_tool_recall']:.4f}",
+        f"Planner Context Role Coverage: {metrics['planner_context_role_coverage']:.4f}",
         f"Fallback Rate: {metrics['fallback_rate']:.4f}",
         f"Supported Fallback Rate: {metrics['supported_fallback_rate']:.4f}",
         f"Unsupported Fallback Rate: {metrics['unsupported_fallback_rate']:.4f}",
@@ -129,6 +131,24 @@ def _format_summary(evaluation: dict[str, Any]) -> str:
                 details.append("tools=" + ",".join(result["missed_expected_tools"]))
             if result["missed_roles"]:
                 details.append("roles=" + ",".join(result["missed_roles"]))
+            lines.append(f"  - {result['id']}: " + "; ".join(details))
+
+    planner_context_missed = [
+        result
+        for result in evaluation["queries"]
+        if (
+            result["planner_context_missed_expected_tools"]
+            or result["planner_context_missed_roles"]
+        )
+    ]
+    if planner_context_missed:
+        lines.append("Planner context misses:")
+        for result in planner_context_missed:
+            details = []
+            if result["planner_context_missed_expected_tools"]:
+                details.append("tools=" + ",".join(result["planner_context_missed_expected_tools"]))
+            if result["planner_context_missed_roles"]:
+                details.append("roles=" + ",".join(result["planner_context_missed_roles"]))
             lines.append(f"  - {result['id']}: " + "; ".join(details))
 
     return "\n".join(lines)
