@@ -34,6 +34,15 @@ class WorkflowState(TypedDict):
 
     # 记录最近一次 IR repairer 执行的具体修复动作
     repair_actions: list[str]
+
+    # Reviewer repair 使用独立计数和结构化结果，避免与 deterministic repair 混淆
+    reviewer_attempt_count: int
+    reviewer_repair_status: str | None
+    reviewer_repair_request: dict | None
+    reviewer_ir_patch: dict | None
+    reviewer_rejection_reason: str | None
+    reviewer_diagnostics: list[str]
+    reviewer_patch_applied: bool
     
     # 用一个明确的布尔值来记录校验状态，True 代表校验通过，False 代表校验失败
     is_valid: bool

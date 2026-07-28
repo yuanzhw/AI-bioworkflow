@@ -46,3 +46,45 @@ def render_natural_language_planner_prompt(
         "User request:\n"
         f"{request.strip()}\n"
     )
+
+
+def render_reviewer_repair_prompt(request_payload: dict[str, Any]) -> str:
+    """Render a bounded Workflow IR repair request for the Reviewer provider."""
+    return (
+        "You are a constrained reviewer for a deterministic bioinformatics workflow compiler.\n\n"
+        "Rules:\n"
+        "- Return one JSON object only. Do not include markdown or prose outside JSON.\n"
+        "- Propose only Workflow IR patch actions allowed by the request constraints.\n"
+        "- Never generate or edit final WDL text.\n"
+        "- Never change tool or recipe catalogs, task commands, runtime settings, container "
+        "images, trust fields, or resource sizing.\n"
+        "- Use only recipe and tool references present in catalog_context.\n"
+        "- Treat workflow.steps as canonical. workflow.calls is compatibility-only and must "
+        "not be patched.\n"
+        "- For add/replace include a non-null value and omit from_path.\n"
+        "- For remove omit both value and from_path.\n"
+        "- For move include from_path and omit value.\n"
+        "- status must be one of patch_proposed, no_action, invalid_request, "
+        "policy_rejected, or model_error.\n"
+        "- If no safe patch is available, return status no_action with diagnostics.\n"
+        "- Do not echo secrets, credentials, or unrelated request data.\n\n"
+        "Output shape:\n"
+        "{\n"
+        '  "status": "patch_proposed",\n'
+        '  "patch": {\n'
+        '    "summary": "short repair summary",\n'
+        '    "actions": [\n'
+        '      {"operation": "add", "path": "/workflow/outputs/example", '
+        '"value": "call.output", '
+        '"reason": "why this repairs a referenced diagnostic"}\n'
+        "    ],\n"
+        '    "diagnostic_references": [],\n'
+        '    "catalog_references": [],\n'
+        '    "confidence": 0.0\n'
+        "  },\n"
+        '  "rejection_reason": null,\n'
+        '  "diagnostics": []\n'
+        "}\n\n"
+        "Structured Reviewer request:\n"
+        f"{json.dumps(request_payload, indent=2, ensure_ascii=False)}\n"
+    )

@@ -160,6 +160,13 @@ def build_initial_state(
         "error_count": 0,
         "repair_count": 0,
         "repair_actions": [],
+        "reviewer_attempt_count": 0,
+        "reviewer_repair_status": None,
+        "reviewer_repair_request": None,
+        "reviewer_ir_patch": None,
+        "reviewer_rejection_reason": None,
+        "reviewer_diagnostics": [],
+        "reviewer_patch_applied": False,
         "is_valid": False,
     }
 
@@ -473,5 +480,19 @@ def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:
             state["repair_count"] = value
         elif key == "repair_actions":
             state["repair_actions"] = value
+        elif key == "reviewer_attempt_count":
+            state["reviewer_attempt_count"] = value
+        elif key == "reviewer_repair_status":
+            state["reviewer_repair_status"] = value
+        elif key == "reviewer_repair_request":
+            state["reviewer_repair_request"] = value
+        elif key == "reviewer_ir_patch":
+            state["reviewer_ir_patch"] = value
+        elif key == "reviewer_rejection_reason":
+            state["reviewer_rejection_reason"] = value
+        elif key == "reviewer_diagnostics":
+            state["reviewer_diagnostics"] = value
+        elif key == "reviewer_patch_applied":
+            state["reviewer_patch_applied"] = value
         elif key == "is_valid":
             state["is_valid"] = value

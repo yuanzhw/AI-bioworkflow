@@ -16,7 +16,7 @@ from src.reviewer_repair import (
 from src.schema import WorkflowIR, coerce_workflow_ir
 
 
-class ReviewerPatchApplicationError(ReviewerPatchPolicyError):
+class ReviewerPatchApplicationError(ValueError):
     """Raised when a policy-allowed Reviewer patch cannot be applied safely."""
 
 
