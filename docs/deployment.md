@@ -50,7 +50,7 @@ powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1 `
 | `NEXT_PUBLIC_API_BASE_URL` | Web 镜像构建时 | 本地 `http://127.0.0.1:8010` | 浏览器可访问的 API 根地址。值会进入客户端 bundle，不能包含 secret；修改后必须重新构建 Web 镜像。 |
 | `AI_BIOWORKFLOW_API_HOST` | `src.api.server` 本地启动时 | `127.0.0.1` | 控制开发服务器监听地址。生产 API 镜像直接以 `0.0.0.0:8010` 启动，不读取该变量。 |
 | `AI_BIOWORKFLOW_API_PORT` | `src.api.server` 本地启动时 | `8010` | 控制开发服务器端口，允许 `1-65535`。生产容器端口固定为 `8010`。 |
-| `AI_BIOWORKFLOW_CORS_ORIGINS` | API 运行时 | 本地允许 `127.0.0.1:3000` 和 `localhost:3000` | 逗号分隔的浏览器 origin。仅在 Web 与 API 跨 origin 时需要显式设置。 |
+| `AI_BIOWORKFLOW_CORS_ORIGINS` | API 运行时 | 本地允许 `http://127.0.0.1:3000` 和 `http://localhost:3000` | 逗号分隔的浏览器 origin。仅在 Web 与 API 跨 origin 时需要显式设置。 |
 | `AI_BIOWORKFLOW_DB_PATH` | API 运行时 | 本地 `.cache/ai-bioworkflow.sqlite3`；容器 `/data/ai-bioworkflow/ai-bioworkflow.sqlite3` | SQLite 文件路径。生产路径位于 Compose `api_data` volume。 |
 | `DEEPSEEK_API_KEY` | Planner 运行时 | 未设置 | 仅自然语言规划需要；结构化编译必须在无 key 时正常工作。只放在服务端 `.env.prod` 或 secret store。 |
 | `WDL_VALIDATOR` | 编译运行时 | 本地 `auto`；生产 `miniwdl` | 可选值为 `auto`、`womtool`、`miniwdl`。生产镜像已安装 miniwdl。 |
