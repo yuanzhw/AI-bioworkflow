@@ -1,6 +1,6 @@
-# 生产部署与运维手册
+# 部署与运维手册
 
-本文档记录 AI-bioworkflow 作品集 demo 当前的生产部署方案。目标是让部署流程可以重复执行、可以审计、可以回滚，而不是依赖一次性的手工命令。
+本文档记录 AI-bioworkflow 作品集 demo 的本地与公开部署边界，以及当前生产部署方案。目标是让部署流程可以重复执行、可以审计、可以回滚，而不是依赖一次性的手工命令。
 
 当前生产形态是单台阿里云 ECS 上运行 Docker Compose：
 
@@ -13,6 +13,89 @@ GitHub main push
   -> Docker Compose pulls images and starts services
   -> Caddy terminates HTTPS and reverse proxies traffic
 ```
+
+## 运行模式与最短路径
+
+当前仓库覆盖三种运行方式，公开作品集使用第二种：
+
+| 模式 | 入口 | 数据位置 | 适用范围 |
+| --- | --- | --- | --- |
+| 本地联合开发 | `scripts/dev_local.ps1` 启动 FastAPI 与 Next.js | `.cache/ai-bioworkflow.sqlite3` | 开发、演示和跨页面回放 |
+| 单机公开 demo | Caddy + API + Web 的 Docker Compose | `api_data` Docker volume | 当前 ECS 作品集部署 |
+| 前后端分离 | 独立 Web 域名通过 HTTPS 调用 API 域名 | 由 API 部署决定 | 可选拓扑，需要显式配置 API base URL 与 CORS |
+
+本地启动前可以先执行 dry run，检查 Python、Web 依赖和端口可用性，但不启动服务：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1 -DryRun
+powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1
+```
+
+默认地址是 FastAPI `127.0.0.1:8010` 和 Next.js `127.0.0.1:3000`。需要更换端口时，
+联合启动脚本会同步生成 API base URL 和 CORS origins：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1 `
+  -ApiPort 8020 `
+  -WebPort 3001
+```
+
+结构化 RNA-seq 示例调用 `POST /api/compile`，不需要 `DEEPSEEK_API_KEY`。只有自然语言
+入口 `POST /api/runs` 需要 Planner key。
+
+## 环境变量边界
+
+| 变量 | 生效阶段 | 默认值或当前生产值 | 用途与约束 |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Web 镜像构建时 | 本地 `http://127.0.0.1:8010` | 浏览器可访问的 API 根地址。值会进入客户端 bundle，不能包含 secret；修改后必须重新构建 Web 镜像。 |
+| `AI_BIOWORKFLOW_API_HOST` | `src.api.server` 本地启动时 | `127.0.0.1` | 控制开发服务器监听地址。生产 API 镜像直接以 `0.0.0.0:8010` 启动，不读取该变量。 |
+| `AI_BIOWORKFLOW_API_PORT` | `src.api.server` 本地启动时 | `8010` | 控制开发服务器端口，允许 `1-65535`。生产容器端口固定为 `8010`。 |
+| `AI_BIOWORKFLOW_CORS_ORIGINS` | API 运行时 | 本地允许 `http://127.0.0.1:3000` 和 `http://localhost:3000` | 逗号分隔的浏览器 origin。仅在 Web 与 API 跨 origin 时需要显式设置。 |
+| `AI_BIOWORKFLOW_DB_PATH` | API 运行时 | 本地 `.cache/ai-bioworkflow.sqlite3`；容器 `/data/ai-bioworkflow/ai-bioworkflow.sqlite3` | SQLite 文件路径。生产路径位于 Compose `api_data` volume。 |
+| `DEEPSEEK_API_KEY` | Planner 运行时 | 未设置 | 仅自然语言规划需要；结构化编译必须在无 key 时正常工作。只放在服务端 `.env.prod` 或 secret store。 |
+| `WDL_VALIDATOR` | 编译运行时 | 本地 `auto`；生产 `miniwdl` | 可选值为 `auto`、`womtool`、`miniwdl`。生产镜像已安装 miniwdl。 |
+| `AI_BIOWORKFLOW_RUN_BACKEND` | API 运行时 | `disabled` | 控制真实 WDL execution backend。作品集 demo 保持禁用，不把编译 timeline 表述为真实 call 执行状态。 |
+
+`NEXT_PUBLIC_API_BASE_URL` 是构建时公开配置，`.env.prod` 是 API 容器运行时私有配置。
+两者不能互相替代，也不要把 API key、token 或私有网络地址写入任何 `NEXT_PUBLIC_*`
+变量。
+
+## 同源、CORS 与反向代理
+
+当前 ECS 方案使用单一 HTTPS 域名。浏览器请求同一域名的 `/api/*`，Caddy 再转发到
+Docker 网络内的 `api:8010`，因此不产生跨 origin 请求，也不需要为生产域名额外放宽
+CORS。
+
+只有 Web 与 API 使用不同的 scheme、hostname 或 port 时，才需要同时配置：
+
+1. 构建 Web 镜像时，将 `NEXT_PUBLIC_API_BASE_URL` 设置为公开 API 的 HTTPS 根地址。
+2. 在 API `.env.prod` 中，将 `AI_BIOWORKFLOW_CORS_ORIGINS` 设置为实际 Web origins。
+
+```text
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com
+AI_BIOWORKFLOW_CORS_ORIGINS=https://portfolio.example.com,https://preview.example.com
+```
+
+origin 只写 scheme、hostname 和可选 port，不包含 path。CORS 只控制浏览器跨域访问，
+不是认证或限流机制，不应使用它保护匿名公开 API。
+
+## SQLite 与公开 demo 数据边界
+
+SQLite 当前保存 run、event、artifact 和 diagnostic，连接启用 WAL、busy timeout 和
+foreign keys，适合单机、单 API 服务的作品集流量。生产 Compose 的 `api_data` volume
+可以跨容器重建保留数据，但它不是备份，也不能替代主机或云盘级恢复策略。
+
+公开 demo 应遵守以下边界：
+
+- 保持单个 API replica，不让多个主机共享同一个 SQLite 文件。
+- 只使用可公开的示例请求，不保存真实受试者信息、凭证或私有数据路径。
+- 明确保留策略：选择周期性重置匿名 run history，或定期备份 `api_data` volume。
+- 执行数据重置前先停止 API 并备份数据库，避免在写入期间复制或替换 SQLite 文件。
+- 需要多副本、较高并发或长期可靠保存时，再实现并验证 PostgreSQL repository；当前仓库尚未提供可直接切换的 PostgreSQL adapter。
+
+当前 demo 没有登录、多租户、配额或 API rate limit。若在公开 API 中配置
+`DEEPSEEK_API_KEY`，匿名访问者也可能触发模型调用并产生费用；广泛公开前应在反向代理
+或应用层增加访问策略。仅展示确定性编译路径时，可以不配置该 key。
 
 ## 服务边界
 
@@ -170,6 +253,9 @@ AI_BIOWORKFLOW_CADDY_IMAGE=registry.cn-hangzhou.aliyuncs.com/your-namespace/cadd
 AI_BIOWORKFLOW_RUN_BACKEND=disabled
 WDL_VALIDATOR=miniwdl
 
+# Required only when Web and API are served from different browser origins.
+# AI_BIOWORKFLOW_CORS_ORIGINS=https://portfolio.example.com
+
 # Required only when natural-language planning is enabled.
 # DEEPSEEK_API_KEY=<your-deepseek-api-key>
 ```
@@ -219,7 +305,7 @@ ECS 还需要允许出站 HTTPS，用于拉取 ACR 镜像、访问 Docker regist
 {$AI_BIOWORKFLOW_SITE_ADDRESS} {
 	encode zstd gzip
 
-	@api path /api /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health
+	@api path /api /api/* /docs /docs/* /redoc /redoc/* /openapi.json /health /version
 	reverse_proxy @api api:8010
 
 	reverse_proxy web:3000
