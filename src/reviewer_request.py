@@ -31,7 +31,9 @@ def build_reviewer_repair_request(
     try:
         workflow_ir = coerce_workflow_ir(state.get("workflow_ir", {}))
     except Exception as exc:
-        raise ReviewerRequestBuildError(f"Workflow IR is unavailable or invalid: {exc}") from exc
+        raise ReviewerRequestBuildError(
+            f"Workflow IR is unavailable or invalid ({exc.__class__.__name__})."
+        ) from exc
 
     catalog_context = build_approved_catalog_context(
         state.get("parsed_json", {}),
@@ -77,7 +79,8 @@ def build_approved_catalog_context(
         )
     except Exception as exc:
         raise ReviewerRequestBuildError(
-            f"Recipe Tool Plan cannot provide approved Reviewer context: {exc}"
+            "Recipe Tool Plan cannot provide approved Reviewer context "
+            f"({exc.__class__.__name__})."
         ) from exc
 
     workflow_calls = {call.id: call for call in workflow_ir.workflow.calls}
@@ -109,7 +112,8 @@ def build_approved_catalog_context(
             workflow_task = workflow_ir.tasks[workflow_call.task]
         except Exception as exc:
             raise ReviewerRequestBuildError(
-                f"Tool call '{tool_call.id}' cannot provide approved Reviewer context: {exc}"
+                "A planned tool call cannot provide approved Reviewer context "
+                f"({exc.__class__.__name__})."
             ) from exc
 
         if workflow_task.runtime.docker != tool.runtime.docker:

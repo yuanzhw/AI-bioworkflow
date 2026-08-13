@@ -21,7 +21,10 @@ from src.reviewer_provider import (
     coerce_reviewer_repair_result,
     make_default_reviewer_provider,
 )
-from src.reviewer_request import build_reviewer_repair_request
+from src.reviewer_request import (
+    ReviewerRequestBuildError,
+    build_reviewer_repair_request,
+)
 from src.reviewer_repair import (
     ReviewerFailureStage,
     ReviewerIRPatch,
@@ -92,13 +95,25 @@ def make_reviewer_repair_node(
                 tool_catalog=tool_catalog,
                 recipe_catalog=recipe_catalog,
             )
-        except Exception as exc:
+        except ReviewerRequestBuildError as exc:
             return _reviewer_update(
                 state,
                 status=ReviewerRepairStatus.INVALID_REQUEST,
                 rejection_reason=str(exc),
                 diagnostics=[f"Reviewer request could not be constructed: {exc}"],
                 message="Reviewer request construction failed.",
+            )
+        except Exception as exc:
+            safe_error = (
+                "Reviewer request construction failed with "
+                f"{exc.__class__.__name__}."
+            )
+            return _reviewer_update(
+                state,
+                status=ReviewerRepairStatus.INVALID_REQUEST,
+                rejection_reason=safe_error,
+                diagnostics=[safe_error],
+                message="Reviewer request construction failed unexpectedly.",
             )
 
         attempt_count = current_attempt_count + 1

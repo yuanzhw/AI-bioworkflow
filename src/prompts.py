@@ -66,9 +66,13 @@ def render_reviewer_repair_prompt(request_payload: dict[str, Any]) -> str:
         "- For move include from_path and omit value.\n"
         "- status must be one of patch_proposed, no_action, invalid_request, "
         "policy_rejected, or model_error.\n"
+        "- Set patch to an object only when status is patch_proposed; otherwise set patch "
+        "to null.\n"
+        "- Set rejection_reason to a non-empty string only when status is policy_rejected; "
+        "otherwise set rejection_reason to null.\n"
         "- If no safe patch is available, return status no_action with diagnostics.\n"
         "- Do not echo secrets, credentials, or unrelated request data.\n\n"
-        "Output shape:\n"
+        "patch_proposed example:\n"
         "{\n"
         '  "status": "patch_proposed",\n'
         '  "patch": {\n'

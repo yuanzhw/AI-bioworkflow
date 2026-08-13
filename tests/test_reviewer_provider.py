@@ -112,6 +112,15 @@ class ReviewerProviderTests(unittest.TestCase):
         self.assertIn('"failure_stage": "analyzer"', prompt)
         self.assertIn('"tool_id": "salmon_index"', prompt)
         self.assertIn("workflow.steps as canonical", prompt)
+        self.assertIn(
+            "patch to an object only when status is patch_proposed",
+            prompt,
+        )
+        self.assertIn(
+            "rejection_reason to a non-empty string only when status is policy_rejected",
+            prompt,
+        )
+        self.assertIn("patch_proposed example", prompt)
         self.assertNotIn('"tool_id": "fastp"', prompt)
 
     def test_parse_reviewer_response_rejects_non_json_without_echoing_raw_text(self):

@@ -2484,6 +2484,7 @@ result 和 policy 边界。
 
 - Provider 返回合法 `ReviewerRepairResult`。
 - prompt 包含 failure stage 和当前 workflow approved tool。
+- prompt 明确 `patch` 和 `rejection_reason` 与 result status 的对应关系。
 - prompt 不包含未使用的 `fastp` metadata。
 
 覆盖点：
@@ -2643,6 +2644,26 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 覆盖点：
 
 - 自定义 Provider 异常不能绕过 raw payload 不持久化边界。
+
+### `test_reviewer_node_sanitizes_request_construction_errors`
+
+输入：
+
+- 包含敏感标记的 invalid Workflow IR。
+- 包含敏感标记的 invalid Recipe Tool Plan。
+- 包含敏感标记且无法通过 Reviewer request schema 的 diagnostics。
+
+期望输出：
+
+- 三类 request 构造失败都返回 `invalid_request`，且不调用 provider。
+- Reviewer attempt count 保持为零。
+- rejection reason、diagnostics 和完整 node update 都不包含敏感标记。
+
+覆盖点：
+
+- Workflow IR、Recipe Tool Plan、planned tool call 和最终 request schema 的底层
+  异常文本不会进入 Reviewer state。
+- request 构造错误只保留固定上下文和异常类型。
 
 ### `test_reviewer_node_rejects_policy_violation_without_mutating_ir`
 

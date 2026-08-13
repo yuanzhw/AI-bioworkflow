@@ -228,6 +228,41 @@ class ReviewerNodeTests(unittest.TestCase):
         self.assertIn("ReviewerProviderError", update["reviewer_diagnostics"][0])
         self.assertNotIn("TOP_SECRET", json.dumps(update, default=str))
 
+    def test_reviewer_node_sanitizes_request_construction_errors(self):
+        invalid_states = []
+
+        invalid_workflow_ir = self.sample_state()
+        invalid_workflow_ir["workflow_ir"] = {
+            "workflow": {"name": "TOP_SECRET"},
+        }
+        invalid_states.append(("workflow_ir", invalid_workflow_ir))
+
+        invalid_recipe_plan = self.sample_state()
+        invalid_recipe_plan["parsed_json"]["workflow"]["tool_calls"][0]["tool"] = {
+            "secret": "TOP_SECRET",
+        }
+        invalid_states.append(("recipe_plan", invalid_recipe_plan))
+
+        invalid_request_contract = self.sample_state()
+        invalid_request_contract["analysis_errors"] = [
+            {"secret": "TOP_SECRET"},
+        ]
+        invalid_states.append(("request_contract", invalid_request_contract))
+
+        for label, state in invalid_states:
+            with self.subTest(label=label):
+                provider = RecordingReviewerProvider({"status": "no_action"})
+
+                update = self.make_node(provider)(state)
+
+                self.assertEqual(
+                    update["reviewer_repair_status"],
+                    ReviewerRepairStatus.INVALID_REQUEST.value,
+                )
+                self.assertEqual(update["reviewer_attempt_count"], 0)
+                self.assertEqual(provider.requests, [])
+                self.assertNotIn("TOP_SECRET", json.dumps(update, default=str))
+
     def test_reviewer_node_rejects_policy_violation_without_mutating_ir(self):
         provider = RecordingReviewerProvider(
             {
