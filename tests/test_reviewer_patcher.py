@@ -289,19 +289,21 @@ class ReviewerPatcherTests(unittest.TestCase):
             {
                 "summary": "Set workflow output to an invalid value type.",
                 "actions": [
-                    {
-                        "operation": "replace",
-                        "path": "/workflow/outputs/clean_r1",
-                        "value": ["qc.clean_r1"],
-                        "reason": "Workflow outputs must remain string expressions.",
-                    }
+                        {
+                            "operation": "replace",
+                            "path": "/workflow/outputs/clean_r1",
+                            "value": ["TOP_SECRET"],
+                            "reason": "Workflow outputs must remain string expressions.",
+                        }
                 ],
             }
         )
 
-        with self.assertRaisesRegex(ReviewerPatchApplicationError, "invalid Workflow IR"):
+        with self.assertRaises(ReviewerPatchApplicationError) as raised:
             apply_reviewer_patch(original, patch)
 
+        self.assertIn("invalid Workflow IR", str(raised.exception))
+        self.assertNotIn("TOP_SECRET", str(raised.exception))
         self.assertEqual(original["workflow"]["outputs"]["clean_r1"], "qc.clean_r1")
 
 

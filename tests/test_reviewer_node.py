@@ -330,6 +330,41 @@ class ReviewerNodeTests(unittest.TestCase):
         self.assertFalse(update["reviewer_patch_applied"])
         self.assertNotIn("workflow_ir", update)
 
+    def test_reviewer_node_sanitizes_schema_application_failure(self):
+        state = self.sample_state()
+        output_name = next(iter(state["workflow_ir"]["workflow"]["outputs"]))
+        provider = RecordingReviewerProvider(
+            {
+                "status": "patch_proposed",
+                "patch": {
+                    "summary": "Propose an invalid workflow output value type.",
+                    "actions": [
+                        {
+                            "operation": "replace",
+                            "path": f"/workflow/outputs/{output_name}",
+                            "value": ["TOP_SECRET"],
+                            "reason": "Exercise schema rejection diagnostics.",
+                        }
+                    ],
+                },
+            }
+        )
+
+        update = self.make_node(provider)(state)
+
+        self.assertEqual(
+            update["reviewer_repair_status"],
+            ReviewerRepairStatus.INVALID_REQUEST.value,
+        )
+        self.assertIsNotNone(update["reviewer_ir_patch"])
+        self.assertNotIn("TOP_SECRET", update["reviewer_rejection_reason"])
+        self.assertNotIn(
+            "TOP_SECRET",
+            json.dumps(update["reviewer_diagnostics"]),
+        )
+        self.assertFalse(update["reviewer_patch_applied"])
+        self.assertNotIn("workflow_ir", update)
+
     def test_reviewer_node_builds_checker_request_without_routing_it(self):
         provider = RecordingReviewerProvider(
             {

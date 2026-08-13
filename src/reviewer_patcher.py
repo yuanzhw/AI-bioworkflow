@@ -42,7 +42,7 @@ def apply_reviewer_patch(
         return WorkflowIR.model_validate(candidate)
     except ValidationError as exc:
         raise ReviewerPatchApplicationError(
-            f"applied Reviewer patch produced invalid Workflow IR: {exc}"
+            "applied Reviewer patch produced invalid Workflow IR."
         ) from exc
 
 

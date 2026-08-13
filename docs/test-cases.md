@@ -2451,7 +2451,7 @@ result 和 policy 边界。
 
 输入：
 
-- patch 尝试把 `/workflow/outputs/clean_r1` 替换为数组值。
+- patch 尝试把 `/workflow/outputs/clean_r1` 替换为包含敏感标记的数组值。
 
 执行：
 
@@ -2460,12 +2460,14 @@ result 和 policy 边界。
 期望输出：
 
 - 抛出 `ReviewerPatchApplicationError`，错误说明 candidate 不是合法 Workflow IR。
+- application error 不包含 Pydantic 原始输入或敏感标记。
 - 原始 workflow output 仍是字符串表达式。
 
 覆盖点：
 
 - patch 应用完成后仍必须重新通过 `WorkflowIR` schema validation。
 - schema-invalid candidate 不会被交给 graph re-entry。
+- schema re-validation failure 不会把 Workflow IR 字段值写入错误文本。
 
 ## `tests/test_reviewer_provider.py`
 
@@ -2698,6 +2700,25 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 
 - `ReviewerPatchApplicationError` 与 `ReviewerPatchPolicyError` 是独立错误类别。
 - P2.4/P2.5 可以按真实失败阶段生成 diagnostics。
+
+### `test_reviewer_node_sanitizes_schema_application_failure`
+
+输入：
+
+- fake provider 返回 policy 允许但会产生 schema-invalid Workflow IR 的 patch。
+- 无效 workflow output 数组值包含敏感标记。
+
+期望输出：
+
+- status 为 `invalid_request`，并保存 parsed patch。
+- rejection reason 和 diagnostics 不包含敏感标记。
+- Workflow IR 不变，patch 未标记为 applied。
+
+覆盖点：
+
+- Pydantic `ValidationError` 的原始输入不会经 application error 进入 Reviewer
+  rejection state。
+- 保存 parsed patch 与错误信息脱敏是两个独立契约。
 
 ### `test_reviewer_node_builds_checker_request_without_routing_it`
 
