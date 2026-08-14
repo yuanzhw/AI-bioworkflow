@@ -428,6 +428,56 @@ class ReviewerNodeTests(unittest.TestCase):
         self.assertIn("Catalog-controlled", update["reviewer_rejection_reason"])
         self.assertEqual(provider.requests, [])
 
+    def test_recipe_plan_context_uses_canonical_scatter_steps(self):
+        plan = json.loads(
+            (REPO_ROOT / "examples" / "rnaseq_deg_recipe_plan.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        workflow_ir = resolve_tool_plan(
+            plan,
+            self.recipe_catalog,
+            self.tool_catalog,
+        ).model_dump(mode="json")
+        self.assertEqual(workflow_ir["workflow"]["steps"][0]["kind"], "scatter")
+
+        valid_provider = RecordingReviewerProvider(
+            {
+                "status": "no_action",
+                "diagnostics": ["Canonical scatter steps are consistent."],
+            }
+        )
+        valid_state = build_initial_state(copy.deepcopy(plan))
+        valid_state["workflow_ir"] = copy.deepcopy(workflow_ir)
+
+        valid_update = self.make_node(valid_provider)(valid_state)
+
+        self.assertEqual(
+            valid_update["reviewer_repair_status"],
+            ReviewerRepairStatus.NO_ACTION.value,
+        )
+        self.assertEqual(len(valid_provider.requests), 1)
+
+        invalid_provider = RecordingReviewerProvider({"status": "no_action"})
+        invalid_state = build_initial_state(copy.deepcopy(plan))
+        invalid_state["workflow_ir"] = copy.deepcopy(workflow_ir)
+        invalid_state["workflow_ir"]["workflow"]["steps"][0]["body"][0][
+            "inputs"
+        ]["r1"] = "tampered_input"
+
+        invalid_update = self.make_node(invalid_provider)(invalid_state)
+
+        self.assertEqual(
+            invalid_update["reviewer_repair_status"],
+            ReviewerRepairStatus.INVALID_REQUEST.value,
+        )
+        self.assertEqual(invalid_update["reviewer_attempt_count"], 0)
+        self.assertIn(
+            "compatibility calls do not match canonical workflow steps",
+            invalid_update["reviewer_rejection_reason"],
+        )
+        self.assertEqual(invalid_provider.requests, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ from src.reviewer_repair import (
     ReviewerFailureStage,
     ReviewerRepairRequest,
 )
-from src.schema import WorkflowIR, coerce_workflow_ir
+from src.schema import CallSpec, ScatterSpec, WorkflowIR, coerce_workflow_ir
 from src.state import WorkflowState
 
 
@@ -83,17 +83,22 @@ def build_approved_catalog_context(
             f"({exc.__class__.__name__})."
         ) from exc
 
-    workflow_calls = {call.id: call for call in workflow_ir.workflow.calls}
-    if len(workflow_calls) != len(workflow_ir.workflow.calls):
-        raise ReviewerRequestBuildError(
-            "Current Workflow IR contains duplicate compatibility call IDs."
-        )
+    workflow_calls = _canonical_call_map(workflow_ir, label="Current")
+    expected_workflow_calls = _canonical_call_map(
+        expected_workflow_ir,
+        label="Resolved",
+    )
     planned_call_ids = {tool_call.id for tool_call in plan.workflow.tool_calls}
     if set(workflow_calls) != planned_call_ids:
         raise ReviewerRequestBuildError(
-            "Recipe Tool Plan calls do not match the current Workflow IR calls."
+            "Recipe Tool Plan calls do not match the current canonical Workflow IR steps."
         )
-    _validate_catalog_provenance(workflow_ir, expected_workflow_ir)
+    _validate_catalog_provenance(
+        workflow_ir,
+        expected_workflow_ir,
+        workflow_calls=workflow_calls,
+        expected_workflow_calls=expected_workflow_calls,
+    )
 
     step_ids: list[str] = []
     tool_ids: list[str] = []
@@ -167,6 +172,9 @@ def _repair_history(state: WorkflowState) -> list[str]:
 def _validate_catalog_provenance(
     workflow_ir: WorkflowIR,
     expected_workflow_ir: WorkflowIR,
+    *,
+    workflow_calls: dict[str, CallSpec],
+    expected_workflow_calls: dict[str, CallSpec],
 ) -> None:
     """Verify fields outside the patch allowlist still match formal plan resolution."""
     if (
@@ -183,12 +191,8 @@ def _validate_catalog_provenance(
             "Current Workflow IR tasks do not match Recipe Tool Plan provenance."
         )
 
-    current_calls = {call.id: call for call in workflow_ir.workflow.calls}
-    expected_calls = {
-        call.id: call for call in expected_workflow_ir.workflow.calls
-    }
-    for call_id, expected_call in expected_calls.items():
-        if current_calls[call_id].task != expected_call.task:
+    for call_id, expected_call in expected_workflow_calls.items():
+        if workflow_calls[call_id].task != expected_call.task:
             raise ReviewerRequestBuildError(
                 f"Tool call '{call_id}' task does not match Recipe Tool Plan provenance."
             )
@@ -202,6 +206,37 @@ def _validate_catalog_provenance(
                 f"Task '{task_name}' Catalog-controlled fields do not match "
                 "Recipe Tool Plan provenance."
             )
+
+
+def _canonical_call_map(
+    workflow_ir: WorkflowIR,
+    *,
+    label: str,
+) -> dict[str, CallSpec]:
+    canonical_calls = _flatten_canonical_calls(workflow_ir.workflow.steps)
+    call_map = {call.id: call for call in canonical_calls}
+    if len(call_map) != len(canonical_calls):
+        raise ReviewerRequestBuildError(
+            f"{label} Workflow IR contains duplicate canonical call IDs."
+        )
+
+    if workflow_ir.workflow.calls != canonical_calls:
+        raise ReviewerRequestBuildError(
+            f"{label} Workflow IR compatibility calls do not match canonical workflow steps."
+        )
+    return call_map
+
+
+def _flatten_canonical_calls(
+    steps: list[CallSpec | ScatterSpec],
+) -> list[CallSpec]:
+    calls: list[CallSpec] = []
+    for step in steps:
+        if isinstance(step, CallSpec):
+            calls.append(step)
+        else:
+            calls.extend(_flatten_canonical_calls(step.body))
+    return calls
 
 
 def _catalog_controlled_task_data(task: Any) -> dict[str, Any]:

@@ -2773,6 +2773,28 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 - allowlist 内允许修复的 wiring、workflow outputs 和 task output values 不参与该
   immutable provenance 比较。
 
+### `test_recipe_plan_context_uses_canonical_scatter_steps`
+
+输入：
+
+- resolver 生成且 `steps`/`calls` 一致的 RNA-seq DEG scatter Workflow IR。
+- 保持兼容 `calls` 不变，但篡改 scatter body 中 canonical call wiring 的 Workflow
+  IR。
+
+期望输出：
+
+- 一致的 scatter Workflow IR 可以构建 approved context 并调用 provider。
+- 不一致的 Workflow IR 返回 `invalid_request`，Reviewer attempt count 保持为零，
+  且不调用 provider。
+
+覆盖点：
+
+- Reviewer provenance 递归从 canonical `workflow.steps` 提取普通及 scatter body
+  calls。
+- compatibility `workflow.calls` 必须与 canonical calls 的顺序、ID、task 和 inputs
+  完全一致。
+- approved Catalog context 不能由与 canonical DAG 脱节的旧版兼容视图授权。
+
 ## `tests/test_graph.py`
 
 该文件验证 Compiler Graph、Analyzer、Renderer 和 deterministic repairer 的交互。
