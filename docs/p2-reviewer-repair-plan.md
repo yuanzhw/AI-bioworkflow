@@ -322,3 +322,21 @@ Windows PowerShell：
   不复用完整 Catalog Retriever payload，也不提供候选工具重选上下文。
 - Reviewer 尝试次数后续实现宜拆成 deterministic 与 Reviewer 计数，便于 run
   diagnostics 和前端展示区分两类修复来源。
+
+## 已确认的 P2.3 决策
+
+- Reviewer provider 默认禁用；只有调用方显式启用后才允许创建 provider 或调用
+  模型。显式启用但缺少 `DEEPSEEK_API_KEY` 时返回 no-op diagnostic，不把该情况
+  计为一次模型尝试。
+- Recipe Tool Plan 路径只向 Reviewer 传递当前 plan 实际使用并再次通过正式
+  Catalog 校验的 recipe、step 和 tool metadata。直接 Workflow IR 没有正式
+  Catalog provenance，因此使用空 `catalog_context`，不根据 task 名称、command
+  或 runtime 猜测工具。
+- Provider boundary 只返回经过 `ReviewerRepairResult` schema 校验的结果。raw
+  provider response 不进入 Compiler state；schema error 只保留不含原始值的字段
+  位置和校验消息。
+- Reviewer node 使用独立 `reviewer_attempt_count` 和结构化 request、patch、
+  rejection reason、diagnostics state。P2.3 不添加 Compiler Graph edge；
+  Analyzer failure routing 和 Checker failure routing 按后续 PR 分别接入。
+- Policy rejection 与 application failure 使用不同异常类别。前者表示越过 P2
+  allowlist，后者表示 policy 允许的 patch 无法安全应用到当前 Workflow IR。

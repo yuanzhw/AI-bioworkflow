@@ -2451,7 +2451,7 @@ result 和 policy 边界。
 
 输入：
 
-- patch 尝试把 `/workflow/outputs/clean_r1` 替换为数组值。
+- patch 尝试把 `/workflow/outputs/clean_r1` 替换为包含敏感标记的数组值。
 
 执行：
 
@@ -2460,12 +2460,340 @@ result 和 policy 边界。
 期望输出：
 
 - 抛出 `ReviewerPatchApplicationError`，错误说明 candidate 不是合法 Workflow IR。
+- application error 不包含 Pydantic 原始输入或敏感标记。
 - 原始 workflow output 仍是字符串表达式。
 
 覆盖点：
 
 - patch 应用完成后仍必须重新通过 `WorkflowIR` schema validation。
 - schema-invalid candidate 不会被交给 graph re-entry。
+- schema re-validation failure 不会把 Workflow IR 字段值写入错误文本。
+
+## `tests/test_reviewer_provider.py`
+
+该文件验证 P2.3 Reviewer provider boundary。Provider 负责把结构化
+`ReviewerRepairRequest` 渲染为 JSON-only prompt，并把响应解析为
+`ReviewerRepairResult`；raw response 不进入返回契约。
+
+### `test_llm_provider_renders_structured_request_and_parses_fenced_result`
+
+输入：
+
+- 包含 Workflow IR、Analyzer diagnostics 和单个 approved tool 的 Reviewer request。
+- fake LLM 返回 fenced JSON `no_action` result。
+
+期望输出：
+
+- Provider 返回合法 `ReviewerRepairResult`。
+- prompt 包含 failure stage 和当前 workflow approved tool。
+- prompt 明确 `patch` 和 `rejection_reason` 与 result status 的对应关系。
+- prompt 不包含未使用的 `fastp` metadata。
+
+覆盖点：
+
+- Provider prompt 只使用结构化 request。
+- fenced JSON 可以解析，但 raw response 不作为结果字段返回。
+
+### `test_parse_reviewer_response_rejects_non_json_without_echoing_raw_text`
+
+输入：
+
+- 不包含 JSON object、且带有敏感标记的 provider 文本。
+
+期望输出：
+
+- 抛出 `ReviewerProviderResponseError`。
+- error message 不回显敏感标记。
+
+覆盖点：
+
+- 非 JSON provider 输出不会作为 diagnostic 原样持久化。
+
+### `test_parse_reviewer_response_rejects_invalid_schema_without_echoing_values`
+
+输入：
+
+- JSON object 使用 `patch_proposed`，但 patch 缺少必填字段并包含敏感值。
+
+期望输出：
+
+- 抛出 schema-classified `ReviewerProviderResponseError`。
+- error message 只包含字段位置和校验消息，不包含原始值。
+
+覆盖点：
+
+- Provider response schema failure 保留可诊断性，同时避免 raw payload 泄漏。
+
+### `test_default_reviewer_provider_requires_api_key`
+
+输入：
+
+- 显式创建默认 Reviewer provider。
+- `DEEPSEEK_API_KEY` 为空。
+
+期望输出：
+
+- 抛出 `ReviewerProviderUnavailableError`。
+
+覆盖点：
+
+- Reviewer 只有显式启用并具备凭证时才创建真实模型客户端。
+- 确定性结构化编译路径不因 P2.3 自动依赖 API key。
+
+## `tests/test_reviewer_node.py`
+
+该文件验证 P2.3 `reviewer_repair` compiler node 的独立行为。Node 已具备
+Provider 注入、request 构造、patch 校验和应用能力，但本阶段不添加 Compiler
+Graph edge；Analyzer 和 Checker routing 留给 P2.4。
+
+### `test_default_reviewer_node_is_callable_and_disabled`
+
+输入：
+
+- 默认禁用的 Reviewer node。
+- 一个调用即失败的 fake provider。
+
+期望输出：
+
+- 返回 `no_action` 和禁用 diagnostic。
+- attempt count 保持为零。
+- provider 没有被调用，Workflow IR update 不存在。
+
+覆盖点：
+
+- Reviewer 必须显式启用。
+- 默认结构化编译路径不会隐式触发模型调用。
+
+### `test_reviewer_node_returns_no_action_when_provider_is_unavailable`
+
+输入：
+
+- Reviewer 已启用。
+- provider factory 抛出 `ReviewerProviderUnavailableError`。
+
+期望输出：
+
+- 返回 `no_action` 和 unavailable diagnostic。
+- attempt count 保持为零，Workflow IR 不变。
+
+覆盖点：
+
+- 缺少 API key 或 provider 时安全降级，不把 provider setup 当作一次模型尝试。
+
+### `test_reviewer_node_applies_valid_patch_with_minimal_approved_context`
+
+输入：
+
+- 已解析的 RNA-seq reference preparation Recipe Tool Plan 和 Workflow IR。
+- fake provider 返回增加 workflow output 的合法 patch。
+- patch 只引用当前 plan 使用的 `salmon_index:1.9.0`。
+
+期望输出：
+
+- patch 应用到新的 Workflow IR candidate，原 state IR 不变。
+- Reviewer attempt count 增加到 1。
+- request 只包含当前 recipe，以及 `salmon_index`、`gtf_tx2gene` metadata。
+- Analyzer diagnostics 和旧 WDL state 为 graph re-entry 清空。
+
+覆盖点：
+
+- Node 串联 request、provider、result schema、policy 和 patch application。
+- 不复用完整 Catalog Retriever payload，也不暴露 raw provider response。
+
+### `test_reviewer_node_rejects_invalid_provider_output_without_raw_payload`
+
+输入：
+
+- fake provider 返回缺少 patch 必填字段、且包含敏感标记的 dict。
+
+期望输出：
+
+- status 为 `model_error`。
+- 不返回 Workflow IR update。
+- diagnostics 和完整 node update 都不包含敏感标记。
+
+覆盖点：
+
+- Node 会再次校验 provider boundary，即使 fake/custom provider 未遵守 Protocol。
+
+### `test_reviewer_node_records_provider_failure_as_model_error`
+
+输入：
+
+- fake provider 抛出 transport exception。
+
+期望输出：
+
+- status 为 `model_error`，attempt count 为 1。
+- diagnostics 记录 provider failure。
+- Workflow IR 不变。
+
+覆盖点：
+
+- 已发生的模型调用失败与 disabled/unavailable no-op 分开记录。
+
+### `test_reviewer_node_does_not_persist_typed_provider_error_payload`
+
+输入：
+
+- fake provider 抛出包含敏感标记的 `ReviewerProviderError`。
+
+期望输出：
+
+- status 为 `model_error`。
+- diagnostics 只记录异常类型，不记录异常原文或敏感标记。
+
+覆盖点：
+
+- 自定义 Provider 异常不能绕过 raw payload 不持久化边界。
+
+### `test_reviewer_node_sanitizes_request_construction_errors`
+
+输入：
+
+- 包含敏感标记的 invalid Workflow IR。
+- 包含敏感标记的 invalid Recipe Tool Plan。
+- 包含敏感标记且无法通过 Reviewer request schema 的 diagnostics。
+
+期望输出：
+
+- 三类 request 构造失败都返回 `invalid_request`，且不调用 provider。
+- Reviewer attempt count 保持为零。
+- rejection reason、diagnostics 和完整 node update 都不包含敏感标记。
+
+覆盖点：
+
+- Workflow IR、Recipe Tool Plan、planned tool call 和最终 request schema 的底层
+  异常文本不会进入 Reviewer state。
+- request 构造错误只保留固定上下文和异常类型。
+
+### `test_reviewer_node_rejects_policy_violation_without_mutating_ir`
+
+输入：
+
+- fake provider 提议替换 task runtime Docker image。
+
+期望输出：
+
+- status 为 `policy_rejected`。
+- 保存 parsed patch 和 rejection reason。
+- 不返回 Workflow IR update，原 runtime image 不变。
+
+覆盖点：
+
+- Provider 不能绕过 P2.1 policy。
+- 被拒绝 patch 仍以脱敏 parsed data 形式保留用于后续 observability。
+
+### `test_reviewer_node_classifies_application_failure_separately_from_policy`
+
+输入：
+
+- policy 允许但尝试 `replace` 不存在 workflow output 的 patch。
+
+期望输出：
+
+- status 为 `invalid_request`，而不是 `policy_rejected`。
+- rejection reason 说明 target 不存在。
+- Workflow IR 不变。
+
+覆盖点：
+
+- `ReviewerPatchApplicationError` 与 `ReviewerPatchPolicyError` 是独立错误类别。
+- P2.4/P2.5 可以按真实失败阶段生成 diagnostics。
+
+### `test_reviewer_node_sanitizes_schema_application_failure`
+
+输入：
+
+- fake provider 返回 policy 允许但会产生 schema-invalid Workflow IR 的 patch。
+- 无效 workflow output 数组值包含敏感标记。
+
+期望输出：
+
+- status 为 `invalid_request`，并保存 parsed patch。
+- rejection reason 和 diagnostics 不包含敏感标记。
+- Workflow IR 不变，patch 未标记为 applied。
+
+覆盖点：
+
+- Pydantic `ValidationError` 的原始输入不会经 application error 进入 Reviewer
+  rejection state。
+- 保存 parsed patch 与错误信息脱敏是两个独立契约。
+
+### `test_reviewer_node_builds_checker_request_without_routing_it`
+
+输入：
+
+- `failure_stage = checker`。
+- state 包含 WOMtool validation message。
+- fake provider 返回 `no_action`。
+
+期望输出：
+
+- Provider 收到 Checker request 和完整 validation message。
+- Node 不应用 patch。
+
+覆盖点：
+
+- P2.3 同时设计 Analyzer/Checker request contract。
+- Checker graph routing 仍明确留在后续 PR。
+
+### `test_direct_workflow_ir_request_uses_empty_catalog_context`
+
+输入：
+
+- 直接 Workflow IR，而不是 Recipe Tool Plan。
+
+期望输出：
+
+- request 的 approved recipes 和 tools 都为空。
+
+覆盖点：
+
+- 没有正式 plan provenance 时不从 task 名称、command 或 runtime 猜测 Catalog
+  metadata。
+- Reviewer 不能借由直接 IR 获得候选工具重选上下文。
+
+### `test_recipe_plan_context_rejects_modified_catalog_controlled_task`
+
+输入：
+
+- 合法 Recipe Tool Plan 对应的 Workflow IR。
+- 当前 IR 中的 task command 已偏离正式 Catalog resolver 结果。
+
+期望输出：
+
+- request 构造返回 `invalid_request`，且不调用 provider。
+- Reviewer attempt count 保持为零。
+
+覆盖点：
+
+- approved context 只有在当前 IR 的 workflow identity、task mapping、command、
+  input/output schema 和 runtime 仍具有正式 plan provenance 时才会提供。
+- allowlist 内允许修复的 wiring、workflow outputs 和 task output values 不参与该
+  immutable provenance 比较。
+
+### `test_recipe_plan_context_uses_canonical_scatter_steps`
+
+输入：
+
+- resolver 生成且 `steps`/`calls` 一致的 RNA-seq DEG scatter Workflow IR。
+- 保持兼容 `calls` 不变，但篡改 scatter body 中 canonical call wiring 的 Workflow
+  IR。
+
+期望输出：
+
+- 一致的 scatter Workflow IR 可以构建 approved context 并调用 provider。
+- 不一致的 Workflow IR 返回 `invalid_request`，Reviewer attempt count 保持为零，
+  且不调用 provider。
+
+覆盖点：
+
+- Reviewer provenance 递归从 canonical `workflow.steps` 提取普通及 scatter body
+  calls。
+- compatibility `workflow.calls` 必须与 canonical calls 的顺序、ID、task 和 inputs
+  完全一致。
+- approved Catalog context 不能由与 canonical DAG 脱节的旧版兼容视图授权。
 
 ## `tests/test_graph.py`
 

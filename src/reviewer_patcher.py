@@ -16,7 +16,7 @@ from src.reviewer_repair import (
 from src.schema import WorkflowIR, coerce_workflow_ir
 
 
-class ReviewerPatchApplicationError(ReviewerPatchPolicyError):
+class ReviewerPatchApplicationError(ValueError):
     """Raised when a policy-allowed Reviewer patch cannot be applied safely."""
 
 
@@ -42,7 +42,7 @@ def apply_reviewer_patch(
         return WorkflowIR.model_validate(candidate)
     except ValidationError as exc:
         raise ReviewerPatchApplicationError(
-            f"applied Reviewer patch produced invalid Workflow IR: {exc}"
+            "applied Reviewer patch produced invalid Workflow IR."
         ) from exc
 
 
