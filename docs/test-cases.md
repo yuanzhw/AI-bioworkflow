@@ -104,7 +104,7 @@ OK (skipped=2)
 
 - workflow 名称：`RNASeqPipeline`
 - workflow inputs：`raw_r1: File`、`raw_r2: File`、`reference: File`
-- calls：
+- canonical steps：
   - `qc` 调用 task `fastp`
   - `align` 调用 task `bwa_mem`，输入引用 `qc.clean_r1/qc.clean_r2`
 - outputs：`bam = align.bam`
@@ -116,7 +116,7 @@ OK (skipped=2)
 
 - Analyzer 认为 call 顺序正确时 IR 有效。
 - Renderer 生成 `workflow RNASeqPipeline`、`call fastp as qc`、`call bwa_mem as align` 和 `File bam = align.bam`。
-- 当 calls 反转时，Analyzer 能发现前向引用；Agent repairer 能在安全情况下重排。
+- 当 steps 反转时，Analyzer 能发现前向引用；Agent repairer 能在安全情况下重排。
 
 ## `tests/api/test_models.py`
 
@@ -884,7 +884,7 @@ OK (skipped=2)
 
 输入：
 
-- 从 `examples/rnaseq_workflow_ir.json` 读取 Workflow IR，并反转 calls 形成 forward reference。
+- 从 `examples/rnaseq_workflow_ir.json` 读取 Workflow IR，并反转 canonical steps 形成 forward reference。
 - `check=False`
 
 执行：
@@ -896,7 +896,7 @@ OK (skipped=2)
 
 - snapshot `status == "succeeded"`。
 - diagnostics 包含 repair actions。
-- snapshot Workflow IR calls 被修复为 `["qc", "align"]`。
+- snapshot Workflow IR steps 被修复为 `["qc", "align"]`。
 - `artifact.updated` workflow_ir 事件在 `repair.applied` 事件前出现。
 - `repair.applied` payload 包含结构化 `repair_actions`。
 
@@ -2365,7 +2365,7 @@ result 和 policy 边界。
 - `remove` 支持 allowlist 内的 object entry 删除。
 - 删除失败不会通过共享引用污染原始 IR。
 
-### `test_apply_reviewer_patch_moves_workflow_steps_and_syncs_calls`
+### `test_apply_reviewer_patch_moves_steps_and_regenerates_compatibility_calls`
 
 输入：
 
@@ -2420,7 +2420,7 @@ result 和 policy 边界。
 期望输出：
 
 - 抛出 `ReviewerPatchPolicyError`。
-- 原始 `workflow.steps` 和 `workflow.calls` wiring 都保持不变。
+- 原始 `workflow.steps` wiring 保持不变，且不会向原始 dict 写入 `workflow.calls`。
 
 覆盖点：
 
@@ -2795,6 +2795,69 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
   完全一致。
 - approved Catalog context 不能由与 canonical DAG 脱节的旧版兼容视图授权。
 
+## `tests/test_schema.py`
+
+该文件验证 `workflow.steps` 的 canonical 契约以及 `workflow.calls` 的旧版兼容
+边界。业务模块不得把 `calls` 当作第二份 DAG。
+
+### `test_calls_only_input_builds_canonical_steps`
+
+输入：只包含无 `kind` 的 `workflow.calls` 旧版 IR。
+
+期望输出：
+
+- `coerce_workflow_ir(...)` 将 call 转成 canonical `workflow.steps`。
+- 生成的 compatibility calls 与 steps 一致。
+
+覆盖点：calls-only 历史输入仍然受支持。
+
+### `test_steps_only_input_builds_flattened_compatibility_view`
+
+输入：只包含一个 scatter 及其 body call 的 canonical `workflow.steps`。
+
+期望输出：
+
+- schema 递归生成扁平 `workflow.calls`。
+- compatibility call 与 canonical step 是不同对象。
+
+覆盖点：`calls` 是从 steps 生成的深拷贝快照，不通过共享引用成为第二个写入口。
+
+### `test_coercion_rejects_mismatched_dual_views`
+
+输入：同时提供 `steps` 和 `calls`，但两者的 call input wiring 不一致。
+
+期望输出：`coerce_workflow_ir(...)` 抛出 `WorkflowCompatibilityError`。
+
+覆盖点：输入归一化不会静默选择任意一份冲突 DAG。
+
+### `test_coercion_accepts_equivalent_default_call_inputs`
+
+输入：canonical step 省略 `inputs`，compatibility call 显式提供空 `inputs`。
+
+期望输出：IR 归一化成功，两个视图保持一致。
+
+覆盖点：双视图校验在比较前补齐 CallSpec 默认值，不误拒绝语义等价输入。
+
+### `test_direct_model_validation_rejects_mismatched_dual_views`
+
+输入：与上一用例相同的冲突双视图 IR。
+
+期望输出：`WorkflowIR.model_validate(...)` 抛出 `ValidationError`。
+
+覆盖点：绕过 normalizer 的直接 schema 构造也保持双视图一致性约束。
+
+### `test_refresh_rebuilds_detached_compatibility_snapshot`
+
+输入：修改已解析 IR 中的 canonical call，使旧 compatibility snapshot 过期。
+
+期望输出：
+
+- `compatibility_calls_match_steps(...)` 先返回 `False`。
+- `refresh_compatibility_calls(...)` 后重新一致。
+- 刷新后的 compatibility call 仍不与 canonical call 共享对象。
+
+覆盖点：Repairer 等内部修改方通过共享 helper 单向刷新兼容视图。
+
 ## `tests/test_graph.py`
 
 该文件验证 Compiler Graph、Analyzer、Renderer 和 deterministic repairer 的交互。
@@ -2832,7 +2895,7 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 输入：
 
 - `sample_multi_task_ir()`。
-- 将 `workflow.calls` 顺序反转，使 `align` 在 `qc` 之前出现。
+- 将 `workflow.steps` 顺序反转，使 `align` 在 `qc` 之前出现。
 
 执行：
 
@@ -2871,7 +2934,7 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 输入：
 
 - `sample_multi_task_ir()`。
-- 将 `workflow.calls` 顺序反转。
+- 将 `workflow.steps` 顺序反转。
 - 通过 `initial_state(...)` 构造 LangGraph state。
 
 执行：
@@ -2881,7 +2944,7 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 期望输出：
 
 - final state 中 `is_valid=True`。
-- 修复后的 `workflow_ir.workflow.calls` 顺序为 `["qc", "align"]`。
+- 修复后的 `workflow_ir.workflow.steps` 顺序为 `["qc", "align"]`。
 - `repair_actions` 非空。
 
 覆盖点：
@@ -2986,7 +3049,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 期望输出：
 
 - 标准 IR workflow 名称为 `SimpleQC`。
-- `workflow.calls[0].id == "fastp_qc"`。
+- `workflow.steps[0].id == "fastp_qc"`。
 - `workflow_ir.tasks["fastp_qc"].runtime.docker == "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0"`。
 
 覆盖点：

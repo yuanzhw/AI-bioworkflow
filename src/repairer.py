@@ -10,6 +10,7 @@ from src.schema import (
     ScatterSpec,
     WorkflowIR,
     coerce_workflow_ir,
+    refresh_compatibility_calls,
 )
 
 
@@ -44,7 +45,7 @@ def _repair_call_order(ir: WorkflowIR, actions: list[str]) -> None:
         return
 
     ir.workflow.steps = repaired_steps
-    ir.workflow.calls = _flatten_calls(repaired_steps)
+    refresh_compatibility_calls(ir.workflow)
     actions.append(
         "Reordered workflow steps to satisfy upstream output dependencies: "
         f"{' -> '.join(_step_labels(repaired_steps))}"
@@ -143,16 +144,6 @@ def _step_produced_calls(step: CallSpec | ScatterSpec) -> set[str]:
     for child in step.body:
         produced.update(_step_produced_calls(child))
     return produced
-
-
-def _flatten_calls(steps: list[CallSpec | ScatterSpec]) -> list[CallSpec]:
-    calls = []
-    for step in steps:
-        if isinstance(step, CallSpec):
-            calls.append(step)
-        else:
-            calls.extend(_flatten_calls(step.body))
-    return calls
 
 
 def _step_labels(steps: list[CallSpec | ScatterSpec]) -> list[str]:

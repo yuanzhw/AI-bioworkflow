@@ -415,7 +415,7 @@ class ReviewerNodeTests(unittest.TestCase):
             }
         )
         state = self.sample_state()
-        task_name = state["workflow_ir"]["workflow"]["calls"][0]["task"]
+        task_name = state["workflow_ir"]["workflow"]["steps"][0]["task"]
         state["workflow_ir"]["tasks"][task_name]["command"] = "echo tampered"
 
         update = self.make_node(provider)(state)

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import copy
 from typing import Any
-
-from pydantic import ValidationError
 
 from src.reviewer_repair import (
     ApprovedCatalogContext,
@@ -38,9 +35,13 @@ def apply_reviewer_patch(
     for action in patch.actions:
         _apply_action(candidate, action)
 
+    workflow = candidate.get("workflow")
+    if isinstance(workflow, dict):
+        workflow.pop("calls", None)
+
     try:
-        return WorkflowIR.model_validate(candidate)
-    except ValidationError as exc:
+        return coerce_workflow_ir(candidate)
+    except (TypeError, ValueError) as exc:
         raise ReviewerPatchApplicationError(
             "applied Reviewer patch produced invalid Workflow IR."
         ) from exc
@@ -66,7 +67,6 @@ def _apply_add(candidate: dict[str, Any], path: str, value: Any) -> None:
     if key in parent:
         raise ReviewerPatchApplicationError(f"add target '{path}' already exists")
     parent[key] = value
-    _sync_calls_after_steps_patch(candidate, path)
 
 
 def _apply_replace(candidate: dict[str, Any], path: str, value: Any) -> None:
@@ -75,13 +75,11 @@ def _apply_replace(candidate: dict[str, Any], path: str, value: Any) -> None:
         if key not in parent:
             raise ReviewerPatchApplicationError(f"replace target '{path}' does not exist")
         parent[key] = value
-        _sync_calls_after_steps_patch(candidate, path)
         return
 
     if isinstance(parent, list):
         index = _parse_existing_index(key, parent, path)
         parent[index] = value
-        _sync_calls_after_steps_patch(candidate, path)
         return
 
     raise ReviewerPatchApplicationError(f"replace target parent for '{path}' is not editable")
@@ -93,13 +91,11 @@ def _apply_remove(candidate: dict[str, Any], path: str) -> None:
         if key not in parent:
             raise ReviewerPatchApplicationError(f"remove target '{path}' does not exist")
         del parent[key]
-        _sync_calls_after_steps_patch(candidate, path)
         return
 
     if isinstance(parent, list):
         index = _parse_existing_index(key, parent, path)
         parent.pop(index)
-        _sync_calls_after_steps_patch(candidate, path)
         return
 
     raise ReviewerPatchApplicationError(f"remove target parent for '{path}' is not editable")
@@ -120,7 +116,6 @@ def _apply_move(candidate: dict[str, Any], action: ReviewerPatchAction) -> None:
     item = source_parent.pop(source_index)
     target_index = _parse_insert_index(target_key, source_parent, action.path)
     source_parent.insert(target_index, item)
-    _sync_calls_after_steps_patch(candidate, action.path)
 
 
 def _resolve_parent(candidate: dict[str, Any], path: str) -> tuple[Any, str]:
@@ -168,33 +163,6 @@ def _parse_index(segment: str, path: str) -> int:
     if index < 0:
         raise ReviewerPatchApplicationError(f"patch path '{path}' contains a negative list index")
     return index
-
-
-def _sync_calls_after_steps_patch(candidate: dict[str, Any], path: str) -> None:
-    if not path.startswith("/workflow/steps/"):
-        return
-
-    workflow = candidate.get("workflow")
-    if not isinstance(workflow, dict):
-        return
-
-    steps = workflow.get("steps")
-    if isinstance(steps, list):
-        workflow["calls"] = _flatten_call_steps(steps)
-
-
-def _flatten_call_steps(steps: list[Any]) -> list[dict[str, Any]]:
-    calls: list[dict[str, Any]] = []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        if step.get("kind", "call") == "call":
-            calls.append(copy.deepcopy(step))
-        elif step.get("kind") == "scatter":
-            body = step.get("body", [])
-            if isinstance(body, list):
-                calls.extend(_flatten_call_steps(body))
-    return calls
 
 
 def _json_pointer_segments(path: str) -> list[str]:

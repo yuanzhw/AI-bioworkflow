@@ -41,8 +41,9 @@ def repairable_forward_reference_ir() -> dict:
                 "raw_r2": "File",
                 "reference": "File",
             },
-            "calls": [
+            "steps": [
                 {
+                    "kind": "call",
                     "id": "align",
                     "task": "bwa_mem",
                     "inputs": {
@@ -52,6 +53,7 @@ def repairable_forward_reference_ir() -> dict:
                     },
                 },
                 {
+                    "kind": "call",
                     "id": "qc",
                     "task": "fastp",
                     "inputs": {
@@ -182,7 +184,7 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(events[artifact_index]["node"], "repairer")
         self.assertEqual(events[artifact_index]["payload"], {"artifact": "workflow_ir"})
         self.assertEqual(
-            [call["id"] for call in events[artifact_index]["workflow_ir"]["workflow"]["calls"]],
+            [step["id"] for step in events[artifact_index]["workflow_ir"]["workflow"]["steps"]],
             ["qc", "align"],
         )
 
@@ -204,7 +206,7 @@ class WorkflowServiceTests(unittest.TestCase):
             )
 
         repaired_ir = repairable_forward_reference_ir()
-        repaired_ir["workflow"]["calls"].reverse()
+        repaired_ir["workflow"]["steps"].reverse()
         with (
             patch(
                 "src.services.workflow_service.checker_node",
@@ -238,7 +240,7 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(events[artifact_index]["node"], "repairer")
         self.assertEqual(events[artifact_index]["payload"], {"artifact": "workflow_ir"})
         self.assertEqual(
-            [call["id"] for call in events[artifact_index]["workflow_ir"]["workflow"]["calls"]],
+            [step["id"] for step in events[artifact_index]["workflow_ir"]["workflow"]["steps"]],
             ["qc", "align"],
         )
 

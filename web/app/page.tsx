@@ -33,7 +33,7 @@ const pipelineStages = [
   },
   {
     label: "Workflow IR",
-    detail: "编译契约记录 steps、calls、scatter 和 workflow outputs。",
+    detail: "编译契约记录 call/scatter steps 和 workflow outputs。",
   },
   {
     label: "Analyzer / Repairer",
@@ -102,7 +102,7 @@ const systemSurfaces: Array<{
   },
   {
     title: "DAG",
-    description: "查看 Workflow IR 的 calls、scatter、依赖边和结构状态。",
+    description: "查看 Workflow IR 的 call/scatter steps、依赖边和结构状态。",
     icon: Network,
   },
 ];

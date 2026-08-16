@@ -3,7 +3,7 @@ import logging
 from langchain_core.messages import HumanMessage
 
 from src.analyzer import analyze_workflow_ir
-from src.schema import WorkflowIR
+from src.schema import coerce_workflow_ir
 from src.state import WorkflowState
 
 
@@ -17,7 +17,7 @@ def analyzer_node(state: WorkflowState):
     logger.info("Analyzer node is checking Workflow IR.")
 
     try:
-        workflow_ir = WorkflowIR.model_validate(state.get("workflow_ir", {}))
+        workflow_ir = coerce_workflow_ir(state.get("workflow_ir", {}))
     except Exception as exc:
         message = f"Workflow IR 结构校验失败: {exc}"
         return {

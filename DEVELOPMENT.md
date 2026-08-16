@@ -62,7 +62,7 @@ AI-bioworkflow/
 
 1. **状态管理 (`state.py`)**：必须保持强类型。除了 LangGraph 原生的 `messages` 列表，还需要定义好接收前端传入的 `parsed_json`、标准化后的 `workflow_ir`、流转中的 `current_wdl`、`analysis_errors` 和 `validation_message`。
 2. **提示词隔离 (`prompts.py`)**：绝对不要将长篇大论的 System Prompt 硬编码在业务逻辑文件中。
-3. **IR 优先 (`schema.py`)**：workflow 的调用关系与 task 的定义必须分离。`workflow.steps` 表达 call/scatter DAG，`workflow.calls` 作为旧输入兼容，`tasks` 表达可复用 task 模板。
+3. **IR 优先 (`schema.py`)**：workflow 的调用关系与 task 的定义必须分离。`workflow.steps` 是唯一 canonical call/scatter DAG；`workflow.calls` 仅作为旧输入和序列化输出的只读扁平兼容视图；`tasks` 表达可复用 task 模板。
 4. **自然语言只到 Plan (`nl_planner.py`)**：LLM 的职责是把用户需求转成 Recipe Tool Plan，不直接生成 WDL。Planner 失败需要区分 JSON 解析、plan schema、recipe/catalog 校验三类错误，便于调试真实模型输出。
 5. **Catalog 先于自由生成 (`catalog/`, `recipes/`)**：常见生信工具、版本、参数、runtime 与配方步骤应沉淀为结构化目录，Planner 可以把 Recipe Tool Plan 解析成标准 IR。
 6. **静态分析先于渲染 (`analyzer.py`)**：在生成 WDL 前先检查 task 是否存在、输入是否齐全、上游输出引用是否有效、基础类型是否匹配。
@@ -263,7 +263,7 @@ Web 展示系统与 Agent 核心代码继续保留在同一仓库中，以便 Wo
 | 数据持久化 | SQLite（展示版）/ PostgreSQL（部署升级） | 保存 run 摘要、状态事件、结构化产物和错误记录 |
 | Frontend | Next.js + TypeScript | 承载介绍站、交互工作台、DAG 视图和历史详情页 |
 | UI 与样式 | Tailwind CSS + shadcn/ui | 建立一致、可扩展的产品界面组件 |
-| DAG 可视化 | React Flow | 展示 Workflow IR 中 steps/calls/scatter 的依赖图 |
+| DAG 可视化 | React Flow | 展示 Workflow IR 中 call/scatter steps 的依赖图 |
 | 结构化产物展示 | Monaco Editor 或轻量只读代码查看器 | 展示 JSON Plan、Workflow IR 和 WDL，并支持复制/对比 |
 
 第一阶段使用 SSE 而不是 WebSocket：当前主要需求是后端向前端单向推送执行阶段与中间产物，SSE 的实现和调试成本更低。当后续引入运行中人工批准、交互式修订或双向协作时，再评估 WebSocket。
@@ -338,7 +338,7 @@ AI-bioworkflow/
 | --- | --- | --- | --- |
 | 项目介绍页 | 问题背景、Agent/Compiler 架构、RNA-seq DEG 示例、技术栈与项目边界 | 快速说明生信经验如何转化为 Agent 产品能力 | 可跳转到预填充示例工作台、run 历史和 API 文档 |
 | Workflow 生成工作台 | 自然语言输入、执行阶段流、Plan / IR / WDL 标签页、校验、修复信息和失败摘要 | 展示端到端 Agent 工程链路与可解释输出 | 提交一个示例请求后可实时看到状态、最终校验结果，并进入历史详情 |
-| Workflow DAG 审阅 | calls、scatter、依赖边、输入输出、runtime docker 和结构状态 | 展示结构化建模、领域工作流理解和可视化能力 | 能在 run 详情中从 Workflow IR 渲染 RNA-seq 示例 DAG 并选中节点查看详情 |
+| Workflow DAG 审阅 | call/scatter steps、依赖边、输入输出、runtime docker 和结构状态 | 展示结构化建模、领域工作流理解和可视化能力 | 能在 run 详情中从 Workflow IR 渲染 RNA-seq 示例 DAG 并选中节点查看详情 |
 | Run 历史详情 | 原始请求、事件时间线、模型/编译步骤、修复动作、产物、诊断与失败回放 | 展示可观测性、审计能力和失败处理意识 | 刷新页面后仍可重看一次成功或失败 run 的关键产物 |
 
 第一版工作台重点呈现的阶段为：

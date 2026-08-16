@@ -4,7 +4,7 @@ import copy
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -100,6 +100,28 @@ class ScatterSpec(BaseModel):
 WorkflowStepSpec = Annotated[CallSpec | ScatterSpec, Field(discriminator="kind")]
 
 
+WORKFLOW_CALLS_MISMATCH_MESSAGE = (
+    "compatibility calls do not match canonical workflow steps"
+)
+
+
+class WorkflowCompatibilityError(ValueError):
+    """Raised when legacy workflow.calls diverges from canonical workflow.steps."""
+
+
+def flatten_workflow_calls(
+    steps: list[CallSpec | ScatterSpec],
+) -> list[CallSpec]:
+    """Return canonical calls in workflow step traversal order."""
+    calls: list[CallSpec] = []
+    for step in steps:
+        if isinstance(step, CallSpec):
+            calls.append(step)
+        else:
+            calls.extend(flatten_workflow_calls(step.body))
+    return calls
+
+
 class WorkflowSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -127,6 +149,39 @@ class WorkflowSpec(BaseModel):
         _validate_mapping_keys(value, "workflow output")
         return value
 
+    @model_validator(mode="after")
+    def normalize_compatibility_calls(self):
+        calls_provided = "calls" in self.model_fields_set
+        steps_provided = "steps" in self.model_fields_set
+
+        if calls_provided and not steps_provided:
+            self.steps = [call.model_copy(deep=True) for call in self.calls]
+
+        canonical_calls = flatten_workflow_calls(self.steps)
+        if calls_provided and steps_provided and self.calls != canonical_calls:
+            raise WorkflowCompatibilityError(WORKFLOW_CALLS_MISMATCH_MESSAGE)
+
+        self.calls = [call.model_copy(deep=True) for call in canonical_calls]
+        return self
+
+
+def compatibility_calls_match_steps(workflow: WorkflowSpec) -> bool:
+    """Check that the legacy calls view is an exact snapshot of canonical steps."""
+    return workflow.calls == flatten_workflow_calls(workflow.steps)
+
+
+def ensure_compatibility_calls_match_steps(workflow: WorkflowSpec) -> None:
+    if not compatibility_calls_match_steps(workflow):
+        raise WorkflowCompatibilityError(WORKFLOW_CALLS_MISMATCH_MESSAGE)
+
+
+def refresh_compatibility_calls(workflow: WorkflowSpec) -> None:
+    """Regenerate the legacy calls view from canonical workflow steps."""
+    workflow.calls = [
+        call.model_copy(deep=True)
+        for call in flatten_workflow_calls(workflow.steps)
+    ]
+
 
 class WorkflowIR(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -145,6 +200,7 @@ class WorkflowIR(BaseModel):
 def coerce_workflow_ir(data: WorkflowIR | dict[str, Any]) -> WorkflowIR:
     """Normalize supported user JSON shapes into the internal WorkflowIR."""
     if isinstance(data, WorkflowIR):
+        ensure_compatibility_calls_match_steps(data.workflow)
         return data
     if not isinstance(data, dict):
         raise TypeError("workflow input must be a dictionary")
@@ -187,6 +243,7 @@ def _normalize_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     if isinstance(workflow, dict):
+        calls_provided = "calls" in workflow
         calls = workflow.get("calls", [])
         steps = workflow.get("steps")
 
@@ -195,8 +252,12 @@ def _normalize_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
         else:
             workflow["steps"] = [_normalize_step_dict(step) for step in steps]
 
-        if "calls" not in workflow:
-            workflow["calls"] = _flatten_call_steps(workflow["steps"])
+        canonical_calls = _flatten_call_step_dicts(workflow["steps"])
+        if calls_provided:
+            normalized_calls = [_normalize_call_step(call) for call in calls]
+            if normalized_calls != canonical_calls:
+                raise WorkflowCompatibilityError(WORKFLOW_CALLS_MISMATCH_MESSAGE)
+        workflow["calls"] = canonical_calls
 
     return normalized
 
@@ -204,7 +265,7 @@ def _normalize_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
 def _legacy_to_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
     workflow_inputs = dict(data.get("inputs", {}))
     task_defs: dict[str, dict[str, Any]] = {}
-    calls: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
     previous_task_outputs: dict[str, dict[str, str]] = {}
 
     for raw_task in data.get("tasks", []):
@@ -230,15 +291,22 @@ def _legacy_to_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
             "outputs": outputs,
             "runtime": _normalize_runtime(raw_task),
         }
-        calls.append({"id": task_name, "task": task_name, "inputs": call_inputs})
+        steps.append(
+            {
+                "kind": "call",
+                "id": task_name,
+                "task": task_name,
+                "inputs": call_inputs,
+            }
+        )
         previous_task_outputs[task_name] = {
             output_name: output_spec["type"]
             for output_name, output_spec in outputs.items()
         }
 
     workflow_outputs = dict(data.get("outputs", {}))
-    if not workflow_outputs and calls:
-        last_call_id = calls[-1]["id"]
+    if not workflow_outputs and steps:
+        last_call_id = steps[-1]["id"]
         workflow_outputs = {
             output_name: f"{last_call_id}.{output_name}"
             for output_name in task_defs[last_call_id]["outputs"]
@@ -249,8 +317,7 @@ def _legacy_to_ir_dict(data: dict[str, Any]) -> dict[str, Any]:
         "workflow": {
             "name": data["workflow_name"],
             "inputs": workflow_inputs,
-            "calls": calls,
-            "steps": [_normalize_call_step(call) for call in calls],
+            "steps": steps,
             "outputs": workflow_outputs,
         },
         "tasks": task_defs,
@@ -290,6 +357,7 @@ def _normalize_runtime(task_data: dict[str, Any]) -> dict[str, Any]:
 def _normalize_call_step(call: dict[str, Any]) -> dict[str, Any]:
     normalized = copy.deepcopy(call)
     normalized.setdefault("kind", "call")
+    normalized.setdefault("inputs", {})
     return normalized
 
 
@@ -310,13 +378,13 @@ def _normalize_step_dict(step: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _flatten_call_steps(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _flatten_call_step_dicts(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     calls = []
     for step in steps:
         if step.get("kind", "call") == "call":
             calls.append(_normalize_call_step(step))
         elif step.get("kind") == "scatter":
-            calls.extend(_flatten_call_steps(step.get("body", [])))
+            calls.extend(_flatten_call_step_dicts(step.get("body", [])))
     return calls
 
 

@@ -30,16 +30,6 @@ def sample_workflow_ir():
                     },
                 }
             ],
-            "calls": [
-                {
-                    "kind": "call",
-                    "id": "qc",
-                    "task": "fastp",
-                    "inputs": {
-                        "r1": "raw_r1",
-                    },
-                }
-            ],
             "outputs": {
                 "clean_r1": "qc.clean_r1",
                 "legacy_report": "qc.clean_r1",
@@ -80,17 +70,6 @@ def sample_ordering_ir():
             },
         },
         workflow_ir["workflow"]["steps"][0],
-    ]
-    workflow_ir["workflow"]["calls"] = [
-        {
-            "kind": "call",
-            "id": "align",
-            "task": "bwa_mem",
-            "inputs": {
-                "r1": "qc.clean_r1",
-            },
-        },
-        workflow_ir["workflow"]["calls"][0],
     ]
     workflow_ir["tasks"]["bwa_mem"] = {
         "inputs": {
@@ -172,7 +151,7 @@ class ReviewerPatcherTests(unittest.TestCase):
         self.assertEqual(patched.workflow.outputs["clean_r1"], "qc.clean_r1")
         self.assertEqual(patched.tasks["fastp"].outputs["clean_r1"].value, "\"clean_R1.fq.gz\"")
         self.assertNotIn("r2", original["workflow"]["steps"][0]["inputs"])
-        self.assertNotIn("r2", original["workflow"]["calls"][0]["inputs"])
+        self.assertNotIn("calls", original["workflow"])
 
     def test_apply_reviewer_patch_removes_workflow_output_without_mutating_original(self):
         original = sample_workflow_ir()
@@ -194,7 +173,7 @@ class ReviewerPatcherTests(unittest.TestCase):
         self.assertNotIn("legacy_report", patched.workflow.outputs)
         self.assertIn("legacy_report", original["workflow"]["outputs"])
 
-    def test_apply_reviewer_patch_moves_workflow_steps_and_syncs_calls(self):
+    def test_apply_reviewer_patch_moves_steps_and_regenerates_compatibility_calls(self):
         original = sample_ordering_ir()
         patch = ReviewerIRPatch.model_validate(
             {
@@ -260,7 +239,7 @@ class ReviewerPatcherTests(unittest.TestCase):
             apply_reviewer_patch(original, patch)
 
         self.assertEqual(original["workflow"]["steps"][0]["inputs"]["r1"], "raw_r1")
-        self.assertEqual(original["workflow"]["calls"][0]["inputs"]["r1"], "raw_r1")
+        self.assertNotIn("calls", original["workflow"])
 
     def test_apply_reviewer_patch_rejects_missing_replace_target_without_mutating_original(self):
         original = sample_workflow_ir()
