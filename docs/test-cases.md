@@ -1368,6 +1368,7 @@ OK (skipped=2)
 1. 调用 `resolve_tool_plan(...)`。
 2. 调用 `analyze_workflow_ir(...)`。
 3. 调用 `render_wdl(...)`。
+3. 调用 `render_wdl(...)`。
 
 期望输出：
 
@@ -1547,6 +1548,29 @@ OK (skipped=2)
 覆盖点：
 
 - Tool call params 必须来自 Tool Catalog 声明。
+
+### `test_resolver_does_not_infer_missing_workflow_outputs`
+
+输入：
+
+- 复制 `sample_rnaseq_tool_plan()`。
+- 删除显式声明的 `workflow.outputs`。
+
+执行：
+
+1. 调用 `resolve_tool_plan(...)`。
+2. 调用 `analyze_workflow_ir(...)`。
+
+期望输出：
+
+- Analyzer 返回 `is_valid=True`。
+- `workflow.outputs` 保持为空字典。
+- 生成的 WDL workflow 区块不包含 `output` block。
+
+覆盖点：
+
+- Resolver 不按 `tool_calls` 或 canonical `steps` 的顺序猜测 workflow 默认输出。
+- 未显式声明 outputs 的 Plan 与直接构造的空 outputs Workflow IR 保持相同语义。
 
 ### `test_multiqc_report_files_can_be_auto_collected_from_output_tags`
 

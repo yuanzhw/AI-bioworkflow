@@ -190,6 +190,10 @@ output {
 }
 ```
 
+Recipe Tool Plan 未显式声明 `workflow.outputs` 时，Resolver 保留空字典，不根据
+`tool_calls` 或 canonical `steps` 的排列顺序推断默认输出。若 recipe 需要提供默认
+输出，应由 recipe metadata 显式声明，而不是依赖 DAG 的序列化顺序。
+
 ## TaskSpec
 
 `tasks` 中每个条目对应一个 `TaskSpec`。
@@ -585,8 +589,9 @@ Resolver 的主要职责：
 5. 把 tool params 转成 task inputs 和 WDL 字面量。
 6. 根据 recipe scatter metadata 生成 `workflow.steps` 中的 scatter block。
 7. 在 scatter 中自动把 workflow array input 索引为单元素输入。
-8. 从 canonical steps 生成扁平化 `workflow.calls` 兼容快照。
-9. 收集 catalog output tags，用于自动连接某些通用汇总工具。
+8. 仅复制 Plan 显式声明的 `workflow.outputs`，不根据 step 顺序推断默认输出。
+9. 从 canonical steps 生成扁平化 `workflow.calls` 兼容快照。
+10. 收集 catalog output tags，用于自动连接某些通用汇总工具。
 
 ### MultiQC 自动收集
 

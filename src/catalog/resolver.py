@@ -96,7 +96,6 @@ def resolve_tool_plan(
     steps: list[dict[str, Any]] = []
     scatter_steps: dict[str, dict[str, Any]] = {}
     tagged_outputs: dict[str, list[str]] = {MULTIQC_INPUT_TAG: []}
-    last_call_step: dict[str, Any] | None = None
 
     for tool_call in plan.workflow.tool_calls:
         step = recipe.step_by_id(tool_call.step)
@@ -142,12 +141,7 @@ def resolve_tool_plan(
         }
         _append_workflow_step(steps, scatter_steps, call_step, step.scatter)
         _record_tagged_outputs(tagged_outputs, tool_call.id, tool)
-        last_call_step = call_step
 
-    workflow_outputs = plan.workflow.outputs or _default_workflow_outputs(
-        last_call_step,
-        task_defs,
-    )
     return WorkflowIR.model_validate(
         {
             "version": "1.0",
@@ -155,7 +149,7 @@ def resolve_tool_plan(
                 "name": plan.workflow.name,
                 "inputs": plan.workflow.inputs,
                 "steps": steps,
-                "outputs": workflow_outputs,
+                "outputs": plan.workflow.outputs,
             },
             "tasks": task_defs,
         }
@@ -392,20 +386,6 @@ def _join_shell_command_lines(lines: list[str]) -> str:
         for index, line in enumerate(lines)
     ]
     return "\n".join(continued_lines)
-
-
-def _default_workflow_outputs(
-    last_call: dict[str, Any] | None,
-    task_defs: dict[str, dict[str, Any]],
-) -> dict[str, str]:
-    if last_call is None:
-        return {}
-
-    last_task = task_defs[last_call["task"]]
-    return {
-        output_name: f"{last_call['id']}.{output_name}"
-        for output_name in last_task["outputs"]
-    }
 
 
 def _task_name_for_call(tool_call: PlannedToolCall) -> str:
