@@ -1368,7 +1368,6 @@ OK (skipped=2)
 1. 调用 `resolve_tool_plan(...)`。
 2. 调用 `analyze_workflow_ir(...)`。
 3. 调用 `render_wdl(...)`。
-3. 调用 `render_wdl(...)`。
 
 期望输出：
 
