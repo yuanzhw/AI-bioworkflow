@@ -462,7 +462,7 @@ class RunRepositoryTests(unittest.TestCase):
                 DiagnosticReport(
                     analysis_errors=["missing input"],
                     analysis_warnings=["unused output"],
-                    repair_actions=["reordered calls"],
+                    repair_actions=["reordered steps"],
                     validation_message="missing input",
                     is_valid=False,
                     succeeded=False,

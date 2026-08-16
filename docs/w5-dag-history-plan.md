@@ -6,7 +6,7 @@
 
 `W5` 的目标是把 `W4` 工作台产生的一次 workflow run，从“可实时生成”推进到“可结构化理解、可回放、可审计”。
 
-当前访问者已经能从工作台创建 RNA-seq 示例 run，在历史列表中再次找到它，进入详情页回放事件、产物和诊断信息，并通过 DAG 图理解 Workflow IR 中的 calls、scatter、依赖边、输入输出和结构状态。
+当前访问者已经能从工作台创建 RNA-seq 示例 run，在历史列表中再次找到它，进入详情页回放事件、产物和诊断信息，并通过 DAG 图理解 Workflow IR 中的 call/scatter steps、依赖边、输入输出和结构状态。
 
 `W5` 是 run 历史与 Workflow IR 可视化阶段，不改变 Compiler Graph 的职责，不让前端生成或修复 Plan、IR、WDL，也不引入新的 Agent 节点或真实 WDL 执行后端。
 
@@ -36,7 +36,7 @@
   - `/runs/[runId]` 历史详情、事件回放、artifact tabs、失败摘要和 Workflow IR DAG。
   - `workflow-graph` 纯数据模型、React Flow 展示组件和 graph 测试。
   - `RunEvent`、`WorkflowArtifacts`、`DiagnosticReport` 和 `WorkflowRunSnapshotResponse` 类型。
-- Workflow IR 已以 `workflow.steps` 作为 canonical DAG 表示，`workflow.calls` 仅用于兼容旧输入和调试输出。
+- Workflow IR 已以 `workflow.steps` 作为 canonical DAG 表示，`workflow.calls` 仅用于兼容旧输入和序列化输出。
 
 ## 产品行为
 

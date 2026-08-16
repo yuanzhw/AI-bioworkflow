@@ -12,7 +12,14 @@ from src.reviewer_repair import (
     ReviewerFailureStage,
     ReviewerRepairRequest,
 )
-from src.schema import CallSpec, ScatterSpec, WorkflowIR, coerce_workflow_ir
+from src.schema import (
+    CallSpec,
+    WorkflowCompatibilityError,
+    WorkflowIR,
+    coerce_workflow_ir,
+    compatibility_calls_match_steps,
+    flatten_workflow_calls,
+)
 from src.state import WorkflowState
 
 
@@ -30,6 +37,8 @@ def build_reviewer_repair_request(
     """Build a structured request with only current-workflow approved metadata."""
     try:
         workflow_ir = coerce_workflow_ir(state.get("workflow_ir", {}))
+    except WorkflowCompatibilityError as exc:
+        raise ReviewerRequestBuildError(str(exc)) from exc
     except Exception as exc:
         raise ReviewerRequestBuildError(
             f"Workflow IR is unavailable or invalid ({exc.__class__.__name__})."
@@ -213,30 +222,18 @@ def _canonical_call_map(
     *,
     label: str,
 ) -> dict[str, CallSpec]:
-    canonical_calls = _flatten_canonical_calls(workflow_ir.workflow.steps)
+    canonical_calls = flatten_workflow_calls(workflow_ir.workflow.steps)
     call_map = {call.id: call for call in canonical_calls}
     if len(call_map) != len(canonical_calls):
         raise ReviewerRequestBuildError(
             f"{label} Workflow IR contains duplicate canonical call IDs."
         )
 
-    if workflow_ir.workflow.calls != canonical_calls:
+    if not compatibility_calls_match_steps(workflow_ir.workflow):
         raise ReviewerRequestBuildError(
             f"{label} Workflow IR compatibility calls do not match canonical workflow steps."
         )
     return call_map
-
-
-def _flatten_canonical_calls(
-    steps: list[CallSpec | ScatterSpec],
-) -> list[CallSpec]:
-    calls: list[CallSpec] = []
-    for step in steps:
-        if isinstance(step, CallSpec):
-            calls.append(step)
-        else:
-            calls.extend(_flatten_canonical_calls(step.body))
-    return calls
 
 
 def _catalog_controlled_task_data(task: Any) -> dict[str, Any]:

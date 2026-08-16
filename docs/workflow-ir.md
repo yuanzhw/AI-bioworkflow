@@ -157,13 +157,19 @@ T?
 ]
 ```
 
-Analyzer 和 Renderer 都以 `workflow.steps` 为准。
+Analyzer、Repairer、Reviewer 和 Renderer 都只以 `workflow.steps` 为 DAG 数据源。
 
 ### `workflow.calls`
 
-`calls` 是旧输入兼容字段。旧 IR 只提供 `workflow.calls` 时，normalizer 会把每个 call 转成 `steps` 中的 `kind: "call"`。
+`calls` 是旧输入和序列化输出的兼容字段，不是第二份 DAG。旧 IR 只提供
+`workflow.calls` 时，normalizer 会把每个 call 转成 `steps` 中的
+`kind: "call"`。新输入应只提供 `workflow.steps`；schema 会从 canonical steps
+递归生成一个扁平、深拷贝的 `calls` 快照。
 
-当前输出 IR 仍会保留扁平化的 `calls`，用于兼容旧测试、旧工具和调试输出。但新功能不应只更新 `calls` 而忽略 `steps`。
+如果输入同时提供 `steps` 和 `calls`，两者的 call 顺序、ID、task 和 inputs 必须
+完全一致，否则 schema 会拒绝该 IR。内部逻辑修改 `steps` 后必须通过共享 schema
+helper 单向刷新 `calls`，不得读取或单独 patch `calls`。由于扁平视图不保留 scatter
+边界，新功能不得依赖它表达 DAG 语义。
 
 ### `workflow.outputs`
 
@@ -183,6 +189,10 @@ output {
   File deg_table = deg.deg_table
 }
 ```
+
+Recipe Tool Plan 未显式声明 `workflow.outputs` 时，Resolver 保留空字典，不根据
+`tool_calls` 或 canonical `steps` 的排列顺序推断默认输出。若 recipe 需要提供默认
+输出，应由 recipe metadata 显式声明，而不是依赖 DAG 的序列化顺序。
 
 ## TaskSpec
 
@@ -579,8 +589,9 @@ Resolver 的主要职责：
 5. 把 tool params 转成 task inputs 和 WDL 字面量。
 6. 根据 recipe scatter metadata 生成 `workflow.steps` 中的 scatter block。
 7. 在 scatter 中自动把 workflow array input 索引为单元素输入。
-8. 保留扁平化 `workflow.calls` 作为兼容字段。
-9. 收集 catalog output tags，用于自动连接某些通用汇总工具。
+8. 仅复制 Plan 显式声明的 `workflow.outputs`，不根据 step 顺序推断默认输出。
+9. 从 canonical steps 生成扁平化 `workflow.calls` 兼容快照。
+10. 收集 catalog output tags，用于自动连接某些通用汇总工具。
 
 ### MultiQC 自动收集
 

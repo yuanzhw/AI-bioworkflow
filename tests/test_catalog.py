@@ -10,6 +10,7 @@ from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ToolSpec
 from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
+from src.schema import flatten_workflow_calls
 
 
 CATALOG_TOOLS_DIR = Path(__file__).resolve().parents[1] / "src" / "catalog" / "tools"
@@ -346,6 +347,22 @@ class CatalogResolutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown param 'magic'"):
             resolve_tool_plan(plan, self.recipe_catalog, self.tool_catalog)
 
+    def test_resolver_does_not_infer_missing_workflow_outputs(self):
+        plan = copy.deepcopy(sample_rnaseq_tool_plan())
+        plan["workflow"].pop("outputs")
+
+        workflow_ir = resolve_tool_plan(
+            plan,
+            self.recipe_catalog,
+            self.tool_catalog,
+        )
+        report = analyze_workflow_ir(workflow_ir)
+        workflow_wdl = render_wdl(workflow_ir).split("\ntask ", maxsplit=1)[0]
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertEqual(workflow_ir.workflow.outputs, {})
+        self.assertNotIn("\n  output {", workflow_wdl)
+
     def test_multiqc_report_files_can_be_auto_collected_from_output_tags(self):
         plan = copy.deepcopy(sample_rnaseq_tool_plan())
         report_call = plan["workflow"]["tool_calls"][-1]
@@ -361,7 +378,7 @@ class CatalogResolutionTests(unittest.TestCase):
 
         self.assertTrue(report.is_valid, report.errors)
         self.assertEqual(
-            workflow_ir.workflow.calls[-1].inputs["report_files"],
+            flatten_workflow_calls(workflow_ir.workflow.steps)[-1].inputs["report_files"],
             ["qc.html_report", "qc.json_report", "quantify.log_file"],
         )
         self.assertIn("report_files = flatten([qc.html_report, qc.json_report, quantify.log_file])", wdl)

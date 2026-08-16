@@ -230,7 +230,7 @@ $env:AI_BIOWORKFLOW_CORS_ORIGINS = "http://127.0.0.1:3001,http://localhost:3001"
 
 结构化输入用于开发、调试和集成测试，目前支持两类：
 
-1. **标准 Workflow IR**：直接提供 `workflow.steps` / `workflow.calls` 和 `tasks`，适合精确控制每个 task 的命令、输入、输出、scatter 和 runtime。
+1. **标准 Workflow IR**：提供 canonical `workflow.steps` 和 `tasks`，适合精确控制每个 task 的命令、输入、输出、scatter 和 runtime；旧版 calls-only 输入仍兼容，但 `workflow.calls` 只作为自动生成的扁平兼容视图。
 2. **Recipe Tool Plan**：提供 `workflow.recipe` 和 `workflow.tool_calls`，由内置 recipe/tool catalog 自动解析为 Workflow IR。
 
 Recipe Tool Plan 示例：

@@ -17,8 +17,9 @@ def sample_multi_task_ir() -> dict[str, Any]:
                 "raw_r2": "File",
                 "reference": "File",
             },
-            "calls": [
+            "steps": [
                 {
+                    "kind": "call",
                     "id": "qc",
                     "task": "fastp",
                     "inputs": {
@@ -27,6 +28,7 @@ def sample_multi_task_ir() -> dict[str, Any]:
                     },
                 },
                 {
+                    "kind": "call",
                     "id": "align",
                     "task": "bwa_mem",
                     "inputs": {
@@ -213,7 +215,7 @@ class WorkflowCompilationTests(unittest.TestCase):
 
     def test_analyzer_rejects_forward_output_reference(self):
         raw_ir = sample_multi_task_ir()
-        raw_ir["workflow"]["calls"].reverse()
+        raw_ir["workflow"]["steps"].reverse()
 
         workflow_ir = coerce_workflow_ir(raw_ir)
         report = analyze_workflow_ir(workflow_ir)
@@ -223,13 +225,13 @@ class WorkflowCompilationTests(unittest.TestCase):
 
     def test_compiler_graph_repairs_forward_output_reference_order(self):
         raw_ir = sample_multi_task_ir()
-        raw_ir["workflow"]["calls"].reverse()
+        raw_ir["workflow"]["steps"].reverse()
 
         final_state = compiler_graph.invoke(initial_state(raw_ir))
 
         self.assertTrue(final_state["is_valid"], final_state["validation_message"])
         self.assertEqual(
-            [call["id"] for call in final_state["workflow_ir"]["workflow"]["calls"]],
+            [step["id"] for step in final_state["workflow_ir"]["workflow"]["steps"]],
             ["qc", "align"],
         )
         self.assertTrue(final_state["repair_actions"])
@@ -237,7 +239,7 @@ class WorkflowCompilationTests(unittest.TestCase):
     def test_analyzer_allows_omitted_optional_call_inputs(self):
         raw_ir = sample_multi_task_ir()
         raw_ir["tasks"]["fastp"]["inputs"]["r2"] = "File?"
-        raw_ir["workflow"]["calls"][0]["inputs"].pop("r2")
+        raw_ir["workflow"]["steps"][0]["inputs"].pop("r2")
 
         workflow_ir = coerce_workflow_ir(raw_ir)
         report = analyze_workflow_ir(workflow_ir)
@@ -405,7 +407,7 @@ class WorkflowCompilationTests(unittest.TestCase):
         workflow_ir = coerce_workflow_ir(legacy_json)
 
         self.assertEqual(workflow_ir.workflow.name, "SimpleQC")
-        self.assertEqual(workflow_ir.workflow.calls[0].id, "fastp_qc")
+        self.assertEqual(workflow_ir.workflow.steps[0].id, "fastp_qc")
         self.assertEqual(
             workflow_ir.tasks["fastp_qc"].runtime.docker,
             "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0",
@@ -425,7 +427,7 @@ class WorkflowCompilationTests(unittest.TestCase):
 
     def test_compiler_graph_stops_when_repairer_has_no_safe_action(self):
         raw_ir = sample_multi_task_ir()
-        raw_ir["workflow"]["calls"][0]["inputs"]["r1"] = "missing_input"
+        raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
 
         final_state = compiler_graph.invoke(initial_state(raw_ir))
 

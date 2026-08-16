@@ -55,7 +55,7 @@ def natural_language_result(
 
 def repairable_forward_reference_ir() -> dict:
     workflow_ir = load_example("rnaseq_workflow_ir.json")
-    workflow_ir["workflow"]["calls"].reverse()
+    workflow_ir["workflow"]["steps"].reverse()
     return workflow_ir
 
 
@@ -122,7 +122,7 @@ class RunServiceTests(unittest.TestCase):
             self.assertEqual(snapshot.status, RunStatus.SUCCEEDED)
             self.assertTrue(snapshot.diagnostics.repair_actions)
             self.assertEqual(
-                [call["id"] for call in snapshot.artifacts.workflow_ir["workflow"]["calls"]],
+                [step["id"] for step in snapshot.artifacts.workflow_ir["workflow"]["steps"]],
                 ["qc", "align"],
             )
 

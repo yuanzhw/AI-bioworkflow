@@ -6,8 +6,9 @@
       "raw_r2": "File",
       "reference": "File"
     },
-    "calls": [
+    "steps": [
       {
+        "kind": "call",
         "id": "qc",
         "task": "fastp",
         "inputs": {
@@ -16,6 +17,7 @@
         }
       },
       {
+        "kind": "call",
         "id": "align",
         "task": "bwa_mem",
         "inputs": {
