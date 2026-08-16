@@ -819,6 +819,13 @@ RAG 开发序列放在 P4 之下维护：
 | R3 | 规划中 | 在 R2 baseline 后选择 vector 或 hybrid backend，并保持现有 artifact contract |
 | R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
 
+进入 R3 前，先按
+[Catalog Expansion for RAG Development Plan](./docs/catalog-expansion-rag-plan.md)
+依次扩展 ChIP-seq、scRNA-seq 和 variant calling family，建立具有区分度的
+跨 family lexical baseline。该计划同时定义 compile-ready 与 execution
+verification 的边界，允许暂缓真实 e2e，但不允许用不完整占位条目绕过正式
+Tool Catalog 契约。
+
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 
 ### P5 Resource Agent
