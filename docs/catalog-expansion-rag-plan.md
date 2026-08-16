@@ -520,6 +520,14 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 
 新增或修改正式 Tool Catalog 时至少运行：
 
+Linux / macOS：
+
+```bash
+.venv/bin/python -m unittest tests.test_catalog tests.test_catalog_retriever tests.test_retrieval_evaluation -v
+```
+
+Windows PowerShell：
+
 ```powershell
 .\.venv\Scripts\python.exe -m unittest tests.test_catalog tests.test_catalog_retriever tests.test_retrieval_evaluation -v
 ```
