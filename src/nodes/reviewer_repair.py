@@ -37,11 +37,12 @@ from src.state import WorkflowState
 
 ReviewerNode = Callable[[WorkflowState], dict[str, Any]]
 ReviewerProviderFactory = Callable[[str], ReviewerRepairProvider]
+DEFAULT_MAX_REVIEWER_ATTEMPTS = 1
 logger = logging.getLogger(__name__)
 
 
 def reviewer_repair_node(state: WorkflowState) -> dict[str, Any]:
-    """Default-disabled Reviewer node retained for later Compiler Graph routing."""
+    """Run the default-disabled Reviewer branch used by the Compiler Graph."""
     return make_reviewer_repair_node()(state)
 
 
@@ -54,11 +55,28 @@ def make_reviewer_repair_node(
     provider_factory: ReviewerProviderFactory = make_default_reviewer_provider,
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
+    max_attempts: int = DEFAULT_MAX_REVIEWER_ATTEMPTS,
 ) -> ReviewerNode:
     """Create a Reviewer node with injectable provider and Catalog dependencies."""
+    if max_attempts < 1:
+        raise ValueError("Reviewer max_attempts must be at least 1.")
 
     def node(state: WorkflowState) -> dict[str, Any]:
         current_attempt_count = state.get("reviewer_attempt_count", 0)
+        if current_attempt_count >= max_attempts:
+            return _reviewer_update(
+                state,
+                status=ReviewerRepairStatus.NO_ACTION,
+                diagnostics=[
+                    f"Reviewer repair attempt budget exhausted ({max_attempts})."
+                ],
+                message=(
+                    "Reviewer repair attempt budget is exhausted; "
+                    "no model call was made."
+                ),
+                preserve_existing=True,
+            )
+
         if not enabled:
             return _reviewer_update(
                 state,
@@ -249,7 +267,26 @@ def _reviewer_update(
     rejection_reason: str | None = None,
     attempt_count: int | None = None,
     patch_applied: bool = False,
+    preserve_existing: bool = False,
 ) -> dict[str, Any]:
+    request_payload = (
+        request.model_dump(mode="json") if request is not None else None
+    )
+    patch_payload = patch.model_dump(mode="json") if patch is not None else None
+    resolved_rejection_reason = rejection_reason
+    resolved_diagnostics = diagnostics
+    if preserve_existing:
+        if request_payload is None:
+            request_payload = state.get("reviewer_repair_request")
+        if patch_payload is None:
+            patch_payload = state.get("reviewer_ir_patch")
+        if resolved_rejection_reason is None:
+            resolved_rejection_reason = state.get("reviewer_rejection_reason")
+        resolved_diagnostics = [
+            *list(state.get("reviewer_diagnostics") or []),
+            *diagnostics,
+        ]
+
     return {
         "reviewer_attempt_count": (
             state.get("reviewer_attempt_count", 0)
@@ -257,14 +294,10 @@ def _reviewer_update(
             else attempt_count
         ),
         "reviewer_repair_status": status.value,
-        "reviewer_repair_request": (
-            request.model_dump(mode="json") if request is not None else None
-        ),
-        "reviewer_ir_patch": (
-            patch.model_dump(mode="json") if patch is not None else None
-        ),
-        "reviewer_rejection_reason": rejection_reason,
-        "reviewer_diagnostics": diagnostics,
+        "reviewer_repair_request": request_payload,
+        "reviewer_ir_patch": patch_payload,
+        "reviewer_rejection_reason": resolved_rejection_reason,
+        "reviewer_diagnostics": resolved_diagnostics,
         "reviewer_patch_applied": patch_applied,
         "messages": [AIMessage(content=message)],
     }

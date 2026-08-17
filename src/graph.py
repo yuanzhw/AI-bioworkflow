@@ -7,6 +7,10 @@ from src.nodes.checker import checker_node
 from src.nodes.ir_normalizer import ir_normalizer_node
 from src.nodes.renderer import renderer_node
 from src.nodes.repairer import repairer_node
+from src.nodes.reviewer_repair import (
+    ReviewerNode,
+    reviewer_repair_node as default_reviewer_repair_node,
+)
 from src.state import WorkflowState
 from src.tools.validator import VALIDATOR_MISSING_MARKER
 
@@ -24,6 +28,8 @@ def route_after_analyzer(state: WorkflowState):
     if state.get("analysis_errors"):
         if _can_attempt_repair(state):
             return "repairer"
+        if state.get("workflow_ir"):
+            return "reviewer_repair"
         return END
     return "renderer"
 
@@ -41,6 +47,14 @@ def route_after_checker(state: WorkflowState):
 def route_after_repairer(state: WorkflowState):
     if state.get("repair_actions"):
         return "analyzer"
+    if state.get("analysis_errors") and state.get("workflow_ir"):
+        return "reviewer_repair"
+    return END
+
+
+def route_after_reviewer(state: WorkflowState):
+    if state.get("reviewer_patch_applied"):
+        return "analyzer"
     return END
 
 
@@ -52,28 +66,32 @@ def _missing_local_validator(state: WorkflowState) -> bool:
     return VALIDATOR_MISSING_MARKER in state.get("validation_message", "")
 
 
-# 1. 实例化状态图，传入我们的 WorkflowState 笔记本
-builder = StateGraph(WorkflowState)
+def build_compiler_graph(*, reviewer_node: ReviewerNode | None = None):
+    """Build the compiler graph with an explicitly injected Reviewer node."""
+    resolved_reviewer_node = (
+        reviewer_node
+        if reviewer_node is not None
+        else default_reviewer_repair_node
+    )
+    builder = StateGraph(WorkflowState)
+    builder.add_node("ir_normalizer", ir_normalizer_node)
+    builder.add_node("analyzer", analyzer_node)
+    builder.add_node("renderer", renderer_node)
+    builder.add_node("checker", checker_node)
+    builder.add_node("repairer", repairer_node)
+    builder.add_node("reviewer_repair", resolved_reviewer_node)
 
-# 2. 添加工作节点
-# 第一个参数是节点的内部名称（随便起），第二个参数是我们刚才写的处理函数
-builder.add_node("ir_normalizer", ir_normalizer_node)
-builder.add_node("analyzer", analyzer_node)
-builder.add_node("renderer", renderer_node)
-builder.add_node("checker", checker_node)
-builder.add_node("repairer", repairer_node)
+    builder.add_edge(START, "ir_normalizer")
+    builder.add_conditional_edges("ir_normalizer", route_after_ir_normalizer)
+    builder.add_conditional_edges("analyzer", route_after_analyzer)
+    builder.add_edge("renderer", "checker")
+    builder.add_conditional_edges("checker", route_after_checker)
+    builder.add_conditional_edges("repairer", route_after_repairer)
+    builder.add_conditional_edges("reviewer_repair", route_after_reviewer)
+    return builder.compile()
 
-# 3. 规划工作流向 (连线)
-# START -> ir_normalizer -> analyzer -> renderer -> checker -> END
-# analyzer/checker can branch to repairer, then repairer returns to analyzer.
-builder.add_edge(START, "ir_normalizer")
-builder.add_conditional_edges("ir_normalizer", route_after_ir_normalizer)
-builder.add_conditional_edges("analyzer", route_after_analyzer)
-builder.add_edge("renderer", "checker")
-builder.add_conditional_edges("checker", route_after_checker)
-builder.add_conditional_edges("repairer", route_after_repairer)
-# 4. 编译打包成结构化 Workflow IR -> WDL 编译子图
-compiler_graph = builder.compile()
+
+compiler_graph = build_compiler_graph()
 
 # Backward-compatible alias for older imports. New code should use
 # compiler_graph to make the graph boundary explicit.
