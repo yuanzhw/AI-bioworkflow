@@ -250,6 +250,8 @@ artifacts，避免前端和 API 消费方解析文本 summary。
 
 - 第一部分只接入 Analyzer failure routing。deterministic repairer 有安全动作时不
   调用 Reviewer；无安全动作时才进入 Reviewer branch。
+- deterministic repairer 内部失败使用独立状态终止当前分支并保留 diagnostic，
+  不得被解释为正常的 `no_action`，也不得触发 Reviewer model call。
 - Reviewer 使用独立 `reviewer_attempt_count`，默认最多调用 provider 一次。禁用、
   provider 不可用、拒绝、model error 或预算耗尽都终止该分支并保留 diagnostics。
 - 已应用 patch 重新进入 Analyzer、Renderer 和 Checker。

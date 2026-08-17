@@ -211,6 +211,7 @@ def initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
         "error_count": 0,
         "repair_count": 0,
         "repair_actions": [],
+        "repairer_failed": False,
         "reviewer_attempt_count": 0,
         "reviewer_repair_status": None,
         "reviewer_repair_request": None,
@@ -289,6 +290,29 @@ class WorkflowCompilationTests(unittest.TestCase):
         )
         self.assertTrue(final_state["repair_actions"])
         self.assertEqual(final_state["reviewer_attempt_count"], 0)
+
+    def test_repairer_failure_stops_before_reviewer(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+        provider = UnexpectedGraphReviewerProvider()
+
+        with patch(
+            "src.nodes.repairer.repair_workflow_ir",
+            side_effect=RuntimeError("Synthetic repairer failure."),
+        ):
+            final_state = self.make_graph_with_reviewer(provider).invoke(
+                initial_state(raw_ir)
+            )
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertTrue(final_state["repairer_failed"])
+        self.assertEqual(final_state["repair_count"], 1)
+        self.assertEqual(final_state["repair_actions"], [])
+        self.assertIsNone(final_state["reviewer_repair_status"])
+        self.assertIn(
+            "Synthetic repairer failure.",
+            final_state["messages"][-1].content,
+        )
 
     def test_analyzer_allows_omitted_optional_call_inputs(self):
         raw_ir = sample_multi_task_ir()

@@ -2997,6 +2997,29 @@ Analyzer Reviewer branch 的交互。
 
 - Reviewer 不抢占可以确定性修复的 Analyzer failure。
 
+### `test_repairer_failure_stops_before_reviewer`
+
+输入：
+
+- 使用 `missing_input` 触发 Analyzer failure。
+- 注入 enabled Reviewer provider。
+- mock deterministic repair implementation 抛出异常。
+
+执行：
+
+- 调用注入 Reviewer node 的 Compiler Graph。
+
+期望输出：
+
+- `repairer_failed == True`，且 deterministic `repair_count == 1`。
+- repairer diagnostic 保留在 state messages 中。
+- Reviewer provider 调用次数为零，Reviewer status 保持为空。
+
+覆盖点：
+
+- deterministic repairer 内部失败与正常完成后的 `no_action` 是不同状态。
+- 内部异常会明确终止，不会被 Reviewer routing 掩盖或触发模型调用。
+
 ### `test_analyzer_allows_omitted_optional_call_inputs`
 
 输入：
@@ -3744,6 +3767,29 @@ Agent 占位逻辑。
 
 - service 不吞掉 resolver/catalog 诊断。
 - 无效 plan 不会产生 WDL。
+
+### `test_analyzer_repair_failure_emits_failed_event`
+
+输入：
+
+- 使用可触发 Analyzer repair 的 forward-reference Workflow IR。
+- mock deterministic repair implementation 抛出异常。
+- 注入 event callback。
+
+执行：
+
+- 调用 `compile_structured_workflow(..., check=False, event_callback=...)`。
+
+期望输出：
+
+- 编译失败，`repairer_failed == True` 且 `repair_count == 1`。
+- repairer 事件序列为 `node.started`、`node.failed`。
+- failed event payload 明确包含 `repairer_failed: true`。
+
+覆盖点：
+
+- workflow service 保留 deterministic repairer 的显式失败状态。
+- repairer 异常不会被错误记录为“正常完成但无安全修复动作”。
 
 ### `test_plan_and_compile_workflow_plans_then_compiles`
 

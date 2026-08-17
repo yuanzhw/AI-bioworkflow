@@ -14,6 +14,7 @@ def repairer_node(state: WorkflowState):
     Deterministically repair WorkflowIR when the analyzer/checker finds a safe fix.
     """
     logger.info("Repairer node is attempting to repair Workflow IR.")
+    repair_count = state.get("repair_count", 0) + 1
 
     try:
         report = repair_workflow_ir(state.get("workflow_ir", {}))
@@ -21,14 +22,16 @@ def repairer_node(state: WorkflowState):
         message = f"Workflow IR 修复失败: {exc}"
         return {
             "repair_actions": [],
+            "repair_count": repair_count,
+            "repairer_failed": True,
             "messages": [AIMessage(content=message)],
         }
 
-    repair_count = state.get("repair_count", 0) + 1
     if not report.changed:
         return {
             "repair_actions": [],
             "repair_count": repair_count,
+            "repairer_failed": False,
             "messages": [AIMessage(content="Repairer 未找到可安全自动修复的 IR 问题。")],
         }
 
@@ -41,5 +44,6 @@ def repairer_node(state: WorkflowState):
         "is_valid": False,
         "repair_actions": report.actions,
         "repair_count": repair_count,
+        "repairer_failed": False,
         "messages": [AIMessage(content=f"Workflow IR 已修复：\n{action_summary}")],
     }

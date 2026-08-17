@@ -45,6 +45,8 @@ def route_after_checker(state: WorkflowState):
 
 
 def route_after_repairer(state: WorkflowState):
+    if state.get("repairer_failed"):
+        return END
     if state.get("repair_actions"):
         return "analyzer"
     if state.get("analysis_errors") and state.get("workflow_ir"):

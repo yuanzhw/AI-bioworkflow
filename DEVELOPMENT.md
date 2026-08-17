@@ -141,8 +141,9 @@ Analyzer failure recovery：
 analyzer_node
   ↓
 repairer_node       # 始终先尝试确定性修复
+  ├─ 内部失败 -> END，并保留 repairer diagnostic
   ├─ 有安全动作 -> analyzer_node -> renderer_node -> checker_node
-  └─ 无安全动作 -> reviewer_repair
+  └─ 正常完成但无安全动作 -> reviewer_repair
                       ├─ patch 已应用 -> analyzer_node -> renderer_node -> checker_node
                       └─ disabled / rejected / error / budget exhausted -> END
 
