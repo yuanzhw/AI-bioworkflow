@@ -4,6 +4,11 @@ aliases:
   - QC report
   - workflow summary
 description: Aggregate per-step quality control files into a MultiQC HTML report.
+execution_verification:
+  status: e2e-validated
+  evidence:
+    - DEVELOPMENT.md
+    - docs/test-cases.md
 
 inputs:
   report_files:

@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.catalog.schema import ExecutionVerificationStatus
+
 
 TrustStatus = Literal["catalog-approved", "auto-validated", "experimental", "rejected"]
 
@@ -61,6 +63,13 @@ class RuntimeDto(BaseModel):
     disks: str | None = None
 
 
+class ExecutionVerificationDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ExecutionVerificationStatus
+    evidence: list[str] = Field(default_factory=list)
+
+
 class ToolInputDto(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -103,6 +112,7 @@ class ToolDto(BaseModel):
     outputs: dict[str, ToolOutputDto] = Field(default_factory=dict)
     runtime: RuntimeDto = Field(default_factory=RuntimeDto)
     trust_status: TrustStatus
+    execution_verification: ExecutionVerificationDto
 
 
 class ToolListResponse(BaseModel):

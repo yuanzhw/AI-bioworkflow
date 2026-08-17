@@ -4,7 +4,8 @@ import unittest
 from pathlib import Path
 
 import main as cli
-from src.execution import get_execution_backend
+from src.catalog import load_tool_catalog
+from src.execution import ensure_tools_execution_eligible, get_execution_backend
 
 
 EXAMPLES_DIR = Path(__file__).parents[2] / "examples"
@@ -33,6 +34,13 @@ class CromwellTinyRunTests(unittest.TestCase):
             self.fail(f"tiny-run inputs JSON does not exist: {tiny_inputs}")
 
         plan = cli.load_workflow_input(EXAMPLES_DIR / "rnaseq_deg_recipe_plan.json")
+        tool_catalog = load_tool_catalog()
+        selected_tools = [
+            tool_catalog.get(tool_call["tool"], tool_call["version"])
+            for tool_call in plan["workflow"]["tool_calls"]
+        ]
+        ensure_tools_execution_eligible(selected_tools)
+
         state = cli.compile_workflow(plan, check=True)
         self.assertTrue(state["is_valid"], state["validation_message"])
 

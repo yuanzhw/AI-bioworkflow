@@ -30,6 +30,8 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertEqual(fastp["version"], "1.3.3")
         self.assertEqual(fastp["runtime"]["docker"], "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0")
         self.assertEqual(fastp["trust_status"], "catalog-approved")
+        self.assertEqual(fastp["execution_verification"]["status"], "e2e-validated")
+        self.assertIn("docs/test-cases.md", fastp["execution_verification"]["evidence"])
         self.assertIn("clean_r1", fastp["outputs"])
 
     def test_get_tool_returns_explicit_version(self):
@@ -38,6 +40,7 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertEqual(tool["id"], "salmon")
         self.assertEqual(tool["version"], "1.9.0")
         self.assertEqual(tool["inputs"]["r1"]["type"], "File")
+        self.assertEqual(tool["execution_verification"]["status"], "e2e-validated")
         self.assertIn("1.9.0", tool["versions"])
 
     def test_get_tool_defaults_to_highest_catalog_version(self):

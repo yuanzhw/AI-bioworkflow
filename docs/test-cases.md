@@ -328,15 +328,16 @@ OK (skipped=2)
 
 期望输出：
 
-- `fastp` tool version 为 `0.23.2`。
+- `fastp` tool version 为 `1.3.3`。
 - `trust_status == "catalog-approved"`。
-- runtime docker 为 `quay.io/biocontainers/fastp:0.23.2`。
+- `execution_verification.status == "e2e-validated"`，并保留 evidence。
+- runtime docker 为 `quay.io/biocontainers/fastp:1.3.3--h43da1c4_0`。
 - outputs 包含 `clean_r1`。
 
 覆盖点：
 
 - Catalog service 的 tool records 与 API DTO 兼容。
-- Tool runtime 与 trust status 可以直接暴露给前端。
+- Tool runtime、Catalog admission 与 execution verification 可以分别暴露给前端。
 
 ### `test_run_event_defines_persistable_event_envelope`
 
@@ -467,8 +468,9 @@ OK (skipped=2)
 
 - HTTP status 为 `200`。
 - `catalog_service.list_tools()` 被调用一次。
-- `fastp` 记录中 `version == "0.23.2"`。
+- `fastp` 记录中 `version == "1.3.3"`。
 - `fastp` 记录中 `trust_status == "catalog-approved"`。
+- `fastp` 记录中 `execution_verification.status == "e2e-validated"`。
 
 覆盖点：
 
@@ -1385,6 +1387,35 @@ OK (skipped=2)
 - 替代工具仍通过完整 Recipe / Tool Catalog 校验，而不是由 Planner 自由选择未批准工具。
 - 不改变 Workflow IR 或 WDL renderer 架构即可扩展同一 recipe step 的工具集合。
 
+### `test_catalog_tools_declare_execution_verification`
+
+输入：当前正式 Tool Catalog。
+
+期望输出：
+
+- tiny RNA-seq e2e 中使用的 `fastp` 标记为 `e2e-validated`。
+- 尚无执行记录的 `salmon_index` 标记为 `unverified`。
+
+覆盖点：所有正式 ToolSpec 必须显式区分 Catalog 准入与真实执行验证。
+
+### `test_tool_spec_requires_execution_verification`
+
+输入：从合法 `fastp` ToolSpec 中删除 `execution_verification` 字段。
+
+期望输出：模型校验失败，避免正式 Catalog 通过隐式默认值隐藏执行状态。
+
+### `test_verified_execution_status_requires_evidence`
+
+输入：`status == "smoke-tested"` 且 evidence 为空的 execution verification。
+
+期望输出：模型校验失败，并说明已验证状态必须提供 evidence。
+
+### `test_unverified_execution_status_rejects_evidence`
+
+输入：`status == "unverified"` 但附带 verification evidence 的记录。
+
+期望输出：模型校验失败，避免状态与证据互相矛盾。
+
 ### `test_tool_spec_requires_runtime_docker`
 
 输入：
@@ -1631,11 +1662,12 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 - tool 召回结果包含 `fastp`、`salmon`、`tximport`、`deseq2` 和 `multiqc`。
 - recipe/tool 结果包含非零 `score`、`matched_terms`、`matched_fields` 和 `reason`。
 - tool 结果包含 `trust_status == "catalog-approved"`。
+- tool 结果包含独立的 `execution_verification` 状态和 evidence。
 
 覆盖点：
 
 - R1 retriever 可以从正式 catalog 中召回 RNA-seq DEG 所需 recipe 和关键工具。
-- 输出契约使用稳定 JSON key，便于后续 Planner、API、SSE 和前端复用。
+- 输出契约分别保留 Catalog admission 与 execution verification，便于后续 Planner、API、SSE 和前端复用。
 
 ### `test_retrieves_reference_prep_and_de_alternative_tools`
 
@@ -1955,12 +1987,14 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
   - `version == "1.3.3"`
   - `runtime["docker"] == "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0"`
   - `trust_status == "catalog-approved"`
+  - `execution_verification.status == "e2e-validated"`
+  - execution verification evidence 包含 `docs/test-cases.md`
   - `outputs` 包含 `clean_r1`
 
 覆盖点：
 
 - Tool runtime docker 从 Catalog 权威来源读取。
-- API-facing tool 记录包含 container trust status。
+- API-facing tool 记录分别包含 Catalog trust status 和 execution verification。
 
 ### `test_get_tool_returns_explicit_version`
 
@@ -4320,6 +4354,19 @@ qc.html_report + qc.json_report
 - `AI_BIOWORKFLOW_RUN_BACKEND=cromwell` 时 factory 返回 `CromwellBackend`，并读取 Cromwell URL、poll interval 和 timeout 配置。
 - `local-miniwdl` 后端仍保持未实现。
 
+## `tests/test_execution_policy.py`
+
+该文件验证 application-level Tool execution preflight，不修改底层 backend
+协议。
+
+覆盖点：
+
+- 默认拒绝包含 `unverified` ToolSpec 的真实执行请求，并列出稳定的
+  `tool@version` 标识。
+- `allow_unverified=True` 作为显式 opt-in 时允许继续。
+- `smoke-tested` 与 `e2e-validated` 工具可以通过 preflight。
+- 本地 miniwdl 与真实 Cromwell tiny e2e 在执行 WDL 前都会对 plan 中的工具执行该检查。
+
 ## `tests/test_cromwell_backend.py`
 
 该文件验证 Cromwell server mode REST client 的 contract，不依赖真实 Cromwell、Docker 或生信输入文件。
@@ -4637,7 +4684,7 @@ npm run test:catalog-retrieval
 
 - `null` retrieval。
 - 空 query、空 recipes、空 tools 且未 fallback 的 retrieval。
-- 包含 RNA-seq query、recipe 和 tool 候选的 retrieval。
+- 包含 RNA-seq query、recipe 和带 execution verification 的 tool 候选的 retrieval。
 
 期望输出：
 
@@ -4647,6 +4694,18 @@ npm run test:catalog-retrieval
 覆盖点：
 
 - 前端不会为结构化入口或未产生检索产物的 run 伪造 Catalog Retrieval 展示。
+
+### `accepts legacy retrieval tools without execution verification`
+
+输入：契约落地前已持久化、tool 候选不包含 `execution_verification` 的历史
+retrieval artifact。
+
+期望输出：
+
+- artifact 仍被识别为有效 retrieval。
+- UI 可以显示“执行状态未记录”，而不是隐藏整份历史 artifact。
+
+覆盖点：execution verification 对新 artifact 必填，但前端读取层保持历史兼容。
 
 ### `selects top catalog recipe and limited tools`
 
@@ -4702,13 +4761,14 @@ npm run test:catalog-retrieval
 
 - Recipe Tool Plan schema 与 recipe/catalog 校验。
 - Catalog runtime docker 必填约束。
+- Tool execution verification 状态/evidence 一致性及未验证工具 preflight policy。
 - Recipe Tool Plan 到 Workflow IR 的 resolver 主路径。
 - RNA-seq reference prep recipe、Salmon index 和 tx2gene helper 的 Catalog resolver / WDL renderer 路径。
 - RNA-seq DEG recipe 中 DESeq2、edgeR 和 limma-voom 替代 differential expression 后端。
 - Catalog 查询服务的 recipe/tool JSON-ready 输出。
 - Approved Catalog Retriever 的词法召回、CJK tokenization、fallback 原因和 JSON-ready 输出契约。
 - 自然语言 run 对 catalog retrieval artifact 的持久化、snapshot 暴露和 SSE 事件回放顺序。
-- 前端 Catalog Retrieval 摘要对 top recipe/tools、matched terms 和 score 格式的处理。
+- 前端 Catalog Retrieval 摘要对 top recipe/tools、execution verification、历史 artifact、matched terms 和 score 格式的处理。
 - Analyzer 对引用、optional input、scatter output 类型提升的处理。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。

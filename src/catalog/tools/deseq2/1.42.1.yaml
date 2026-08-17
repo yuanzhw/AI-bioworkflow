@@ -4,6 +4,11 @@ aliases:
   - differential expression
   - DEG
 description: Differential expression analysis from count matrix and sample groups.
+execution_verification:
+  status: e2e-validated
+  evidence:
+    - DEVELOPMENT.md
+    - docs/test-cases.md
 
 inputs:
   counts:

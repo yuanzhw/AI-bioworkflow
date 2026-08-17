@@ -108,6 +108,7 @@ def _tool_to_record(tool: ToolSpec, *, tool_catalog: ToolCatalog) -> dict[str, A
         },
         "runtime": tool.runtime.model_dump(mode="json", exclude_none=True),
         "trust_status": CATALOG_APPROVED_TRUST_STATUS,
+        "execution_verification": tool.execution_verification.model_dump(mode="json"),
     }
 
 

@@ -145,6 +145,7 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
         self.assertIn("validation_boundary", prompt)
         self.assertIn("matched_terms", prompt)
         self.assertIn("trust_status", prompt)
+        self.assertIn("execution_verification", prompt)
         self.assertNotIn("Use only tools and versions listed in the retrieved", prompt)
         self.assertIn("Run RNA-seq differential expression.", prompt)
 

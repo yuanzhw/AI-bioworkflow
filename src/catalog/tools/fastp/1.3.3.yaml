@@ -4,6 +4,11 @@ aliases:
   - fastq qc
   - adapter trimming
 description: FASTQ quality control and adapter trimming.
+execution_verification:
+  status: e2e-validated
+  evidence:
+    - DEVELOPMENT.md
+    - docs/test-cases.md
 
 inputs:
   r1:

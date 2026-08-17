@@ -2,6 +2,8 @@ import type {
   CatalogRetrievalArtifact,
   CatalogRetrievalRecipe,
   CatalogRetrievalTool,
+  ExecutionVerification,
+  ExecutionVerificationStatus,
   TrustStatus,
 } from "@/lib/types";
 
@@ -17,6 +19,16 @@ const TRUST_STATUS_VALUES = [
 
 const TRUST_STATUSES = new Set<TrustStatus>(TRUST_STATUS_VALUES);
 
+const EXECUTION_VERIFICATION_STATUS_VALUES = [
+  "unverified",
+  "smoke-tested",
+  "e2e-validated",
+] satisfies ExecutionVerificationStatus[];
+
+const EXECUTION_VERIFICATION_STATUSES = new Set<ExecutionVerificationStatus>(
+  EXECUTION_VERIFICATION_STATUS_VALUES,
+);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -27,6 +39,19 @@ function isStringArray(value: unknown): value is string[] {
 
 function isTrustStatus(value: unknown): value is TrustStatus {
   return typeof value === "string" && TRUST_STATUSES.has(value as TrustStatus);
+}
+
+function isExecutionVerification(value: unknown): value is ExecutionVerification {
+  if (
+    !isRecord(value) ||
+    typeof value.status !== "string" ||
+    !EXECUTION_VERIFICATION_STATUSES.has(value.status as ExecutionVerificationStatus) ||
+    !isStringArray(value.evidence)
+  ) {
+    return false;
+  }
+
+  return value.status === "unverified" ? value.evidence.length === 0 : value.evidence.length > 0;
 }
 
 function isCatalogRetrievalRecipe(value: unknown): value is CatalogRetrievalRecipe {
@@ -49,6 +74,8 @@ function isCatalogRetrievalTool(value: unknown): value is CatalogRetrievalTool {
     isStringArray(value.matched_terms) &&
     isStringArray(value.matched_fields) &&
     isTrustStatus(value.trust_status) &&
+    (value.execution_verification === undefined ||
+      isExecutionVerification(value.execution_verification)) &&
     typeof value.reason === "string"
   );
 }

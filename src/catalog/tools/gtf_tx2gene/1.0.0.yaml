@@ -5,6 +5,9 @@ aliases:
   - GTF transcript to gene mapping
   - transcript gene map
 description: Extract a tx2gene table from transcript_id and gene_id attributes in a GTF file.
+execution_verification:
+  status: unverified
+  evidence: []
 
 inputs:
   annotation_gtf:

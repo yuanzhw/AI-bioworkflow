@@ -6,6 +6,35 @@ from src.schema import IDENTIFIER_PATTERN, RuntimeSpec, extract_command_inputs
 
 
 WDL_PRIMITIVE_TYPES = {"Boolean", "File", "Float", "Int", "String"}
+ExecutionVerificationStatus = Literal["unverified", "smoke-tested", "e2e-validated"]
+
+
+class ExecutionVerificationSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: ExecutionVerificationStatus
+    evidence: list[str] = Field(default_factory=list)
+
+    @field_validator("evidence")
+    @classmethod
+    def validate_evidence(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for item in value:
+            evidence = item.strip()
+            if not evidence:
+                raise ValueError("execution verification evidence must not be empty")
+            if evidence in normalized:
+                raise ValueError("execution verification evidence must be unique")
+            normalized.append(evidence)
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_status_evidence(self):
+        if self.status == "unverified" and self.evidence:
+            raise ValueError("unverified tools must not declare execution verification evidence")
+        if self.status != "unverified" and not self.evidence:
+            raise ValueError(f"{self.status} tools must declare execution verification evidence")
+        return self
 
 
 class ToolInputSpec(BaseModel):
@@ -58,6 +87,7 @@ class ToolSpec(BaseModel):
     version: str
     aliases: list[str] = Field(default_factory=list)
     description: str = ""
+    execution_verification: ExecutionVerificationSpec
     inputs: dict[str, ToolInputSpec] = Field(default_factory=dict)
     params: dict[str, ToolParamSpec] = Field(default_factory=dict)
     outputs: dict[str, ToolOutputSpec] = Field(default_factory=dict)

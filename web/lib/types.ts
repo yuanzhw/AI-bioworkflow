@@ -4,6 +4,16 @@ export type TrustStatus =
   | "experimental"
   | "rejected";
 
+export type ExecutionVerificationStatus =
+  | "unverified"
+  | "smoke-tested"
+  | "e2e-validated";
+
+export type ExecutionVerification = {
+  status: ExecutionVerificationStatus;
+  evidence: string[];
+};
+
 export type RecipeInput = {
   type: string;
   description?: string | null;
@@ -51,6 +61,7 @@ export type Tool = {
   description: string;
   runtime: Runtime;
   trust_status: TrustStatus;
+  execution_verification: ExecutionVerification;
 };
 
 export type ToolListResponse = {
@@ -132,6 +143,7 @@ export type CatalogRetrievalTool = {
   matched_terms: string[];
   matched_fields: string[];
   trust_status: TrustStatus;
+  execution_verification?: ExecutionVerification;
   reason: string;
 };
 

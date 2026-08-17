@@ -4,6 +4,11 @@ aliases:
   - transcript quantification
   - RNA-seq quantification
 description: Transcript-level quantification for RNA-seq reads.
+execution_verification:
+  status: e2e-validated
+  evidence:
+    - DEVELOPMENT.md
+    - docs/test-cases.md
 
 inputs:
   r1:

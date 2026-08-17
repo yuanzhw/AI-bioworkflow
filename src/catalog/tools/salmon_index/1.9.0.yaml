@@ -5,6 +5,9 @@ aliases:
   - transcriptome index
   - RNA-seq reference index
 description: Build a Salmon transcriptome index archive from a transcriptome FASTA.
+execution_verification:
+  status: unverified
+  evidence: []
 
 inputs:
   transcriptome_fasta:
