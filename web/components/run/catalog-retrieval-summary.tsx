@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertTriangle, Database, Search, ShieldCheck, Tags } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeCheck,
+  Database,
+  FlaskConical,
+  Search,
+  ShieldCheck,
+  Tags,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,6 +22,7 @@ import type {
   CatalogRetrievalArtifact,
   CatalogRetrievalRecipe,
   CatalogRetrievalTool,
+  ExecutionVerification,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -44,13 +53,55 @@ function MatchedTerms({ terms }: { terms: string[] }) {
   );
 }
 
+function ExecutionVerificationBadge({
+  verification,
+}: {
+  verification?: ExecutionVerification;
+}) {
+  if (!verification) {
+    return (
+      <Badge variant="outline" className="gap-1.5" title="历史 artifact 未记录执行验证状态">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        执行状态未记录
+      </Badge>
+    );
+  }
+
+  if (verification.status === "unverified") {
+    return (
+      <Badge variant="outline" className="gap-1.5" title="工具尚无成功执行验证记录">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        执行未验证
+      </Badge>
+    );
+  }
+
+  if (verification.status === "smoke-tested") {
+    return (
+      <Badge variant="secondary" className="gap-1.5" title="工具已通过 smoke test">
+        <FlaskConical className="h-3.5 w-3.5" />
+        Smoke test 已验证
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="secondary" className="gap-1.5" title="工具已通过小数据端到端执行">
+      <BadgeCheck className="h-3.5 w-3.5" />
+      E2E 已验证
+    </Badge>
+  );
+}
+
 function CandidateMeta({
   candidate,
 }: {
   candidate: CatalogRetrievalRecipe | CatalogRetrievalTool;
 }) {
-  const version = "version" in candidate ? candidate.version : null;
-  const trustStatus = "trust_status" in candidate ? candidate.trust_status : null;
+  const isTool = "version" in candidate;
+  const version = isTool ? candidate.version : null;
+  const trustStatus = isTool ? candidate.trust_status : null;
+  const verification = isTool ? candidate.execution_verification : undefined;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -62,6 +113,7 @@ function CandidateMeta({
           {trustStatus}
         </Badge>
       ) : null}
+      {isTool ? <ExecutionVerificationBadge verification={verification} /> : null}
       <Badge variant="outline">score {formatRetrievalScore(candidate.score)}</Badge>
     </div>
   );

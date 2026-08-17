@@ -4,6 +4,11 @@ aliases:
   - transcript to gene counts
   - Salmon aggregation
 description: Summarize Salmon transcript quantifications into a gene-level count matrix.
+execution_verification:
+  status: e2e-validated
+  evidence:
+    - DEVELOPMENT.md
+    - docs/test-cases.md
 
 inputs:
   quant_files:

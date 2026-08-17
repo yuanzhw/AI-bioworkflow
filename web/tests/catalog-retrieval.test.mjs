@@ -29,6 +29,10 @@ const retrieval = {
       matched_terms: ["differential", "expression"],
       matched_fields: ["id", "description"],
       trust_status: "catalog-approved",
+      execution_verification: {
+        status: "e2e-validated",
+        evidence: ["docs/test-cases.md"],
+      },
       reason: "Matched approved catalog tool fields.",
     },
     {
@@ -38,6 +42,10 @@ const retrieval = {
       matched_terms: ["quantification"],
       matched_fields: ["description"],
       trust_status: "catalog-approved",
+      execution_verification: {
+        status: "e2e-validated",
+        evidence: ["docs/test-cases.md"],
+      },
       reason: "Matched approved catalog tool fields.",
     },
   ],
@@ -66,6 +74,18 @@ test("detects non-empty catalog retrieval artifacts", () => {
   );
   assert.equal(
     hasCatalogRetrieval({
+      ...retrieval,
+      tools: [
+        {
+          ...retrieval.tools[0],
+          execution_verification: { status: "e2e-validated", evidence: [] },
+        },
+      ],
+    }),
+    false,
+  );
+  assert.equal(
+    hasCatalogRetrieval({
       query: "",
       strategy: "lexical_v1",
       recipes: [],
@@ -76,6 +96,15 @@ test("detects non-empty catalog retrieval artifacts", () => {
     false,
   );
   assert.equal(hasCatalogRetrieval(retrieval), true);
+});
+
+test("accepts legacy retrieval tools without execution verification", () => {
+  const legacyRetrieval = {
+    ...retrieval,
+    tools: retrieval.tools.map(({ execution_verification: _verification, ...tool }) => tool),
+  };
+
+  assert.equal(hasCatalogRetrieval(legacyRetrieval), true);
 });
 
 test("selects top catalog recipe and limited tools", () => {

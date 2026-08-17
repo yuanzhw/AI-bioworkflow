@@ -44,6 +44,7 @@ class CatalogRetrieverTests(unittest.TestCase):
         self.assertIn("differential", deseq2["matched_terms"])
         self.assertTrue(deseq2["matched_fields"])
         self.assertEqual(deseq2["trust_status"], "catalog-approved")
+        self.assertEqual(deseq2["execution_verification"]["status"], "e2e-validated")
         self.assertIn("Matched approved catalog tool", deseq2["reason"])
 
     def test_retrieves_reference_prep_and_de_alternative_tools(self):
@@ -102,6 +103,10 @@ class CatalogRetrieverTests(unittest.TestCase):
         self.assertEqual(len(result["tools"]), 3)
         for tool in result["tools"]:
             self.assertEqual(tool["trust_status"], "catalog-approved")
+            self.assertIn(
+                tool["execution_verification"]["status"],
+                {"unverified", "smoke-tested", "e2e-validated"},
+            )
             self.assertEqual(tool["matched_terms"], [])
             self.assertIn("Fallback result", tool["reason"])
 

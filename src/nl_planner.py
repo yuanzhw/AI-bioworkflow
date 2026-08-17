@@ -255,6 +255,7 @@ def _tool_spec_prompt_context(
         "version": tool.version,
         "description": tool.description,
         "trust_status": CATALOG_APPROVED_TRUST_STATUS,
+        "execution_verification": tool.execution_verification.model_dump(mode="json"),
         "inputs": {
             input_name: spec.model_dump(exclude_none=True)
             for input_name, spec in tool.inputs.items()

@@ -7,11 +7,11 @@ import { apiDocsUrl } from "@/lib/api";
 import { rnaseqDemoWorkspaceHref, rnaseqRecipeSteps } from "@/lib/examples";
 
 const tools = [
-  ["fastp", "读段质量控制", "quay.io/biocontainers/fastp"],
-  ["salmon", "转录本定量", "quay.io/biocontainers/salmon"],
-  ["tximport", "基因层面汇总", "项目维护镜像"],
-  ["deseq2", "差异表达分析", "项目维护镜像"],
-  ["multiqc", "质控报告汇总", "项目维护镜像"],
+  ["fastp", "读段质量控制", "quay.io/biocontainers/fastp", "e2e-validated"],
+  ["salmon", "转录本定量", "quay.io/biocontainers/salmon", "e2e-validated"],
+  ["tximport", "基因层面汇总", "项目维护镜像", "e2e-validated"],
+  ["deseq2", "差异表达分析", "项目维护镜像", "e2e-validated"],
+  ["multiqc", "质控报告汇总", "项目维护镜像", "e2e-validated"],
 ];
 
 export default function CatalogPage() {
@@ -75,11 +75,14 @@ export default function CatalogPage() {
             <Badge variant="outline">静态 tool 示例</Badge>
           </div>
           <div className="mt-5 grid gap-3">
-            {tools.map(([tool, role, runtime]) => (
+            {tools.map(([tool, role, runtime, verification]) => (
               <div key={tool} className="rounded-md border bg-background p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="font-semibold">{tool}</div>
-                  <Badge variant="secondary">catalog-approved</Badge>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">catalog-approved</Badge>
+                    <Badge variant="outline">{verification}</Badge>
+                  </div>
                 </div>
                 <div className="mt-2 text-sm text-muted-foreground">{role}</div>
                 <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
@@ -104,11 +107,12 @@ export default function CatalogPage() {
             <Link href={apiDocsUrl}>查看 API 契约</Link>
           </Button>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
             ["schema", "inputs、outputs、parameters 和 command templates 都是显式定义。"],
             ["runtime", "编译后的 WDL 使用 catalog 声明的 container。"],
-            ["trust", "工具记录会暴露 catalog-approved 或 experimental 状态。"],
+            ["admission", "catalog-approved 只表示工具已进入正式 Catalog。"],
+            ["verification", "执行状态独立显示为 unverified、smoke-tested 或 e2e-validated。"],
           ].map(([label, detail]) => (
             <div key={label} className="flex gap-3 rounded-md border bg-background p-4">
               <CheckCircle2 className="mt-0.5 h-5 w-5 flex-none text-primary" />
@@ -123,7 +127,7 @@ export default function CatalogPage() {
           <div className="rounded-md border bg-background p-4">
             <div className="font-semibold text-primary">当前已实现</div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              展示 RNA-seq recipe steps、准入工具、runtime 和 trust status 的前端呈现方式。
+              展示 RNA-seq recipe steps、Catalog 准入、runtime 和独立 execution verification 状态。
             </p>
           </div>
           <div className="rounded-md border bg-background p-4">

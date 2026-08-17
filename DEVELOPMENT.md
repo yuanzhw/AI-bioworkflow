@@ -165,6 +165,8 @@ repairer_node       # 始终先尝试确定性修复
 - [x] **Cromwell runner 基线**：独立 Cromwell server 已运行，Docker 与相关执行 backend 已可用。
 - [x] **e2e 镜像就绪**：RNA-seq DEG tiny e2e 所需镜像已拉取到 runner 本地。
 - [x] **真实 tiny e2e 手动验证**：已通过显式 opt-in 的 Cromwell e2e 入口手动运行真实 RNA-seq tiny workflow。
+- [x] **工具执行验证契约**：正式 Tool Catalog 通过 `execution_verification` 独立记录 `unverified`、`smoke-tested` 或 `e2e-validated` 及其 evidence；`catalog-approved` 只表达 Catalog 准入，不再隐含真实执行能力。
+- [x] **未验证工具执行策略**：应用层 execution preflight 默认拒绝 `unverified` 工具，只有调用方显式 opt-in 时才允许继续；底层 backend 保持 WDL transport/execution 职责。
 
 P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流程沉淀为便捷检查脚本、可复现验证摘要和更清晰的作品集展示材料。
 

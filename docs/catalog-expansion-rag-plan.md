@@ -124,24 +124,43 @@ Recipe Tool Plan 选择，也不能进入 Workflow IR。
 - Renderer 可以生成确定性 WDL。
 - WDL 语法验证通过。
 
-Compile-ready 不等于执行已验证。当前 ToolSpec 尚未记录该区别，第一项实现
-工作应为 Tool Catalog 增加独立的 execution verification 状态。字段命名和
-枚举在实现 PR 中确定，但至少应表达：
+Compile-ready 不等于执行已验证。正式 ToolSpec 使用独立的
+`execution_verification` 结构记录状态和 evidence：
 
-```text
-unverified
-smoke-tested
-e2e-validated
+```yaml
+execution_verification:
+  status: unverified  # unverified | smoke-tested | e2e-validated
+  evidence: []
 ```
+
+`smoke-tested` 和 `e2e-validated` 必须提供非空 evidence；`unverified` 不得
+附带验证 evidence。Catalog admission 由条目进入正式 Catalog 并成功加载表示，
+compile readiness 由完整 ToolSpec、Resolver、Renderer 和 WDL validation 表示，
+不额外持久化容易失真的布尔字段。
+
+| Status | Meaning |
+| --- | --- |
+| `unverified` | 没有可追溯的成功执行记录 |
+| `smoke-tested` | 当前 tool version/runtime 已通过最小直接调用或 wrapper smoke test |
+| `e2e-validated` | 当前 tool version/runtime 已参与至少一次成功的小数据端到端 workflow |
+
+这些状态不表示生产级生物学正确性、参数覆盖率或性能 benchmark。
 
 Catalog admission、compilation readiness 和 execution verification 是不同
 概念，不应继续通过单个硬编码 `catalog-approved` 文案隐含全部状态。
 
+当前 evidence 迁移保持保守：已记录在 RNA-seq tiny e2e 中的 `fastp`、
+`salmon`、`tximport`、`deseq2` 和 `multiqc` 标记为 `e2e-validated`；
+`salmon_index`、`gtf_tx2gene`、`edger` 和 `limma_voom` 在没有成功执行记录前
+保持 `unverified`。存在 smoke test 脚本本身不作为测试已经成功的证据。
+
 ### Execution Policy
 
 - 默认 disabled execution backend 不受影响。
-- 真实 execution backend 应拒绝未验证工具，或要求显式 opt-in。
+- application-level execution preflight 默认拒绝未验证工具，或要求显式 opt-in；
+  低层 execution backend 不扩张为 Catalog policy owner。
 - API、run artifact 和前端应显示 execution verification 状态。
+- 新 retrieval artifact 必须记录状态；前端仍兼容契约落地前已持久化的历史 artifact。
 - 未验证工具可以用于 Planner 和 WDL 编译演示，但不得描述为已经真实运行。
 - 项目维护的 R/Python/helper wrapper 仍需 Dockerfile、打包脚本和最小
   `smoke_test.sh`。如果当前阶段不准备满足该要求，应先保留为
@@ -471,12 +490,12 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 
 ## Proposed PR Sequence
 
-### PR 1: Tool Capability And Verification Contract
+### PR 1: Tool Capability And Verification Contract（已实现）
 
-- 为 ToolSpec 设计 execution verification 状态。
-- 区分 Catalog admission、compile readiness 和 execution verification。
-- 更新 Retriever artifact、API 类型和前端状态文案。
-- 为 execution backend 增加未验证工具 policy。
+- ToolSpec 已增加带 evidence 的 execution verification 状态。
+- Catalog admission、compile readiness 和 execution verification 已明确分离。
+- Retriever artifact、API 类型和前端状态文案已同步。
+- application-level execution preflight 已增加未验证工具 policy。
 
 ### PR 2: ChIP-seq Tool Catalog
 
@@ -567,8 +586,9 @@ recipe resolution、Workflow IR 或 WDL 输出时，还应：
 
 ## Immediate Next Step
 
-本计划落地后的第一项代码工作是 Tool Capability And Verification Contract。
-在该契约合并前，不向正式 Catalog 批量加入未执行验证的新工具。
+Tool Capability And Verification Contract 已落地。下一项工作是加入简化版
+ChIP-seq Tool Catalog：`bowtie2`、`samtools` 和 `macs2` 必须满足完整
+compile-ready ToolSpec，并按实际 evidence 标记 execution verification。
 
-契约稳定后，优先实现简化版 ChIP-seq tool metadata、recipe 和 retrieval
-baseline，再按相同模式推进 scRNA-seq 与 variant calling。
+ChIP-seq 工具契约合并后，再实现 recipe 和 retrieval baseline；随后按相同
+模式推进 scRNA-seq 与 variant calling。

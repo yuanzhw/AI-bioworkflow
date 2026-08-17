@@ -7,7 +7,7 @@ import yaml
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
-from src.catalog.schema import ToolSpec
+from src.catalog.schema import ExecutionVerificationSpec, ToolSpec
 from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
 from src.schema import flatten_workflow_calls
@@ -157,6 +157,43 @@ class CatalogDefinitionTests(unittest.TestCase):
                 self.assertEqual(yaml_path.parent.name, data.get("id"))
                 self.assertEqual(yaml_path.stem, str(data.get("version")))
 
+    def test_catalog_tools_declare_execution_verification(self):
+        tool_catalog = load_tool_catalog()
+
+        self.assertEqual(
+            tool_catalog.get("fastp", "1.3.3").execution_verification.status,
+            "e2e-validated",
+        )
+        self.assertEqual(
+            tool_catalog.get("salmon_index", "1.9.0").execution_verification.status,
+            "unverified",
+        )
+
+    def test_tool_spec_requires_execution_verification(self):
+        tool_data = load_tool_catalog().get("fastp", "1.3.3").model_dump(mode="python")
+        del tool_data["execution_verification"]
+
+        with self.assertRaisesRegex(ValueError, "execution_verification"):
+            ToolSpec.model_validate(tool_data)
+
+    def test_verified_execution_status_requires_evidence(self):
+        with self.assertRaisesRegex(ValueError, "must declare execution verification evidence"):
+            ExecutionVerificationSpec.model_validate(
+                {
+                    "status": "smoke-tested",
+                    "evidence": [],
+                }
+            )
+
+    def test_unverified_execution_status_rejects_evidence(self):
+        with self.assertRaisesRegex(ValueError, "must not declare execution verification evidence"):
+            ExecutionVerificationSpec.model_validate(
+                {
+                    "status": "unverified",
+                    "evidence": ["tests/example.py"],
+                }
+            )
+
 
 class CatalogResolutionTests(unittest.TestCase):
     def setUp(self):
@@ -268,6 +305,10 @@ class CatalogResolutionTests(unittest.TestCase):
                     "id": "fastp",
                     "version": "1.3.3",
                     "description": "FASTQ quality control.",
+                    "execution_verification": {
+                        "status": "unverified",
+                        "evidence": [],
+                    },
                     "inputs": {
                         "r1": {
                             "type": "File",

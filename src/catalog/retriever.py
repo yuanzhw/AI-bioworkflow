@@ -278,6 +278,7 @@ def _tool_result(match: _ScoredItem) -> dict[str, Any]:
         "matched_terms": match.matched_terms,
         "matched_fields": match.matched_fields,
         "trust_status": CATALOG_APPROVED_TRUST_STATUS,
+        "execution_verification": tool.execution_verification.model_dump(mode="json"),
         "reason": _match_reason("tool", match.matched_terms, match.matched_fields),
     }
 
@@ -314,6 +315,7 @@ def _fallback_tool_result(tool: ToolSpec) -> dict[str, Any]:
         "matched_terms": [],
         "matched_fields": [],
         "trust_status": CATALOG_APPROVED_TRUST_STATUS,
+        "execution_verification": tool.execution_verification.model_dump(mode="json"),
         "reason": "Fallback result from approved tool catalog.",
     }
 

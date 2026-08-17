@@ -77,6 +77,7 @@ class ApiRouteTests(unittest.TestCase):
         fastp = next(tool for tool in tools if tool["id"] == "fastp")
         self.assertEqual(fastp["version"], "1.3.3")
         self.assertEqual(fastp["trust_status"], "catalog-approved")
+        self.assertEqual(fastp["execution_verification"]["status"], "e2e-validated")
 
     def test_get_tool_with_version(self):
         tool_record = get_tool("salmon", "1.9.0")

@@ -180,6 +180,8 @@ class CatalogDtoTests(unittest.TestCase):
         fastp = next(tool for tool in response.tools if tool.id == "fastp")
         self.assertEqual(fastp.version, "1.3.3")
         self.assertEqual(fastp.trust_status, "catalog-approved")
+        self.assertEqual(fastp.execution_verification.status, "e2e-validated")
+        self.assertIn("DEVELOPMENT.md", fastp.execution_verification.evidence)
         self.assertEqual(fastp.runtime.docker, "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0")
         self.assertIn("clean_r1", fastp.outputs)
 

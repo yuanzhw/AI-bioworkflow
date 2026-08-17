@@ -6,6 +6,9 @@ aliases:
   - DEG
   - quasi-likelihood differential expression
 description: Differential expression analysis from a gene count matrix using edgeR quasi-likelihood testing.
+execution_verification:
+  status: unverified
+  evidence: []
 
 inputs:
   counts:

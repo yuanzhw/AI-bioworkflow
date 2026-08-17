@@ -6,6 +6,9 @@ aliases:
   - differential expression
   - DEG
 description: Differential expression analysis from a gene count matrix using limma-voom.
+execution_verification:
+  status: unverified
+  evidence: []
 
 inputs:
   counts:
