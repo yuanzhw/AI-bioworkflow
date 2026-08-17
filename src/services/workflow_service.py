@@ -160,6 +160,7 @@ def build_initial_state(
         "error_count": 0,
         "repair_count": 0,
         "repair_actions": [],
+        "repairer_failed": False,
         "reviewer_attempt_count": 0,
         "reviewer_repair_status": None,
         "reviewer_repair_request": None,
@@ -344,6 +345,16 @@ def _analyze_with_repair(
 
         _emit_compiler_event(event_callback, "node.started", "repairer", "Repairer started.", state)
         _merge_state(state, repairer_node(state))
+        if state["repairer_failed"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.failed",
+                "repairer",
+                "Repairer failed.",
+                state,
+                {"repairer_failed": True},
+            )
+            return
         if not state["repair_actions"]:
             _emit_compiler_event(
                 event_callback,
@@ -389,6 +400,16 @@ def _validate_with_repair(
 
         _emit_compiler_event(event_callback, "node.started", "repairer", "Repairer started.", state)
         _merge_state(state, repairer_node(state))
+        if state["repairer_failed"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.failed",
+                "repairer",
+                "Repairer failed.",
+                state,
+                {"repairer_failed": True},
+            )
+            return
         if not state["repair_actions"]:
             _emit_compiler_event(
                 event_callback,
@@ -480,6 +501,8 @@ def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:
             state["repair_count"] = value
         elif key == "repair_actions":
             state["repair_actions"] = value
+        elif key == "repairer_failed":
+            state["repairer_failed"] = value
         elif key == "reviewer_attempt_count":
             state["reviewer_attempt_count"] = value
         elif key == "reviewer_repair_status":

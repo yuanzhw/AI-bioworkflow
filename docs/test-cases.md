@@ -2565,9 +2565,10 @@ result 和 policy 边界。
 
 ## `tests/test_reviewer_node.py`
 
-该文件验证 P2.3 `reviewer_repair` compiler node 的独立行为。Node 已具备
-Provider 注入、request 构造、patch 校验和应用能力，但本阶段不添加 Compiler
-Graph edge；Analyzer 和 Checker routing 留给 P2.4。
+该文件验证 P2.3 `reviewer_repair` compiler node 的独立行为。Node 具备 Provider
+注入、request 构造、patch 校验、应用和 attempt budget 能力。P2.4 Analyzer
+routing 通过 `build_compiler_graph(...)` 使用该 node；Checker request contract 已
+保留，但 Checker routing 仍留给后续 PR。
 
 ### `test_default_reviewer_node_is_callable_and_disabled`
 
@@ -2883,7 +2884,8 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 
 ## `tests/test_graph.py`
 
-该文件验证 Compiler Graph、Analyzer、Renderer 和 deterministic repairer 的交互。
+该文件验证 Compiler Graph、Analyzer、Renderer、deterministic repairer 和有界
+Analyzer Reviewer branch 的交互。
 
 ### `test_multi_task_ir_analyzes_and_renders`
 
@@ -2973,6 +2975,50 @@ Graph edge；Analyzer 和 Checker routing 留给 P2.4。
 覆盖点：
 
 - Deterministic repairer 能修复可由依赖关系确定的 call 顺序问题。
+
+### `test_deterministic_repair_does_not_call_reviewer`
+
+输入：
+
+- 将 `sample_multi_task_ir()` 的 canonical steps 顺序反转。
+- 注入一个记录调用次数的 enabled Reviewer provider。
+
+执行：
+
+- 调用 `build_compiler_graph(...)` 构造测试图并执行。
+
+期望输出：
+
+- deterministic repairer 恢复 `qc -> align` 顺序。
+- `repair_actions` 非空。
+- Reviewer provider 调用次数为零，`reviewer_attempt_count == 0`。
+
+覆盖点：
+
+- Reviewer 不抢占可以确定性修复的 Analyzer failure。
+
+### `test_repairer_failure_stops_before_reviewer`
+
+输入：
+
+- 使用 `missing_input` 触发 Analyzer failure。
+- 注入 enabled Reviewer provider。
+- mock deterministic repair implementation 抛出异常。
+
+执行：
+
+- 调用注入 Reviewer node 的 Compiler Graph。
+
+期望输出：
+
+- `repairer_failed == True`，且 deterministic `repair_count == 1`。
+- repairer diagnostic 保留在 state messages 中。
+- Reviewer provider 调用次数为零，Reviewer status 保持为空。
+
+覆盖点：
+
+- deterministic repairer 内部失败与正常完成后的 `no_action` 是不同状态。
+- 内部异常会明确终止，不会被 Reviewer routing 掩盖或触发模型调用。
 
 ### `test_analyzer_allows_omitted_optional_call_inputs`
 
@@ -3104,7 +3150,7 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 
 - Deterministic repairer 能修复 File/String output 字面量缺少引号的问题。
 
-### `test_compiler_graph_stops_when_repairer_has_no_safe_action`
+### `test_compiler_graph_stops_after_disabled_reviewer_has_no_safe_action`
 
 输入：
 
@@ -3120,10 +3166,103 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 - final state 中 `is_valid=False`。
 - `analysis_errors` 包含 `references unknown value 'missing_input'`。
 - `repair_actions == []`。
+- `reviewer_repair_status == "no_action"`，attempt count 保持零。
+- diagnostics 说明 Reviewer disabled。
 
 覆盖点：
 
 - Repairer 对无法安全推断的问题不做自由修复。
+- 默认 Compiler Graph 不启用模型，也不依赖 API key。
+
+### `test_analyzer_failure_routes_to_reviewer_after_no_safe_repair`
+
+输入：
+
+- 使用相同的 `missing_input` Analyzer failure。
+- 注入返回 `no_action` 的 enabled Reviewer provider。
+
+执行：
+
+- 调用注入 Reviewer node 的 Compiler Graph。
+
+期望输出：
+
+- deterministic `repair_count == 1` 且没有 repair actions。
+- Provider 只调用一次，请求的 failure stage 为 `analyzer`。
+- Reviewer attempt count 为一，status 为 `no_action`。
+- 原始 Analyzer diagnostics 保留，图明确结束。
+
+覆盖点：
+
+- Analyzer Reviewer 只在 deterministic repairer 放弃后触发。
+- Reviewer no-op 不会重新进入 Analyzer 或形成循环。
+
+### `test_analyzer_reviewer_patch_reenters_compiler_pipeline`
+
+输入：
+
+- 使用 `missing_input` Analyzer failure。
+- Reviewer patch 把 `/workflow/steps/0/inputs/r1` 替换为已声明的 `raw_r1`。
+
+执行：
+
+- 调用注入 Reviewer node 的 Compiler Graph。
+
+期望输出：
+
+- Provider 调用一次，patch status 为 `patch_proposed`。
+- patched canonical step 使用 `r1 = raw_r1`。
+- Analyzer errors 清空，Renderer 生成包含该 wiring 的 WDL。
+
+覆盖点：
+
+- 只有已应用的 Reviewer patch 才回到 Analyzer，并继续 Renderer/Checker 流程。
+- Reviewer 只修改 Workflow IR，不直接修改 WDL。
+
+### `test_analyzer_reviewer_attempt_budget_stops_second_model_call`
+
+输入：
+
+- 使用 `missing_input` Analyzer failure。
+- 初始 `reviewer_attempt_count == 1`，并带有上一轮 parsed patch、rejection reason
+  和 diagnostics。
+
+执行：
+
+- 调用默认 Reviewer budget 为一次的测试图。
+
+期望输出：
+
+- Provider 调用次数为零，attempt count 不增加。
+- diagnostics 追加 budget exhausted 说明。
+- 上一轮 parsed patch 和 rejection reason 保留。
+
+覆盖点：
+
+- Reviewer budget 在 provider 创建或调用前强制执行。
+- 次数耗尽会显式结束，不丢失已有审计数据。
+
+### `test_checker_failure_does_not_route_to_analyzer_reviewer`
+
+输入：
+
+- 有效的 `sample_multi_task_ir()`。
+- Checker 返回合成 validation failure。
+- 注入一个记录调用次数的 enabled Analyzer Reviewer provider。
+
+执行：
+
+- 调用 Compiler Graph。
+
+期望输出：
+
+- Checker failure 仍先进入 deterministic repairer，且没有安全动作。
+- Analyzer Reviewer provider 调用次数为零。
+- validation message 保留，Reviewer status 仍为空。
+
+覆盖点：
+
+- P2.4 第一部分没有提前启用 Checker Reviewer routing。
 
 ### `test_compiler_graph_compiles_recipe_tool_plan`
 
@@ -3628,6 +3767,29 @@ Agent 占位逻辑。
 
 - service 不吞掉 resolver/catalog 诊断。
 - 无效 plan 不会产生 WDL。
+
+### `test_analyzer_repair_failure_emits_failed_event`
+
+输入：
+
+- 使用可触发 Analyzer repair 的 forward-reference Workflow IR。
+- mock deterministic repair implementation 抛出异常。
+- 注入 event callback。
+
+执行：
+
+- 调用 `compile_structured_workflow(..., check=False, event_callback=...)`。
+
+期望输出：
+
+- 编译失败，`repairer_failed == True` 且 `repair_count == 1`。
+- repairer 事件序列为 `node.started`、`node.failed`。
+- failed event payload 明确包含 `repairer_failed: true`。
+
+覆盖点：
+
+- workflow service 保留 deterministic repairer 的显式失败状态。
+- repairer 异常不会被错误记录为“正常完成但无安全修复动作”。
 
 ### `test_plan_and_compile_workflow_plans_then_compiles`
 

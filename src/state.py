@@ -35,6 +35,9 @@ class WorkflowState(TypedDict):
     # 记录最近一次 IR repairer 执行的具体修复动作
     repair_actions: list[str]
 
+    # 区分 repairer 内部失败与正常完成但没有安全修复动作
+    repairer_failed: bool
+
     # Reviewer repair 使用独立计数和结构化结果，避免与 deterministic repair 混淆
     reviewer_attempt_count: int
     reviewer_repair_status: str | None

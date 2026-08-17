@@ -1,9 +1,12 @@
 import unittest
 from typing import Any
+from unittest.mock import patch
 
 from src.analyzer import analyze_workflow_ir
-from src.graph import agent, compiler_graph
+from src.graph import agent, build_compiler_graph, compiler_graph
+from src.nodes.reviewer_repair import make_reviewer_repair_node
 from src.renderers import render_wdl
+from src.reviewer_repair import ReviewerFailureStage, ReviewerRepairStatus
 from src.schema import coerce_workflow_ir
 from src.state import WorkflowState
 
@@ -177,6 +180,25 @@ def sample_rnaseq_tool_plan() -> dict[str, Any]:
     }
 
 
+class RecordingGraphReviewerProvider:
+    def __init__(self, result):
+        self.result = result
+        self.requests = []
+
+    def repair(self, request):
+        self.requests.append(request)
+        return self.result
+
+
+class UnexpectedGraphReviewerProvider:
+    def __init__(self):
+        self.call_count = 0
+
+    def repair(self, request):
+        self.call_count += 1
+        return {"status": "no_action"}
+
+
 def initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
     state: WorkflowState = {
         "parsed_json": parsed_json,
@@ -189,12 +211,28 @@ def initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
         "error_count": 0,
         "repair_count": 0,
         "repair_actions": [],
+        "repairer_failed": False,
+        "reviewer_attempt_count": 0,
+        "reviewer_repair_status": None,
+        "reviewer_repair_request": None,
+        "reviewer_ir_patch": None,
+        "reviewer_rejection_reason": None,
+        "reviewer_diagnostics": [],
+        "reviewer_patch_applied": False,
         "is_valid": False,
     }
     return state
 
 
 class WorkflowCompilationTests(unittest.TestCase):
+    def make_graph_with_reviewer(self, provider):
+        return build_compiler_graph(
+            reviewer_node=make_reviewer_repair_node(
+                enabled=True,
+                provider=provider,
+            )
+        )
+
     def test_agent_alias_points_to_compiler_graph(self):
         self.assertIs(agent, compiler_graph)
 
@@ -235,6 +273,46 @@ class WorkflowCompilationTests(unittest.TestCase):
             ["qc", "align"],
         )
         self.assertTrue(final_state["repair_actions"])
+
+    def test_deterministic_repair_does_not_call_reviewer(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["workflow"]["steps"].reverse()
+        provider = UnexpectedGraphReviewerProvider()
+
+        final_state = self.make_graph_with_reviewer(provider).invoke(
+            initial_state(raw_ir)
+        )
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(
+            [step["id"] for step in final_state["workflow_ir"]["workflow"]["steps"]],
+            ["qc", "align"],
+        )
+        self.assertTrue(final_state["repair_actions"])
+        self.assertEqual(final_state["reviewer_attempt_count"], 0)
+
+    def test_repairer_failure_stops_before_reviewer(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+        provider = UnexpectedGraphReviewerProvider()
+
+        with patch(
+            "src.nodes.repairer.repair_workflow_ir",
+            side_effect=RuntimeError("Synthetic repairer failure."),
+        ):
+            final_state = self.make_graph_with_reviewer(provider).invoke(
+                initial_state(raw_ir)
+            )
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertTrue(final_state["repairer_failed"])
+        self.assertEqual(final_state["repair_count"], 1)
+        self.assertEqual(final_state["repair_actions"], [])
+        self.assertIsNone(final_state["reviewer_repair_status"])
+        self.assertIn(
+            "Synthetic repairer failure.",
+            final_state["messages"][-1].content,
+        )
 
     def test_analyzer_allows_omitted_optional_call_inputs(self):
         raw_ir = sample_multi_task_ir()
@@ -425,7 +503,7 @@ class WorkflowCompilationTests(unittest.TestCase):
         self.assertIn('File clean_r2 = "clean_R2.fq.gz"', final_state["current_wdl"])
         self.assertTrue(final_state["repair_actions"])
 
-    def test_compiler_graph_stops_when_repairer_has_no_safe_action(self):
+    def test_compiler_graph_stops_after_disabled_reviewer_has_no_safe_action(self):
         raw_ir = sample_multi_task_ir()
         raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
 
@@ -434,6 +512,133 @@ class WorkflowCompilationTests(unittest.TestCase):
         self.assertFalse(final_state["is_valid"])
         self.assertIn("references unknown value 'missing_input'", "\n".join(final_state["analysis_errors"]))
         self.assertEqual(final_state["repair_actions"], [])
+        self.assertEqual(
+            final_state["reviewer_repair_status"],
+            ReviewerRepairStatus.NO_ACTION.value,
+        )
+        self.assertEqual(final_state["reviewer_attempt_count"], 0)
+        self.assertIn("disabled", final_state["reviewer_diagnostics"][0])
+
+    def test_analyzer_failure_routes_to_reviewer_after_no_safe_repair(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+        provider = RecordingGraphReviewerProvider(
+            {
+                "status": "no_action",
+                "diagnostics": ["No safe Reviewer patch was found."],
+            }
+        )
+
+        final_state = self.make_graph_with_reviewer(provider).invoke(
+            initial_state(raw_ir)
+        )
+
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(
+            provider.requests[0].failure_stage,
+            ReviewerFailureStage.ANALYZER,
+        )
+        self.assertEqual(final_state["repair_count"], 1)
+        self.assertEqual(final_state["repair_actions"], [])
+        self.assertEqual(final_state["reviewer_attempt_count"], 1)
+        self.assertEqual(
+            final_state["reviewer_repair_status"],
+            ReviewerRepairStatus.NO_ACTION.value,
+        )
+        self.assertFalse(final_state["reviewer_patch_applied"])
+        self.assertIn("missing_input", "\n".join(final_state["analysis_errors"]))
+
+    def test_analyzer_reviewer_patch_reenters_compiler_pipeline(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+        provider = RecordingGraphReviewerProvider(
+            {
+                "status": "patch_proposed",
+                "patch": {
+                    "summary": "Reconnect the qc input to an existing workflow input.",
+                    "actions": [
+                        {
+                            "operation": "replace",
+                            "path": "/workflow/steps/0/inputs/r1",
+                            "value": "raw_r1",
+                            "reason": "Use the declared workflow input.",
+                        }
+                    ],
+                    "diagnostic_references": [
+                        "references unknown value 'missing_input'"
+                    ],
+                    "confidence": 0.9,
+                },
+                "diagnostics": ["The replacement uses an existing workflow input."],
+            }
+        )
+
+        final_state = self.make_graph_with_reviewer(provider).invoke(
+            initial_state(raw_ir)
+        )
+
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(final_state["reviewer_attempt_count"], 1)
+        self.assertEqual(
+            final_state["reviewer_repair_status"],
+            ReviewerRepairStatus.PATCH_PROPOSED.value,
+        )
+        self.assertTrue(final_state["reviewer_patch_applied"])
+        self.assertEqual(final_state["analysis_errors"], [])
+        self.assertEqual(
+            final_state["workflow_ir"]["workflow"]["steps"][0]["inputs"]["r1"],
+            "raw_r1",
+        )
+        self.assertIn("r1 = raw_r1", final_state["current_wdl"])
+
+    def test_analyzer_reviewer_attempt_budget_stops_second_model_call(self):
+        raw_ir = sample_multi_task_ir()
+        raw_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+        provider = UnexpectedGraphReviewerProvider()
+        state = initial_state(raw_ir)
+        state["reviewer_attempt_count"] = 1
+        state["reviewer_repair_request"] = {"failure_stage": "analyzer"}
+        state["reviewer_ir_patch"] = {"summary": "Previous parsed patch"}
+        state["reviewer_rejection_reason"] = "Previous rejection"
+        state["reviewer_diagnostics"] = ["Previous diagnostic"]
+
+        final_state = self.make_graph_with_reviewer(provider).invoke(state)
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(final_state["reviewer_attempt_count"], 1)
+        self.assertEqual(
+            final_state["reviewer_ir_patch"],
+            {"summary": "Previous parsed patch"},
+        )
+        self.assertEqual(
+            final_state["reviewer_rejection_reason"],
+            "Previous rejection",
+        )
+        self.assertEqual(
+            final_state["reviewer_diagnostics"],
+            [
+                "Previous diagnostic",
+                "Reviewer repair attempt budget exhausted (1).",
+            ],
+        )
+
+    def test_checker_failure_does_not_route_to_analyzer_reviewer(self):
+        provider = UnexpectedGraphReviewerProvider()
+        graph = self.make_graph_with_reviewer(provider)
+
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.return_value = {
+                "is_valid": False,
+                "message": "Synthetic Checker failure.",
+            }
+            final_state = graph.invoke(initial_state(sample_multi_task_ir()))
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(final_state["analysis_errors"], [])
+        self.assertEqual(final_state["repair_actions"], [])
+        self.assertEqual(final_state["repair_count"], 1)
+        self.assertEqual(final_state["validation_message"], "Synthetic Checker failure.")
+        self.assertIsNone(final_state["reviewer_repair_status"])
 
     def test_compiler_graph_compiles_recipe_tool_plan(self):
         final_state = compiler_graph.invoke(initial_state(sample_rnaseq_tool_plan()))

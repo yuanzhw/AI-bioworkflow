@@ -246,6 +246,18 @@ artifacts，避免前端和 API 消费方解析文本 summary。
 - deterministic repair 放弃且 policy 允许时调用 Reviewer。
 - 修复次数耗尽时返回 failed diagnostic report。
 
+当前拆分：
+
+- 第一部分只接入 Analyzer failure routing。deterministic repairer 有安全动作时不
+  调用 Reviewer；无安全动作时才进入 Reviewer branch。
+- deterministic repairer 内部失败使用独立状态终止当前分支并保留 diagnostic，
+  不得被解释为正常的 `no_action`，也不得触发 Reviewer model call。
+- Reviewer 使用独立 `reviewer_attempt_count`，默认最多调用 provider 一次。禁用、
+  provider 不可用、拒绝、model error 或预算耗尽都终止该分支并保留 diagnostics。
+- 已应用 patch 重新进入 Analyzer、Renderer 和 Checker。
+- Checker failure routing 不在第一部分启用，继续使用现有 deterministic repair
+  行为，后续独立 PR 再接入 Reviewer。
+
 ### P2.5 Run Service 与 API Observability
 
 交付：
@@ -340,3 +352,16 @@ Windows PowerShell：
   Analyzer failure routing 和 Checker failure routing 按后续 PR 分别接入。
 - Policy rejection 与 application failure 使用不同异常类别。前者表示越过 P2
   allowlist，后者表示 policy 允许的 patch 无法安全应用到当前 Workflow IR。
+
+## 已确认的 P2.4 Analyzer Routing 决策
+
+- `build_compiler_graph(...)` 通过显式注入 Reviewer node 启用模型路径；默认导出的
+  `compiler_graph` 使用 disabled Reviewer，不依赖 API key。
+- Analyzer failure 始终先尝试 deterministic repair。只有没有安全动作，或
+  deterministic budget 已耗尽时，才进入 Analyzer Reviewer branch。
+- Reviewer provider 默认最多调用一次，预算与 `repair_count` 分离。预算耗尽时不
+  再创建或调用 provider，并保留已有 parsed patch、rejection reason 和 diagnostics。
+- 只有 `reviewer_patch_applied=True` 才重新进入 Analyzer；其他 Reviewer 状态全部
+  结束当前 Compiler Graph 分支。
+- Checker failure 通过 `analysis_errors` 为空与 Analyzer branch 隔离，本 PR 不改变
+  Checker routing。

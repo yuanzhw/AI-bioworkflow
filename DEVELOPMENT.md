@@ -136,11 +136,20 @@ checker_node     # WDL syntax validation
   ↓
 END
 
-analyzer_node 或 checker_node 发现错误时，如果 repairer 还有重试预算，会进入：
+Analyzer failure recovery：
 
-repairer_node    # 可确定修复时更新 IR
+analyzer_node
   ↓
-analyzer_node    # 修复后重新分析、渲染、校验
+repairer_node       # 始终先尝试确定性修复
+  ├─ 内部失败 -> END，并保留 repairer diagnostic
+  ├─ 有安全动作 -> analyzer_node -> renderer_node -> checker_node
+  └─ 正常完成但无安全动作 -> reviewer_repair
+                      ├─ patch 已应用 -> analyzer_node -> renderer_node -> checker_node
+                      └─ disabled / rejected / error / budget exhausted -> END
+
+`reviewer_repair` 默认禁用，独立预算默认为一次；禁用或缺少 provider 时不会调用
+模型。Checker failure 当前仍只走 deterministic repairer，Reviewer routing 留给后续
+独立 PR。
 ```
 
 ## 已完成的容器管理边界

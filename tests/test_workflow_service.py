@@ -188,6 +188,43 @@ class WorkflowServiceTests(unittest.TestCase):
             ["qc", "align"],
         )
 
+    def test_analyzer_repair_failure_emits_failed_event(self):
+        events = []
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "summary": summary,
+                    "payload": payload or {},
+                }
+            )
+
+        with patch(
+            "src.nodes.repairer.repair_workflow_ir",
+            side_effect=RuntimeError("Synthetic repairer failure."),
+        ):
+            result = compile_structured_workflow(
+                repairable_forward_reference_ir(),
+                check=False,
+                event_callback=event_callback,
+            )
+
+        self.assertFalse(result.succeeded)
+        self.assertTrue(result.state["repairer_failed"])
+        self.assertEqual(result.state["repair_count"], 1)
+        self.assertEqual(result.repair_actions, [])
+        repairer_events = [event for event in events if event["node"] == "repairer"]
+        self.assertEqual(
+            [event["type"] for event in repairer_events],
+            ["node.started", "node.failed"],
+        )
+        self.assertEqual(
+            repairer_events[-1]["payload"],
+            {"repairer_failed": True},
+        )
+
     def test_validation_repair_emits_workflow_ir_artifact_update_before_repair_event(self):
         events = []
         state = build_initial_state(repairable_forward_reference_ir())
