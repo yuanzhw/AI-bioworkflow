@@ -2600,9 +2600,8 @@ result 和 policy 边界。
 ## `tests/test_reviewer_node.py`
 
 该文件验证 P2.3 `reviewer_repair` compiler node 的独立行为。Node 具备 Provider
-注入、request 构造、patch 校验、应用和 attempt budget 能力。P2.4 Analyzer
-routing 通过 `build_compiler_graph(...)` 使用该 node；Checker request contract 已
-保留，但 Checker routing 仍留给后续 PR。
+注入、request 构造、patch 校验、应用和 attempt budget 能力。P2.4 Analyzer 与
+Checker routing 均通过 `build_compiler_graph(...)` 使用该 node。
 
 ### `test_default_reviewer_node_is_callable_and_disabled`
 
@@ -2778,11 +2777,11 @@ routing 通过 `build_compiler_graph(...)` 使用该 node；Checker request cont
   rejection state。
 - 保存 parsed patch 与错误信息脱敏是两个独立契约。
 
-### `test_reviewer_node_builds_checker_request_without_routing_it`
+### `test_reviewer_node_builds_checker_request_from_state_failure_stage`
 
 输入：
 
-- `failure_stage = checker`。
+- state 中 `repair_failure_stage = checker`。
 - state 包含 WOMtool validation message。
 - fake provider 返回 `no_action`。
 
@@ -2793,8 +2792,8 @@ routing 通过 `build_compiler_graph(...)` 使用该 node；Checker request cont
 
 覆盖点：
 
-- P2.3 同时设计 Analyzer/Checker request contract。
-- Checker graph routing 仍明确留在后续 PR。
+- Reviewer node 优先使用当前 repair cycle 的显式 failure stage。
+- Checker request 不依赖构图时硬编码第二个 Reviewer node。
 
 ### `test_direct_workflow_ir_request_uses_empty_catalog_context`
 
@@ -2919,7 +2918,7 @@ routing 通过 `build_compiler_graph(...)` 使用该 node；Checker request cont
 ## `tests/test_graph.py`
 
 该文件验证 Compiler Graph、Analyzer、Renderer、deterministic repairer 和有界
-Analyzer Reviewer branch 的交互。
+Analyzer/Checker Reviewer branch 的交互。
 
 ### `test_multi_task_ir_analyzes_and_renders`
 
@@ -3276,27 +3275,101 @@ files = flatten([qc.html_report, qc.json_report, [extra_report]])
 - Reviewer budget 在 provider 创建或调用前强制执行。
 - 次数耗尽会显式结束，不丢失已有审计数据。
 
-### `test_checker_failure_does_not_route_to_analyzer_reviewer`
+### `test_checker_failure_routes_to_reviewer_after_no_safe_repair`
 
-输入：
-
-- 有效的 `sample_multi_task_ir()`。
-- Checker 返回合成 validation failure。
-- 注入一个记录调用次数的 enabled Analyzer Reviewer provider。
-
-执行：
-
-- 调用 Compiler Graph。
+输入：有效 Workflow IR、合成 Checker failure，以及返回 `no_action` 的 enabled
+Reviewer provider。
 
 期望输出：
 
-- Checker failure 仍先进入 deterministic repairer，且没有安全动作。
-- Analyzer Reviewer provider 调用次数为零。
-- validation message 保留，Reviewer status 仍为空。
+- deterministic repairer 先执行一次且没有安全动作。
+- Provider 收到一次 `failure_stage=checker` request 和完整 validation message。
+- Reviewer status 为 `no_action`，原始 Checker diagnostic 保留。
 
-覆盖点：
+覆盖点：Checker failure 在 deterministic no-action 后进入 Reviewer，且不形成循环。
 
-- P2.4 第一部分没有提前启用 Checker Reviewer routing。
+### `test_checker_failure_stops_after_disabled_reviewer`
+
+输入：有效 Workflow IR、合成 Checker failure，以及默认 disabled Reviewer graph。
+
+期望输出：
+
+- deterministic repairer 执行一次。
+- Reviewer attempt count 保持零，status 为 `no_action`。
+- diagnostics 明确记录 Reviewer disabled。
+
+覆盖点：默认结构化编译路径不会因 Checker routing 依赖模型或 API key。
+
+### `test_checker_repair_budget_exhaustion_routes_directly_to_reviewer`
+
+输入：Checker failure，且初始 `repair_count` 已达到 deterministic 上限。
+
+期望输出：
+
+- deterministic repairer 不再执行，repair count 和 actions 不变。
+- Provider 直接收到 `failure_stage=checker` request。
+
+覆盖点：deterministic budget 与 Reviewer budget 独立，前者耗尽不会跳过受控 Reviewer
+branch。
+
+### `test_checker_reviewer_patch_reenters_compiler_pipeline`
+
+输入：首次 Checker validation 失败；Reviewer 提议增加引用现有 call output 的 workflow
+output；第二次 Checker validation 成功。
+
+期望输出：
+
+- Provider 只调用一次，request stage 为 `checker`。
+- patch 通过 policy/schema validation 并应用到 canonical Workflow IR。
+- 图重新经过 Analyzer、Renderer、Checker，validator 共调用两次并最终成功。
+- 生成 WDL 包含新增 workflow output。
+
+覆盖点：Checker Reviewer 只能修改 Workflow IR，成功 patch 必须重新通过完整编译链路。
+
+### `test_checker_deterministic_repair_does_not_call_reviewer`
+
+输入：首次 Checker validation 失败；deterministic repairer 返回安全动作；第二次
+validation 成功。
+
+期望输出：Reviewer provider 调用次数为零，修复动作保留，最终 validation 成功。
+
+覆盖点：Reviewer 不抢占可由 deterministic repairer 处理的 Checker failure。
+
+### `test_checker_missing_validator_does_not_call_reviewer`
+
+输入：Checker 返回 `VALIDATOR_MISSING_MARKER` 环境诊断。
+
+期望输出：
+
+- deterministic repairer 和 Reviewer 均不执行。
+- validation message 保留，Reviewer status 为空。
+
+覆盖点：缺少 WOMtool/miniwdl 是环境能力缺失，不是可交给 Reviewer 修复的 IR failure。
+
+### `test_checker_repairer_failure_stops_before_reviewer`
+
+输入：Checker validation 失败，随后 deterministic repair implementation 抛出异常。
+
+期望输出：
+
+- `repairer_failed == True`，repair count 增加一次。
+- failure stage 保持 `checker`，Reviewer provider 不调用。
+
+覆盖点：repairer 内部失败不会被误判为正常 no-action 或触发模型调用。
+
+### `test_checker_reviewer_budget_stops_model_call`
+
+输入：Checker validation 失败；Reviewer attempt count 已达到一次上限，并带有既有
+parsed patch、rejection reason、diagnostics 和上一轮 applied 标记。
+
+期望输出：
+
+- Provider 不调用，attempt count 不增加。
+- 既有 parsed patch、rejection reason 和 diagnostics 保留，并追加 budget diagnostic。
+- 当前节点的 `reviewer_patch_applied` 重置为 `False`，validation message 保留。
+
+覆盖点：Analyzer/Checker 共用 Reviewer provider budget；历史 applied 状态不会被误作
+当前节点 re-entry 信号。
 
 ### `test_compiler_graph_compiles_recipe_tool_plan`
 
@@ -4950,8 +5023,8 @@ retrieval artifact。
 - 多 recipe、多工具候选和更复杂 tool selection。
 - 参数范围错误以外的更多 Tool Catalog schema 边界。
 - nested scatter、conditional step、subworkflow 等 roadmap feature。
-- Reviewer provider、Compiler Graph 路由、Run observability、Resource Agent 和
-  Bioinfo Reviewer 等规划中 Agent。
+- Reviewer 在线 provider 集成、Run observability、Resource Agent 和 Bioinfo
+  Reviewer 等规划中 Agent。
 - Nextflow 或其他 backend。
 - 真实自然语言模型调用的在线集成测试。
 - Next.js 工作台、DAG 可视化和 run history 的浏览器级视觉回归测试。

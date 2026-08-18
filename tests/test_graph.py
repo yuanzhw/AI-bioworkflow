@@ -3,12 +3,13 @@ from typing import Any
 from unittest.mock import patch
 
 from src.analyzer import analyze_workflow_ir
-from src.graph import agent, build_compiler_graph, compiler_graph
+from src.graph import MAX_REPAIR_ATTEMPTS, agent, build_compiler_graph, compiler_graph
 from src.nodes.reviewer_repair import make_reviewer_repair_node
 from src.renderers import render_wdl
 from src.reviewer_repair import ReviewerFailureStage, ReviewerRepairStatus
 from src.schema import coerce_workflow_ir
 from src.state import WorkflowState
+from src.tools.validator import VALIDATOR_MISSING_MARKER
 
 
 def sample_multi_task_ir() -> dict[str, Any]:
@@ -212,6 +213,7 @@ def initial_state(parsed_json: dict[str, Any]) -> WorkflowState:
         "repair_count": 0,
         "repair_actions": [],
         "repairer_failed": False,
+        "repair_failure_stage": None,
         "reviewer_attempt_count": 0,
         "reviewer_repair_status": None,
         "reviewer_repair_request": None,
@@ -622,8 +624,13 @@ class WorkflowCompilationTests(unittest.TestCase):
             ],
         )
 
-    def test_checker_failure_does_not_route_to_analyzer_reviewer(self):
-        provider = UnexpectedGraphReviewerProvider()
+    def test_checker_failure_routes_to_reviewer_after_no_safe_repair(self):
+        provider = RecordingGraphReviewerProvider(
+            {
+                "status": "no_action",
+                "diagnostics": ["No safe Checker repair was found."],
+            }
+        )
         graph = self.make_graph_with_reviewer(provider)
 
         with patch("src.nodes.checker.wdl_validator") as validator:
@@ -633,12 +640,220 @@ class WorkflowCompilationTests(unittest.TestCase):
             }
             final_state = graph.invoke(initial_state(sample_multi_task_ir()))
 
-        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(
+            provider.requests[0].failure_stage,
+            ReviewerFailureStage.CHECKER,
+        )
+        self.assertEqual(
+            provider.requests[0].validation_message,
+            "Synthetic Checker failure.",
+        )
         self.assertEqual(final_state["analysis_errors"], [])
         self.assertEqual(final_state["repair_actions"], [])
         self.assertEqual(final_state["repair_count"], 1)
         self.assertEqual(final_state["validation_message"], "Synthetic Checker failure.")
+        self.assertEqual(
+            final_state["reviewer_repair_status"],
+            ReviewerRepairStatus.NO_ACTION.value,
+        )
+        self.assertEqual(final_state["repair_failure_stage"], "checker")
+
+    def test_checker_failure_stops_after_disabled_reviewer(self):
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.return_value = {
+                "is_valid": False,
+                "message": "Synthetic Checker failure.",
+            }
+            final_state = compiler_graph.invoke(initial_state(sample_multi_task_ir()))
+
+        self.assertEqual(final_state["repair_count"], 1)
+        self.assertEqual(final_state["reviewer_attempt_count"], 0)
+        self.assertEqual(
+            final_state["reviewer_repair_status"],
+            ReviewerRepairStatus.NO_ACTION.value,
+        )
+        self.assertIn("disabled", final_state["reviewer_diagnostics"][0])
+
+    def test_checker_repair_budget_exhaustion_routes_directly_to_reviewer(self):
+        provider = RecordingGraphReviewerProvider({"status": "no_action"})
+        graph = self.make_graph_with_reviewer(provider)
+        state = initial_state(sample_multi_task_ir())
+        state["repair_count"] = MAX_REPAIR_ATTEMPTS
+
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.return_value = {
+                "is_valid": False,
+                "message": "Synthetic Checker failure.",
+            }
+            final_state = graph.invoke(state)
+
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(
+            provider.requests[0].failure_stage,
+            ReviewerFailureStage.CHECKER,
+        )
+        self.assertEqual(final_state["repair_count"], MAX_REPAIR_ATTEMPTS)
+        self.assertEqual(final_state["repair_actions"], [])
+
+    def test_checker_reviewer_patch_reenters_compiler_pipeline(self):
+        provider = RecordingGraphReviewerProvider(
+            {
+                "status": "patch_proposed",
+                "patch": {
+                    "summary": "Expose an existing QC output from the workflow.",
+                    "actions": [
+                        {
+                            "operation": "add",
+                            "path": "/workflow/outputs/qc_clean_r1",
+                            "value": "qc.clean_r1",
+                            "reason": "Use an existing call output.",
+                        }
+                    ],
+                    "diagnostic_references": ["Synthetic Checker failure."],
+                    "confidence": 0.8,
+                },
+                "diagnostics": ["The output reference is already type checked."],
+            }
+        )
+        graph = self.make_graph_with_reviewer(provider)
+
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.side_effect = [
+                {
+                    "is_valid": False,
+                    "message": "Synthetic Checker failure.",
+                },
+                {
+                    "is_valid": True,
+                    "message": "Synthetic Checker success.",
+                },
+            ]
+            final_state = graph.invoke(initial_state(sample_multi_task_ir()))
+
+        self.assertEqual(validator.invoke.call_count, 2)
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(
+            provider.requests[0].failure_stage,
+            ReviewerFailureStage.CHECKER,
+        )
+        self.assertTrue(final_state["reviewer_patch_applied"])
+        self.assertTrue(final_state["is_valid"])
+        self.assertEqual(final_state["repair_failure_stage"], None)
+        self.assertEqual(
+            final_state["workflow_ir"]["workflow"]["outputs"]["qc_clean_r1"],
+            "qc.clean_r1",
+        )
+        self.assertIn("File qc_clean_r1 = qc.clean_r1", final_state["current_wdl"])
+        self.assertEqual(final_state["validation_message"], "Synthetic Checker success.")
+
+    def test_checker_deterministic_repair_does_not_call_reviewer(self):
+        provider = UnexpectedGraphReviewerProvider()
+
+        def synthetic_repairer(state):
+            return {
+                "workflow_ir": state["workflow_ir"],
+                "analysis_errors": [],
+                "analysis_warnings": [],
+                "current_wdl": "",
+                "is_valid": False,
+                "repair_actions": ["Applied a synthetic deterministic repair."],
+                "repair_count": state.get("repair_count", 0) + 1,
+                "repairer_failed": False,
+                "messages": [],
+            }
+
+        with patch("src.graph.repairer_node", new=synthetic_repairer):
+            graph = self.make_graph_with_reviewer(provider)
+
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.side_effect = [
+                {"is_valid": False, "message": "Synthetic Checker failure."},
+                {"is_valid": True, "message": "Synthetic Checker success."},
+            ]
+            final_state = graph.invoke(initial_state(sample_multi_task_ir()))
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(validator.invoke.call_count, 2)
+        self.assertTrue(final_state["is_valid"])
+        self.assertEqual(
+            final_state["repair_actions"],
+            ["Applied a synthetic deterministic repair."],
+        )
+
+    def test_checker_missing_validator_does_not_call_reviewer(self):
+        provider = UnexpectedGraphReviewerProvider()
+        graph = self.make_graph_with_reviewer(provider)
+
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.return_value = {
+                "is_valid": False,
+                "message": f"{VALIDATOR_MISSING_MARKER}.",
+            }
+            final_state = graph.invoke(initial_state(sample_multi_task_ir()))
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(final_state["repair_count"], 0)
         self.assertIsNone(final_state["reviewer_repair_status"])
+        self.assertIn(VALIDATOR_MISSING_MARKER, final_state["validation_message"])
+
+    def test_checker_repairer_failure_stops_before_reviewer(self):
+        provider = UnexpectedGraphReviewerProvider()
+        graph = self.make_graph_with_reviewer(provider)
+
+        with (
+            patch("src.nodes.checker.wdl_validator") as validator,
+            patch(
+                "src.nodes.repairer.repair_workflow_ir",
+                side_effect=RuntimeError("Synthetic repairer failure."),
+            ),
+        ):
+            validator.invoke.return_value = {
+                "is_valid": False,
+                "message": "Synthetic Checker failure.",
+            }
+            final_state = graph.invoke(initial_state(sample_multi_task_ir()))
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertTrue(final_state["repairer_failed"])
+        self.assertEqual(final_state["repair_count"], 1)
+        self.assertEqual(final_state["repair_failure_stage"], "checker")
+        self.assertIsNone(final_state["reviewer_repair_status"])
+
+    def test_checker_reviewer_budget_stops_model_call(self):
+        provider = UnexpectedGraphReviewerProvider()
+        graph = self.make_graph_with_reviewer(provider)
+        state = initial_state(sample_multi_task_ir())
+        state["reviewer_attempt_count"] = 1
+        state["reviewer_repair_request"] = {"failure_stage": "analyzer"}
+        state["reviewer_ir_patch"] = {"summary": "Previous parsed patch"}
+        state["reviewer_rejection_reason"] = "Previous rejection"
+        state["reviewer_diagnostics"] = ["Previous diagnostic"]
+        state["reviewer_patch_applied"] = True
+
+        with patch("src.nodes.checker.wdl_validator") as validator:
+            validator.invoke.return_value = {
+                "is_valid": False,
+                "message": "Synthetic Checker failure.",
+            }
+            final_state = graph.invoke(state)
+
+        self.assertEqual(provider.call_count, 0)
+        self.assertEqual(final_state["reviewer_attempt_count"], 1)
+        self.assertEqual(
+            final_state["reviewer_ir_patch"],
+            {"summary": "Previous parsed patch"},
+        )
+        self.assertEqual(final_state["reviewer_rejection_reason"], "Previous rejection")
+        self.assertEqual(
+            final_state["reviewer_diagnostics"],
+            [
+                "Previous diagnostic",
+                "Reviewer repair attempt budget exhausted (1).",
+            ],
+        )
+        self.assertFalse(final_state["reviewer_patch_applied"])
+        self.assertEqual(final_state["validation_message"], "Synthetic Checker failure.")
 
     def test_compiler_graph_compiles_recipe_tool_plan(self):
         final_state = compiler_graph.invoke(initial_state(sample_rnaseq_tool_plan()))

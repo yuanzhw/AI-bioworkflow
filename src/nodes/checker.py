@@ -2,6 +2,7 @@ import logging
 
 from langchain_core.messages import HumanMessage
 
+from src.reviewer_repair import ReviewerFailureStage
 from src.state import WorkflowState
 from src.tools.validator import wdl_validator
 
@@ -30,6 +31,7 @@ def checker_node(state: WorkflowState):
             "error_count": current_error_count,
             "is_valid": True,
             "validation_message": message,
+            "repair_failure_stage": None,
         }
     else:
         logger.info("WDL validation failed.")
@@ -39,4 +41,5 @@ def checker_node(state: WorkflowState):
             "error_count": current_error_count + 1,
             "is_valid": False,
             "validation_message": message,
+            "repair_failure_stage": ReviewerFailureStage.CHECKER.value,
         }

@@ -41,6 +41,8 @@ def route_after_checker(state: WorkflowState):
         return END
     if _can_attempt_repair(state):
         return "repairer"
+    if state.get("workflow_ir"):
+        return "reviewer_repair"
     return END
 
 
@@ -49,7 +51,7 @@ def route_after_repairer(state: WorkflowState):
         return END
     if state.get("repair_actions"):
         return "analyzer"
-    if state.get("analysis_errors") and state.get("workflow_ir"):
+    if _has_reviewer_failure_stage(state) and state.get("workflow_ir"):
         return "reviewer_repair"
     return END
 
@@ -62,6 +64,10 @@ def route_after_reviewer(state: WorkflowState):
 
 def _can_attempt_repair(state: WorkflowState) -> bool:
     return bool(state.get("workflow_ir")) and state.get("repair_count", 0) < MAX_REPAIR_ATTEMPTS
+
+
+def _has_reviewer_failure_stage(state: WorkflowState) -> bool:
+    return state.get("repair_failure_stage") in {"analyzer", "checker"}
 
 
 def _missing_local_validator(state: WorkflowState) -> bool:

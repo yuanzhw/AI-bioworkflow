@@ -86,6 +86,17 @@ def make_reviewer_repair_node(
             )
 
         try:
+            resolved_failure_stage = _resolve_failure_stage(state, failure_stage)
+        except ValueError:
+            return _reviewer_update(
+                state,
+                status=ReviewerRepairStatus.INVALID_REQUEST,
+                diagnostics=["Reviewer failure stage is invalid."],
+                rejection_reason="Reviewer failure stage is invalid.",
+                message="Reviewer request construction failed.",
+            )
+
+        try:
             resolved_provider = (
                 provider if provider is not None else provider_factory(model)
             )
@@ -109,7 +120,7 @@ def make_reviewer_repair_node(
         try:
             request = build_reviewer_repair_request(
                 state,
-                failure_stage=failure_stage,
+                failure_stage=resolved_failure_stage,
                 tool_catalog=tool_catalog,
                 recipe_catalog=recipe_catalog,
             )
@@ -254,6 +265,14 @@ def make_reviewer_repair_node(
         }
 
     return node
+
+
+def _resolve_failure_stage(
+    state: WorkflowState,
+    fallback: ReviewerFailureStage,
+) -> ReviewerFailureStage:
+    state_stage = state.get("repair_failure_stage")
+    return fallback if state_stage is None else ReviewerFailureStage(state_stage)
 
 
 def _reviewer_update(

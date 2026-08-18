@@ -365,7 +365,7 @@ class ReviewerNodeTests(unittest.TestCase):
         self.assertFalse(update["reviewer_patch_applied"])
         self.assertNotIn("workflow_ir", update)
 
-    def test_reviewer_node_builds_checker_request_without_routing_it(self):
+    def test_reviewer_node_builds_checker_request_from_state_failure_stage(self):
         provider = RecordingReviewerProvider(
             {
                 "status": "no_action",
@@ -373,12 +373,10 @@ class ReviewerNodeTests(unittest.TestCase):
             }
         )
         state = self.sample_state()
+        state["repair_failure_stage"] = ReviewerFailureStage.CHECKER.value
         state["validation_message"] = "WOMtool rejected the generated WDL."
 
-        update = self.make_node(
-            provider,
-            failure_stage=ReviewerFailureStage.CHECKER,
-        )(state)
+        update = self.make_node(provider)(state)
 
         self.assertEqual(
             update["reviewer_repair_status"],
