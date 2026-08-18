@@ -259,6 +259,9 @@ artifacts，避免前端和 API 消费方解析文本 summary。
 - 已应用 patch 重新进入 Analyzer、Renderer 和 Checker。
 - Checker 缺少本地 WOMtool/miniwdl 时直接结束，不把环境缺失当作可修复的 IR
   failure，也不调用 Reviewer。
+- P2.4 的上述行为当前只覆盖 `compiler_graph`。带 `event_callback` 的
+  `compile_structured_workflow` 服务路径仍使用 deterministic-only 编译循环；该路径的
+  Reviewer routing、events 与 artifacts 统一留到 P2.5 接入。
 
 ### P2.5 Run Service 与 API Observability
 

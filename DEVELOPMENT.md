@@ -146,11 +146,16 @@ repairer_node       # 始终先尝试确定性修复
   └─ 正常完成但无安全动作 -> reviewer_repair
                       ├─ patch 已应用 -> analyzer_node -> renderer_node -> checker_node
                       └─ disabled / rejected / error / budget exhausted -> END
+```
 
 `reviewer_repair` 默认禁用，独立预算默认为一次；禁用或缺少 provider 时不会调用
 模型。`repair_failure_stage` 显式区分 Analyzer 与 Checker diagnostics；缺少本地 WDL
 validator 时直接结束，不进入 deterministic 或 Reviewer repair。
-```
+
+上述 Reviewer failure recovery 当前只描述 `compiler_graph` 的 P2.4 路由。为保留
+现有 run event 顺序，`compile_structured_workflow(..., event_callback=...)` 暂时继续使用
+deterministic-only 的服务层编译循环；Reviewer events、artifacts 与该路径的行为统一由
+P2.5 Run Service / API Observability 完成。
 
 ## 已完成的容器管理边界
 
