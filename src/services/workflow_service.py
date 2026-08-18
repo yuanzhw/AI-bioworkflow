@@ -161,6 +161,7 @@ def build_initial_state(
         "repair_count": 0,
         "repair_actions": [],
         "repairer_failed": False,
+        "repair_failure_stage": None,
         "reviewer_attempt_count": 0,
         "reviewer_repair_status": None,
         "reviewer_repair_request": None,
@@ -503,6 +504,8 @@ def _merge_state(state: WorkflowState, update: Mapping[str, Any]) -> None:
             state["repair_actions"] = value
         elif key == "repairer_failed":
             state["repairer_failed"] = value
+        elif key == "repair_failure_stage":
+            state["repair_failure_stage"] = value
         elif key == "reviewer_attempt_count":
             state["reviewer_attempt_count"] = value
         elif key == "reviewer_repair_status":

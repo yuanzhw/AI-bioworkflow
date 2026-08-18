@@ -1,4 +1,5 @@
 import operator
+from typing import Literal
 
 from langchain_core.messages import AnyMessage
 from typing_extensions import Annotated, TypedDict
@@ -37,6 +38,9 @@ class WorkflowState(TypedDict):
 
     # 区分 repairer 内部失败与正常完成但没有安全修复动作
     repairer_failed: bool
+
+    # 记录触发当前 repair cycle 的 compiler failure stage
+    repair_failure_stage: Literal["analyzer", "checker"] | None
 
     # Reviewer repair 使用独立计数和结构化结果，避免与 deterministic repair 混淆
     reviewer_attempt_count: int

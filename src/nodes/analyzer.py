@@ -3,6 +3,7 @@ import logging
 from langchain_core.messages import HumanMessage
 
 from src.analyzer import analyze_workflow_ir
+from src.reviewer_repair import ReviewerFailureStage
 from src.schema import coerce_workflow_ir
 from src.state import WorkflowState
 
@@ -23,6 +24,7 @@ def analyzer_node(state: WorkflowState):
         return {
             "analysis_errors": [message],
             "analysis_warnings": [],
+            "repair_failure_stage": ReviewerFailureStage.ANALYZER.value,
             "is_valid": False,
             "messages": [HumanMessage(content=message)],
         }
@@ -35,6 +37,9 @@ def analyzer_node(state: WorkflowState):
     return {
         "analysis_errors": report.errors,
         "analysis_warnings": report.warnings,
+        "repair_failure_stage": (
+            None if report.is_valid else ReviewerFailureStage.ANALYZER.value
+        ),
         "is_valid": report.is_valid,
         "messages": messages,
     }
