@@ -13,6 +13,7 @@ from src.recipes.loader import RecipeCatalog
 from src.recipes.schema import RecipeSpec
 from src.renderers import render_wdl
 from src.schema import flatten_workflow_calls
+from src.tools.validator import wdl_validator, wdl_validator_available
 
 
 CATALOG_TOOLS_DIR = Path(__file__).resolve().parents[1] / "src" / "catalog" / "tools"
@@ -418,6 +419,19 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("File bam_index = prepare_bam.bam_index", wdl)
         self.assertIn("File narrow_peaks = peaks.narrow_peaks", wdl)
         self.assertIn("File peak_summits = peaks.summits", wdl)
+
+    @unittest.skipUnless(wdl_validator_available(), "WDL validator is not installed")
+    def test_chipseq_tool_contract_wdl_passes_syntax_validation(self):
+        workflow_ir = resolve_tool_plan(
+            sample_chipseq_tool_contract_plan(),
+            chipseq_tool_contract_recipe_catalog(),
+            self.tool_catalog,
+        )
+        wdl = render_wdl(workflow_ir)
+
+        result = wdl_validator.invoke({"wdl_code": wdl})
+
+        self.assertTrue(result["is_valid"], result["message"])
 
     def test_macs2_optional_control_is_rendered_when_provided(self):
         plan = sample_chipseq_tool_contract_plan()

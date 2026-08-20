@@ -1404,11 +1404,28 @@ OK (skipped=2)
 
 覆盖点：
 
-- 三个新增 ToolSpec 已达到 resolver/analyzer/renderer 意义上的 compile-ready。
+- 三个新增 ToolSpec 已通过 resolver/analyzer/renderer 阶段的结构和确定性渲染验证。
 - 测试 recipe 不写入正式 Recipe Catalog，因此不会提前宣称 ChIP-seq workflow
   已受支持。
 - Catalog output description 保留给 metadata/API/RAG；resolver 只将
   `type`、`value` 和 `tags` 投影到 Workflow IR OutputSpec。
+
+### `test_chipseq_tool_contract_wdl_passes_syntax_validation`
+
+输入：与 `test_chipseq_tool_contracts_resolve_to_valid_renderable_ir` 相同的测试 recipe、
+Recipe Tool Plan 和正式 Tool Catalog。
+
+执行：
+
+1. 通过 resolver 和 renderer 生成代表性的 ChIP-seq WDL。
+2. 调用项目统一的 `wdl_validator`，由配置的 WOMtool 或 miniwdl 执行语法校验。
+
+期望输出：validator 返回 `is_valid=True`；无可用 validator 时按现有测试约定跳过。
+
+覆盖点：为三个新增 ToolSpec 补齐 compile-ready policy 要求的外部 WDL 语法验证，
+并保持无 validator 环境下的纯 Catalog/Analyzer/Renderer 测试继续运行。
+
+本次 Catalog admission 使用 WOMtool 91 实际执行该测试并通过。
 
 ### `test_macs2_optional_control_is_rendered_when_provided`
 

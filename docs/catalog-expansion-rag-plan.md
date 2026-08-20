@@ -521,6 +521,7 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - 已加入 `bowtie2`、`samtools` 和 `macs2`。
 - 复用 `fastp`、`multiqc`。
 - 已添加 schema/load/rendering tests。
+- 测试 recipe 生成的代表性 WDL 已通过 WOMtool 91 syntax validation。
 - 三个工具均按真实 evidence 标记为 `unverified`。
 
 ### PR 3: ChIP-seq Recipe And Retrieval Baseline
