@@ -42,7 +42,7 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
 - 2 个 recipe，均属于 bulk RNA-seq family：
   - `rnaseq_differential_expression`
   - `rnaseq_reference_preparation`
-- 9 个 tool：
+- 12 个 tool：
   - `fastp`
   - `salmon`
   - `salmon_index`
@@ -52,13 +52,23 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
   - `edger`
   - `limma_voom`
   - `multiqc`
+  - `bowtie2`
+  - `samtools`
+  - `macs2`
 - 24 条 retrieval query：
   - 20 条 supported RNA-seq query。
   - 4 条 unsupported negative query。
 
-当前 `lexical_v1` baseline 的 Planner Context Tool Recall 和 Planner Context
-Role Coverage 均为 `1.0000`。这说明当前 RNA-seq Catalog 内的 prompt context
-覆盖稳定，但不能证明跨 workflow family 的检索能力。
+新增的三个 ChIP-seq 工具已达到 compile-ready，但正式 Catalog 仍只有两个
+RNA-seq recipe。因此 ChIP-seq query 在 recipe/product capability 层面继续标记为
+unsupported，不能因为能直接召回 `macs2` 就声称 workflow 已受支持。
+
+在同一组 24 条 query 上，扩充后的 `lexical_v1` baseline 为：Tool Recall@8
+`0.8900`、Tool MRR `0.9583`、Raw Role Coverage `0.8933`；Planner Context Tool
+Recall 和 Planner Context Role Coverage 仍均为 `1.0000`。Raw 指标相较 9-tool
+Catalog 下降，说明更多跨 family tool 已开始挤占 lexical top-K，但 recipe expansion
+仍能保持当前 RNA-seq Planner context 完整。该中间状态不能作为 R3 决策依据，需在
+ChIP-seq recipe 和 family-labeled query 落地后重新评估。
 
 现有 `Recipe Recall@3` 和 `Tool Recall@8` 在 Catalog 较小时区分度有限。扩展
 Catalog 后应增加更严格的 top-K 和 family-level 指标。
@@ -192,7 +202,7 @@ paired-end ChIP-seq FASTQ
 - `fastp`
 - `multiqc`
 
-建议新增工具：
+已新增 compile-ready 工具：
 
 - `bowtie2`
 - `samtools`
@@ -200,6 +210,15 @@ paired-end ChIP-seq FASTQ
 
 为控制范围，`samtools` 可以先提供边界清晰的 sort/index command contract，
 不必覆盖完整 samtools 子命令集合。
+
+当前固定 runtime 为：
+
+- `quay.io/biocontainers/bowtie2:2.5.5--ha27dd3b_0`
+- `quay.io/biocontainers/samtools:1.24--h9dcdb79_1`
+- `quay.io/biocontainers/macs2:2.2.9.1--py310h1fe012e_5`
+
+这些 tag 已按 Bioconda package 页面和 Quay registry 核实存在，但尚未运行本项目
+的 smoke test 或 tiny e2e，因此 execution verification 均保持 `unverified`。
 
 ### Inputs And Outputs
 
@@ -497,12 +516,13 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - Retriever artifact、API 类型和前端状态文案已同步。
 - application-level execution preflight 已增加未验证工具 policy。
 
-### PR 2: ChIP-seq Tool Catalog
+### PR 2: ChIP-seq Tool Catalog（已实现）
 
-- 加入 `bowtie2`、`samtools` 和 `macs2`。
+- 已加入 `bowtie2`、`samtools` 和 `macs2`。
 - 复用 `fastp`、`multiqc`。
-- 添加 schema/load/rendering tests。
-- 标记真实 execution verification 状态。
+- 已添加 schema/load/rendering tests。
+- 测试 recipe 生成的代表性 WDL 已通过 WOMtool 91 syntax validation。
+- 三个工具均按真实 evidence 标记为 `unverified`。
 
 ### PR 3: ChIP-seq Recipe And Retrieval Baseline
 
@@ -586,9 +606,11 @@ recipe resolution、Workflow IR 或 WDL 输出时，还应：
 
 ## Immediate Next Step
 
-Tool Capability And Verification Contract 已落地。下一项工作是加入简化版
-ChIP-seq Tool Catalog：`bowtie2`、`samtools` 和 `macs2` 必须满足完整
-compile-ready ToolSpec，并按实际 evidence 标记 execution verification。
+Tool Capability And Verification Contract 及简化版 ChIP-seq Tool Catalog 已
+落地。下一项工作是实现 `chipseq_peak_calling` recipe 和首次跨 family retrieval
+baseline：连接 `fastp`、`bowtie2`、`samtools`、`macs2` 和 `multiqc`，增加
+example plan 与确定性 WDL validation，将现有 ChIP-seq negative query 转为
+supported，并加入 Recall@1、Tool Recall@3/5 和 `workflow_family` 分组。
 
-ChIP-seq 工具契约合并后，再实现 recipe 和 retrieval baseline；随后按相同
-模式推进 scRNA-seq 与 variant calling。
+ChIP-seq recipe 与 baseline 合并后，再按相同模式推进 scRNA-seq 与 variant
+calling。

@@ -115,7 +115,11 @@ def resolve_tool_plan(
             "inputs": task_inputs,
             "command": command,
             "outputs": {
-                output_name: output.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
+                output_name: output.model_dump(
+                    mode="json",
+                    include={"type", "value", "tags"},
+                    exclude_defaults=True,
+                )
                 for output_name, output in tool.outputs.items()
             },
             "runtime": tool.runtime.model_dump(mode="json", exclude_none=True),

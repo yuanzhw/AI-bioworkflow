@@ -1,0 +1,49 @@
+id: samtools
+version: "1.24"
+aliases:
+  - SAM to BAM
+  - BAM sort and index
+  - coordinate-sorted alignment
+  - alignment processing
+description: Coordinate-sort a SAM or BAM alignment and build its BAM index.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  alignment:
+    type: File
+    required: true
+    description: Input alignment in SAM or BAM format.
+
+params:
+  threads:
+    type: Int
+    default: 4
+    min: 1
+    description: Number of threads used for sorting and indexing.
+
+outputs:
+  sorted_bam:
+    type: File
+    value: '"aligned.sorted.bam"'
+    description: Coordinate-sorted BAM alignment.
+  bam_index:
+    type: File
+    value: '"aligned.sorted.bam.bai"'
+    description: BAI index for the coordinate-sorted BAM alignment.
+
+command_template: |
+  samtools sort
+  -@ ~{threads}
+  -o aligned.sorted.bam
+  ~{alignment}
+  && samtools index
+  -@ ~{threads}
+  aligned.sorted.bam
+  aligned.sorted.bam.bai
+
+runtime:
+  docker: quay.io/biocontainers/samtools:1.24--h9dcdb79_1
+  cpu: 4
+  memory: 8G

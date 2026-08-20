@@ -124,6 +124,19 @@ tests/fixtures/retrieval_queries.json
   `expected_tools` 中，并且只允许该 tool 覆盖
   `expected_roles.differential_expression`。
 
+### R2c ChIP-seq Tool Catalog Intermediate Checkpoint
+
+在正式 Catalog 增加 compile-ready 的 `bowtie2`、`samtools` 和 `macs2` 后，
+tool 数量从 9 增加到 12，但 recipe 仍只有两个 RNA-seq workflow。该 checkpoint
+继续使用同一组 24 条 query，以观察纯 tool catalog expansion 对 top-K 的影响：
+
+- ChIP-seq negative query 暂不转为 supported，因为 `chipseq_peak_calling`
+  recipe 尚未进入正式 Catalog。
+- 能直接召回 `macs2` 只表示 tool metadata 命中，不等于 workflow capability
+  已受支持。
+- 该中间 checkpoint 用于记录 top-K crowding，不用于决定 R3 backend。
+- 下一 checkpoint 应随 ChIP-seq recipe、family label 和跨 family query 一同建立。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -172,7 +185,7 @@ tests/test_retrieval_evaluation.py
 .\.venv\Scripts\python.exe scripts\evaluate_retrieval.py
 ```
 
-当前 `lexical_v1` expanded RNA-seq catalog baseline：
+R2b expanded RNA-seq catalog 的 9-tool checkpoint：
 
 | Metric | Value |
 | --- | ---: |
@@ -190,11 +203,33 @@ tests/test_retrieval_evaluation.py
 | Supported Fallback Rate | 0.0000 |
 | Unsupported Fallback Rate | 0.2500 |
 
+R2c ChIP-seq tool catalog 的 12-tool 中间 checkpoint：
+
+| Metric | Value |
+| --- | ---: |
+| Query count | 24 |
+| Supported queries | 20 |
+| Unsupported queries | 4 |
+| Recipe Recall@3 | 1.0000 |
+| Recipe MRR | 0.9500 |
+| Tool Recall@8 | 0.8900 |
+| Tool MRR | 0.9583 |
+| Role Coverage | 0.8933 |
+| Planner Context Tool Recall | 1.0000 |
+| Planner Context Role Coverage | 1.0000 |
+| Fallback Rate | 0.0417 |
+| Supported Fallback Rate | 0.0000 |
+| Unsupported Fallback Rate | 0.2500 |
+
 已知 baseline 观察：
 
-- `rnaseq_deg_no_tool_names_en` 和 `rnaseq_params_threads_contrast_en` 的 raw
+- 9-tool checkpoint 中，`rnaseq_deg_no_tool_names_en` 和
+  `rnaseq_params_threads_contrast_en` 的 raw
   tool retrieval 未直接召回 `tximport`，说明 query 只描述目标或参数时，
   lexical tool recall 仍会漏掉中间步骤。
+- 12-tool checkpoint 的 Tool Recall@8 和 Raw Role Coverage 分别降至 `0.8900`
+  和 `0.8933`。`ChIP-seq`、paired-end、alignment 等共享词汇让新增工具进入
+  RNA-seq top-K，形成了预期的 catalog crowding 信号。
 - Planner Context Tool Recall 和 Planner Context Role Coverage 均为 1.0000，
   说明当 top recipe 召回正确时，Planner prompt 中通过 recipe allowed tools
   补齐的候选上下文仍覆盖所需工具和 role。

@@ -49,6 +49,25 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertEqual(tool["id"], "multiqc")
         self.assertEqual(tool["version"], "1.21")
 
+    def test_get_chipseq_tool_exposes_unverified_compile_ready_metadata(self):
+        tool = get_tool("macs2")
+
+        self.assertEqual(tool["version"], "2.2.9.1")
+        self.assertEqual(tool["trust_status"], "catalog-approved")
+        self.assertEqual(
+            tool["runtime"]["docker"],
+            "quay.io/biocontainers/macs2:2.2.9.1--py310h1fe012e_5",
+        )
+        self.assertFalse(tool["inputs"]["control_bam"]["required"])
+        self.assertIn(
+            "enriched genomic regions",
+            tool["outputs"]["narrow_peaks"]["description"],
+        )
+        self.assertEqual(
+            tool["execution_verification"],
+            {"status": "unverified", "evidence": []},
+        )
+
     def test_unknown_recipe_and_tool_raise_key_error(self):
         with self.assertRaisesRegex(KeyError, "unknown recipe"):
             get_recipe("missing_recipe")

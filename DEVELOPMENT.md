@@ -842,6 +842,10 @@ RAG 开发序列放在 P4 之下维护：
 verification 的边界，允许暂缓真实 e2e，但不允许用不完整占位条目绕过正式
 Tool Catalog 契约。
 
+当前 `bowtie2`、`samtools` 和 `macs2` 已作为 `unverified`、compile-ready
+工具进入正式 Catalog。下一步是增加 `chipseq_peak_calling` recipe 和首次跨
+family retrieval baseline；在 recipe 合并前，ChIP-seq 仍不属于已支持 workflow。
+
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 
 ### P5 Resource Agent

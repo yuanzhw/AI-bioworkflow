@@ -1355,6 +1355,93 @@ OK (skipped=2)
 - Salmon index 和 GTF tx2gene helper 生成的 task 定义可被 Analyzer 与 WDL renderer 接受。
 - Reference prep 输出与现有 DEG recipe 所需的 `transcriptome_index` / `tx2gene` 概念衔接。
 
+### `test_chipseq_tools_are_compile_ready_but_unverified`
+
+输入：当前正式 Tool Catalog 中的 `bowtie2@2.5.5`、`samtools@1.24` 和
+`macs2@2.2.9.1`。
+
+期望输出：
+
+- 三个工具均能通过完整 ToolSpec schema 和 Catalog loader。
+- runtime 分别固定为已核实存在的 BioContainers 镜像 tag。
+- `bowtie2` 声明 paired-end FASTQ、index archive、SAM 和 alignment log 契约。
+- `samtools` 声明 alignment、coordinate-sorted BAM 和 BAI 契约。
+- `macs2` 声明 treatment/control BAM、narrowPeak、summits、peak table 和 log 契约。
+- `macs2` 仅将 MultiQC 实际读取的 `*_peaks.xls` peak table 标记为 `multiqc_input`。
+- 三个工具的 execution verification 均为 `unverified` 且 evidence 为空。
+
+覆盖点：
+
+- 正式 Catalog 可以加入尚未真实运行、但结构和 runtime 完整的 compile-ready
+  工具。
+- Catalog admission 不会被误写成 smoke-tested 或 e2e-validated。
+
+### `test_chipseq_tool_contracts_resolve_to_valid_renderable_ir`
+
+输入：
+
+- 只存在于测试代码中的 `chipseq_tool_contract` recipe。
+- 串联 `bowtie2 -> samtools -> macs2` 的最小 Recipe Tool Plan。
+- 当前正式 Tool Catalog。
+
+执行：
+
+1. 调用 `resolve_tool_plan(...)` 生成 Workflow IR。
+2. 调用 `analyze_workflow_ir(...)` 验证数据依赖和类型。
+3. 调用 `render_wdl(...)` 生成 WDL。
+
+期望输出：
+
+- Analyzer 返回 `is_valid=True`。
+- IR/WDL 包含 `bowtie2_align`、`samtools_prepare_bam` 和 `macs2_peaks`。
+- Bowtie 2 index archive 解包后解析 index prefix，并排除 `.rev.1.bt2` /
+  `.rev.1.bt2l` reverse-index 文件。
+- `align.aligned_sam` 正确连接到 samtools，`prepare_bam.sorted_bam` 正确连接到
+  MACS2。
+- samtools command 同一 task 内依次执行 coordinate sort 和 index。
+- 未提供 control 时 MACS2 command 不渲染 `-c`。
+- workflow 输出暴露 sorted BAM、BAI、narrowPeak 和 peak summits。
+
+覆盖点：
+
+- 三个新增 ToolSpec 已通过 resolver/analyzer/renderer 阶段的结构和确定性渲染验证。
+- 测试 recipe 不写入正式 Recipe Catalog，因此不会提前宣称 ChIP-seq workflow
+  已受支持。
+- Catalog output description 保留给 metadata/API/RAG；resolver 只将
+  `type`、`value` 和 `tags` 投影到 Workflow IR OutputSpec。
+
+### `test_chipseq_tool_contract_wdl_passes_syntax_validation`
+
+输入：与 `test_chipseq_tool_contracts_resolve_to_valid_renderable_ir` 相同的测试 recipe、
+Recipe Tool Plan 和正式 Tool Catalog。
+
+执行：
+
+1. 通过 resolver 和 renderer 生成代表性的 ChIP-seq WDL。
+2. 调用项目统一的 `wdl_validator`，由配置的 WOMtool 或 miniwdl 执行语法校验。
+
+期望输出：validator 返回 `is_valid=True`；无可用 validator 时按现有测试约定跳过。
+
+覆盖点：为三个新增 ToolSpec 补齐 compile-ready policy 要求的外部 WDL 语法验证，
+并保持无 validator 环境下的纯 Catalog/Analyzer/Renderer 测试继续运行。
+
+本次 Catalog admission 使用 WOMtool 91 实际执行该测试并通过。
+
+### `test_macs2_optional_control_is_rendered_when_provided`
+
+输入：在最小 ChIP-seq tool contract plan 中增加 `control_bam` workflow input，
+并传给 MACS2 call。
+
+期望输出：
+
+- Analyzer 返回 `is_valid=True`。
+- MACS2 task input 保持 `File? control_bam`。
+- call wiring 包含 `control_bam = control_bam`。
+- command 包含 `-c ~{control_bam}`。
+
+覆盖点：MACS2 control 输入的 optional schema 和 conditional command template
+保持一致。
+
 ### `test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl`
 
 输入：
@@ -1812,11 +1899,15 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 - `supported_query_count == 20`。
 - `unsupported_query_count == 4`。
 - 每个 metric 均为 0 到 1 之间的稳定数值。
+- `planner_context_tool_recall == 1.0`。
+- `planner_context_role_coverage == 1.0`。
 
 覆盖点：
 
 - 当前 Catalog 可以生成可重复 retrieval baseline。
 - Baseline artifact 包含 per-query retrieval、miss、fallback 与 aggregate metrics。
+- 新增 ChIP-seq tools 挤动 raw top-K 时，现有 RNA-seq recipe expansion 仍保持
+  Planner context 完整；这不替代下一 PR 的 family-level baseline。
 
 ### `test_computes_supported_metrics_and_tracks_unsupported_matches`
 
@@ -2037,6 +2128,26 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 覆盖点：
 
 - 未指定版本时，Catalog service 选择当前 catalog 中最高版本。
+
+### `test_get_chipseq_tool_exposes_unverified_compile_ready_metadata`
+
+输入：不指定版本调用 `get_tool("macs2")`。
+
+期望输出：
+
+- 返回 `macs2@2.2.9.1`。
+- `trust_status == "catalog-approved"`。
+- runtime 使用固定 BioContainers image。
+- `control_bam` 保持 optional。
+- `narrow_peaks` 的 Catalog output description 对 API 可见。
+- execution verification 为 `unverified` 且 evidence 为空。
+
+覆盖点：
+
+- compile-ready ChIP-seq metadata 可被 API/RAG surface 使用。
+- Catalog admission 与 execution verification 在 API 输出中继续独立表达。
+- Catalog 专属 output description 不需要进入 Workflow IR，也不会在 resolver
+  投影时丢失源 metadata。
 
 ### `test_unknown_recipe_and_tool_raise_key_error`
 

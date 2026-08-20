@@ -9,8 +9,11 @@ from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ExecutionVerificationSpec, ToolSpec
 from src.recipes import load_recipe_catalog
+from src.recipes.loader import RecipeCatalog
+from src.recipes.schema import RecipeSpec
 from src.renderers import render_wdl
 from src.schema import flatten_workflow_calls
+from src.tools.validator import wdl_validator, wdl_validator_available
 
 
 CATALOG_TOOLS_DIR = Path(__file__).resolve().parents[1] / "src" / "catalog" / "tools"
@@ -146,6 +149,88 @@ def sample_rnaseq_reference_prep_plan() -> dict[str, Any]:
     }
 
 
+def chipseq_tool_contract_recipe_catalog() -> RecipeCatalog:
+    recipe = RecipeSpec.model_validate(
+        {
+            "id": "chipseq_tool_contract",
+            "name": "ChIP-seq tool contract test",
+            "required_inputs": {
+                "r1": {"type": "File"},
+                "r2": {"type": "File"},
+                "genome_index": {"type": "File"},
+            },
+            "steps": [
+                {
+                    "id": "align_reads",
+                    "role": "genome_alignment",
+                    "allowed_tools": ["bowtie2"],
+                },
+                {
+                    "id": "sort_and_index",
+                    "role": "bam_sort_and_index",
+                    "allowed_tools": ["samtools"],
+                },
+                {
+                    "id": "call_peaks",
+                    "role": "peak_calling",
+                    "allowed_tools": ["macs2"],
+                },
+            ],
+        }
+    )
+    return RecipeCatalog({recipe.id: recipe})
+
+
+def sample_chipseq_tool_contract_plan() -> dict[str, Any]:
+    return {
+        "workflow": {
+            "name": "ChIPSeqToolContract",
+            "recipe": "chipseq_tool_contract",
+            "inputs": {
+                "r1": "File",
+                "r2": "File",
+                "genome_index": "File",
+            },
+            "tool_calls": [
+                {
+                    "id": "align",
+                    "step": "align_reads",
+                    "tool": "bowtie2",
+                    "version": "2.5.5",
+                    "inputs": {
+                        "r1": "r1",
+                        "r2": "r2",
+                        "index_archive": "genome_index",
+                    },
+                    "params": {"threads": 8},
+                },
+                {
+                    "id": "prepare_bam",
+                    "step": "sort_and_index",
+                    "tool": "samtools",
+                    "version": "1.24",
+                    "inputs": {"alignment": "align.aligned_sam"},
+                    "params": {"threads": 4},
+                },
+                {
+                    "id": "peaks",
+                    "step": "call_peaks",
+                    "tool": "macs2",
+                    "version": "2.2.9.1",
+                    "inputs": {"treatment_bam": "prepare_bam.sorted_bam"},
+                    "params": {"genome_size": "hs", "qvalue": 0.01},
+                },
+            ],
+            "outputs": {
+                "sorted_bam": "prepare_bam.sorted_bam",
+                "bam_index": "prepare_bam.bam_index",
+                "narrow_peaks": "peaks.narrow_peaks",
+                "peak_summits": "peaks.summits",
+            },
+        }
+    }
+
+
 class CatalogDefinitionTests(unittest.TestCase):
     def test_catalog_file_path_matches_tool_id_and_version(self):
         for yaml_path in sorted(CATALOG_TOOLS_DIR.rglob("*.yaml")):
@@ -168,6 +253,43 @@ class CatalogDefinitionTests(unittest.TestCase):
             tool_catalog.get("salmon_index", "1.9.0").execution_verification.status,
             "unverified",
         )
+
+    def test_chipseq_tools_are_compile_ready_but_unverified(self):
+        tool_catalog = load_tool_catalog()
+        expected_tools = {
+            "bowtie2": {
+                "version": "2.5.5",
+                "docker": "quay.io/biocontainers/bowtie2:2.5.5--ha27dd3b_0",
+                "inputs": {"r1", "r2", "index_archive"},
+                "outputs": {"aligned_sam", "alignment_log"},
+            },
+            "samtools": {
+                "version": "1.24",
+                "docker": "quay.io/biocontainers/samtools:1.24--h9dcdb79_1",
+                "inputs": {"alignment"},
+                "outputs": {"sorted_bam", "bam_index"},
+            },
+            "macs2": {
+                "version": "2.2.9.1",
+                "docker": "quay.io/biocontainers/macs2:2.2.9.1--py310h1fe012e_5",
+                "inputs": {"treatment_bam", "control_bam"},
+                "outputs": {"narrow_peaks", "summits", "peak_table", "callpeak_log"},
+            },
+        }
+
+        for tool_id, expected in expected_tools.items():
+            with self.subTest(tool=tool_id):
+                tool = tool_catalog.get(tool_id, expected["version"])
+                self.assertEqual(tool.runtime.docker, expected["docker"])
+                self.assertEqual(set(tool.inputs), expected["inputs"])
+                self.assertEqual(set(tool.outputs), expected["outputs"])
+                self.assertTrue(tool.command_template.strip())
+                self.assertEqual(tool.execution_verification.status, "unverified")
+                self.assertEqual(tool.execution_verification.evidence, [])
+
+        macs2 = tool_catalog.get("macs2", "2.2.9.1")
+        self.assertEqual(macs2.outputs["peak_table"].tags, ["multiqc_input"])
+        self.assertEqual(macs2.outputs["callpeak_log"].tags, [])
 
     def test_tool_spec_requires_execution_verification(self):
         tool_data = load_tool_catalog().get("fastp", "1.3.3").model_dump(mode="python")
@@ -263,6 +385,76 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("run_gtf_tx2gene.py \\\n    --annotation-gtf ~{annotation_gtf}", wdl)
         self.assertIn("File transcriptome_index = index.index_archive", wdl)
         self.assertIn("File tx2gene = mapping.tx2gene", wdl)
+
+    def test_chipseq_tool_contracts_resolve_to_valid_renderable_ir(self):
+        workflow_ir = resolve_tool_plan(
+            sample_chipseq_tool_contract_plan(),
+            chipseq_tool_contract_recipe_catalog(),
+            self.tool_catalog,
+        )
+        report = analyze_workflow_ir(workflow_ir)
+        wdl = render_wdl(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertIn("bowtie2_align", workflow_ir.tasks)
+        self.assertIn("samtools_prepare_bam", workflow_ir.tasks)
+        self.assertIn("macs2_peaks", workflow_ir.tasks)
+        self.assertIn("call bowtie2_align as align", wdl)
+        self.assertIn("call samtools_prepare_bam as prepare_bam", wdl)
+        self.assertIn("call macs2_peaks as peaks", wdl)
+        self.assertIn("index_archive = genome_index", wdl)
+        self.assertIn("alignment = align.aligned_sam", wdl)
+        self.assertIn("treatment_bam = prepare_bam.sorted_bam", wdl)
+        self.assertIn("find bowtie2_index_input -type f", wdl)
+        self.assertIn("! -name '*.rev.1.bt2'", wdl)
+        self.assertIn("-print -quit", wdl)
+        self.assertIn('-x "$index_prefix"', wdl)
+        self.assertIn("samtools sort", wdl)
+        self.assertIn("&& samtools index", wdl)
+        self.assertIn("macs2 callpeak", wdl)
+        self.assertNotIn("-c ~{control_bam}", wdl)
+        self.assertIn('genome_size = "hs"', wdl)
+        self.assertIn("qvalue = 0.01", wdl)
+        self.assertIn("File sorted_bam = prepare_bam.sorted_bam", wdl)
+        self.assertIn("File bam_index = prepare_bam.bam_index", wdl)
+        self.assertIn("File narrow_peaks = peaks.narrow_peaks", wdl)
+        self.assertIn("File peak_summits = peaks.summits", wdl)
+
+    @unittest.skipUnless(wdl_validator_available(), "WDL validator is not installed")
+    def test_chipseq_tool_contract_wdl_passes_syntax_validation(self):
+        workflow_ir = resolve_tool_plan(
+            sample_chipseq_tool_contract_plan(),
+            chipseq_tool_contract_recipe_catalog(),
+            self.tool_catalog,
+        )
+        wdl = render_wdl(workflow_ir)
+
+        result = wdl_validator.invoke({"wdl_code": wdl})
+
+        self.assertTrue(result["is_valid"], result["message"])
+
+    def test_macs2_optional_control_is_rendered_when_provided(self):
+        plan = sample_chipseq_tool_contract_plan()
+        plan["workflow"]["inputs"]["control_bam"] = "File"
+        peaks_call = next(
+            tool_call
+            for tool_call in plan["workflow"]["tool_calls"]
+            if tool_call["tool"] == "macs2"
+        )
+        peaks_call["inputs"]["control_bam"] = "control_bam"
+
+        workflow_ir = resolve_tool_plan(
+            plan,
+            chipseq_tool_contract_recipe_catalog(),
+            self.tool_catalog,
+        )
+        report = analyze_workflow_ir(workflow_ir)
+        wdl = render_wdl(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertIn("File? control_bam", wdl)
+        self.assertIn("control_bam = control_bam", wdl)
+        self.assertIn("-c ~{control_bam}", wdl)
 
     def test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl(self):
         alternatives = [
