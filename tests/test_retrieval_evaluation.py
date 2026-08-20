@@ -130,6 +130,8 @@ class RetrievalEvaluationTests(unittest.TestCase):
         for metric in result["metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
+        self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
+        self.assertEqual(result["metrics"]["planner_context_role_coverage"], 1.0)
 
     def test_computes_supported_metrics_and_tracks_unsupported_matches(self):
         queries = [

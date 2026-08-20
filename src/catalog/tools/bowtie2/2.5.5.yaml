@@ -1,0 +1,67 @@
+id: bowtie2
+version: "2.5.5"
+aliases:
+  - Bowtie 2
+  - ChIP-seq alignment
+  - paired-end read alignment
+  - short-read genome alignment
+description: Align paired-end ChIP-seq reads to a prebuilt Bowtie 2 genome index.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  r1:
+    type: File
+    required: true
+    description: First cleaned paired-end FASTQ file.
+  r2:
+    type: File
+    required: true
+    description: Second cleaned paired-end FASTQ file.
+  index_archive:
+    type: File
+    required: true
+    description: Gzip-compressed tar archive containing a Bowtie 2 bt2 or bt2l genome index.
+
+params:
+  threads:
+    type: Int
+    default: 8
+    min: 1
+    description: Number of Bowtie 2 alignment threads.
+
+outputs:
+  aligned_sam:
+    type: File
+    value: '"aligned.sam"'
+    description: Paired-end alignments in SAM format.
+  alignment_log:
+    type: File
+    value: '"bowtie2.log"'
+    description: Bowtie 2 alignment summary written to standard error.
+    tags:
+      - multiqc_input
+
+command_template: |
+  set -euo pipefail;
+  index_path="~{index_archive}";
+  mkdir -p bowtie2_index_input;
+  tar -xzf "$index_path" -C bowtie2_index_input;
+  index_file="$(find bowtie2_index_input -type f \( -name '*.1.bt2' -o -name '*.1.bt2l' \) ! -name '*.rev.1.bt2' ! -name '*.rev.1.bt2l' -print -quit)";
+  [ -n "$index_file" ] || { echo "Bowtie 2 index archive does not contain a .1.bt2 or .1.bt2l file" >&2; exit 1; };
+  index_prefix="${index_file%.1.bt2}";
+  index_prefix="${index_prefix%.1.bt2l}";
+  bowtie2
+  -x "$index_prefix"
+  -1 ~{r1}
+  -2 ~{r2}
+  -p ~{threads}
+  --very-sensitive
+  -S aligned.sam
+  2> bowtie2.log
+
+runtime:
+  docker: quay.io/biocontainers/bowtie2:2.5.5--ha27dd3b_0
+  cpu: 8
+  memory: 16G

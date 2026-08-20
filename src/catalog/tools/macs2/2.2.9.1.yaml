@@ -1,0 +1,71 @@
+id: macs2
+version: "2.2.9.1"
+aliases:
+  - MACS2
+  - ChIP-seq peak calling
+  - transcription factor binding peaks
+  - enriched genomic regions
+description: Call narrow ChIP-seq peaks from paired-end treatment and optional control BAM files.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  treatment_bam:
+    type: File
+    required: true
+    description: Coordinate-sorted paired-end ChIP-seq treatment BAM.
+  control_bam:
+    type: File
+    required: false
+    description: Optional coordinate-sorted paired-end input or control BAM.
+
+params:
+  genome_size:
+    type: String
+    default: hs
+    description: Effective genome size accepted by MACS2, such as hs, mm, or a numeric value.
+  qvalue:
+    type: Float
+    default: 0.05
+    min: 0.0
+    max: 1.0
+    description: False-discovery-rate cutoff used to call significant peaks.
+
+outputs:
+  narrow_peaks:
+    type: File
+    value: '"macs2_output/chipseq_peaks.narrowPeak"'
+    description: NarrowPeak table containing enriched genomic regions.
+  summits:
+    type: File
+    value: '"macs2_output/chipseq_summits.bed"'
+    description: BED file containing called peak summit positions.
+  peak_table:
+    type: File
+    value: '"macs2_output/chipseq_peaks.xls"'
+    description: Tabular MACS2 peak report.
+    tags:
+      - multiqc_input
+  callpeak_log:
+    type: File
+    value: '"macs2.log"'
+    description: MACS2 callpeak diagnostic log.
+
+command_template: |
+  mkdir -p macs2_output && macs2 callpeak
+  -t ~{treatment_bam}
+  {% if control_bam %}-c ~{control_bam}{% endif %}
+  -f BAMPE
+  -g ~{genome_size}
+  -q ~{qvalue}
+  --keep-dup auto
+  --call-summits
+  -n chipseq
+  --outdir macs2_output
+  2> macs2.log
+
+runtime:
+  docker: quay.io/biocontainers/macs2:2.2.9.1--py310h1fe012e_5
+  cpu: 2
+  memory: 8G
