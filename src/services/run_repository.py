@@ -551,7 +551,11 @@ class RunRepository:
         return RunSnapshotRecord(
             run=run,
             artifacts=_row_to_artifacts(artifact_row, artifact_records),
-            diagnostics=_row_to_diagnostics(diagnostic_row, check_performed=run.check_performed),
+            diagnostics=_row_to_diagnostics(
+                diagnostic_row,
+                artifact_records,
+                check_performed=run.check_performed,
+            ),
         )
 
     def ensure_schema(self) -> None:
@@ -1027,7 +1031,18 @@ def _artifact_record_content_or_legacy(
     return legacy_content
 
 
-def _row_to_diagnostics(row: sqlite3.Row | None, *, check_performed: bool) -> DiagnosticReport:
+def _row_to_diagnostics(
+    row: sqlite3.Row | None,
+    artifact_records: list[RunArtifactRecord],
+    *,
+    check_performed: bool,
+) -> DiagnosticReport:
+    diagnostics_artifact = next(
+        (record for record in artifact_records if record.name == "diagnostics"),
+        None,
+    )
+    if diagnostics_artifact is not None and isinstance(diagnostics_artifact.content, dict):
+        return DiagnosticReport.model_validate(diagnostics_artifact.content)
     if row is None:
         return DiagnosticReport(check_performed=check_performed)
     return DiagnosticReport(

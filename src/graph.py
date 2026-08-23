@@ -74,8 +74,12 @@ def _missing_local_validator(state: WorkflowState) -> bool:
     return VALIDATOR_MISSING_MARKER in state.get("validation_message", "")
 
 
-def build_compiler_graph(*, reviewer_node: ReviewerNode | None = None):
-    """Build the compiler graph with an explicitly injected Reviewer node."""
+def build_compiler_graph(
+    *,
+    reviewer_node: ReviewerNode | None = None,
+    check: bool = True,
+):
+    """Build the compiler graph with explicit Reviewer and Checker behavior."""
     resolved_reviewer_node = (
         reviewer_node
         if reviewer_node is not None
@@ -92,7 +96,7 @@ def build_compiler_graph(*, reviewer_node: ReviewerNode | None = None):
     builder.add_edge(START, "ir_normalizer")
     builder.add_conditional_edges("ir_normalizer", route_after_ir_normalizer)
     builder.add_conditional_edges("analyzer", route_after_analyzer)
-    builder.add_edge("renderer", "checker")
+    builder.add_edge("renderer", "checker" if check else END)
     builder.add_conditional_edges("checker", route_after_checker)
     builder.add_conditional_edges("repairer", route_after_repairer)
     builder.add_conditional_edges("reviewer_repair", route_after_reviewer)

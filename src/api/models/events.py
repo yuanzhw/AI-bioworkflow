@@ -15,6 +15,8 @@ class RunEventType(StrEnum):
     NODE_COMPLETED = "node.completed"
     NODE_FAILED = "node.failed"
     ARTIFACT_UPDATED = "artifact.updated"
+    REPAIR_PROPOSED = "repair.proposed"
+    REPAIR_REJECTED = "repair.rejected"
     REPAIR_APPLIED = "repair.applied"
     VALIDATION_COMPLETED = "validation.completed"
     RUN_COMPLETED = "run.completed"

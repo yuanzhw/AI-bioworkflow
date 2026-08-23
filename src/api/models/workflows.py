@@ -92,7 +92,7 @@ class WorkflowArtifacts(BaseModel):
 
 
 class DiagnosticReport(BaseModel):
-    """Analyzer, repairer, and checker diagnostics for one compile/run result."""
+    """Analyzer, repairer, Reviewer, and checker diagnostics for one run."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,6 +103,11 @@ class DiagnosticReport(BaseModel):
     is_valid: bool = False
     succeeded: bool = False
     check_performed: bool = True
+    reviewer_attempt_count: int = Field(default=0, ge=0)
+    reviewer_repair_status: str | None = None
+    reviewer_rejection_reason: str | None = None
+    reviewer_diagnostics: list[str] = Field(default_factory=list)
+    reviewer_patch_applied: bool = False
 
 
 class RunDiagnosticSummary(BaseModel):
@@ -173,6 +178,11 @@ class CompilationResultResponse(BaseModel):
                 is_valid=result.is_valid,
                 succeeded=result.succeeded,
                 check_performed=result.check_performed,
+                reviewer_attempt_count=result.reviewer_attempt_count,
+                reviewer_repair_status=result.reviewer_repair_status,
+                reviewer_rejection_reason=result.reviewer_rejection_reason,
+                reviewer_diagnostics=result.reviewer_diagnostics,
+                reviewer_patch_applied=result.reviewer_patch_applied,
             ),
             planner_prompt=result.planner_prompt,
             planner_raw_response=result.planner_raw_response,

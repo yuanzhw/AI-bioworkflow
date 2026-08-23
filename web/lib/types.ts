@@ -173,6 +173,11 @@ export type DiagnosticReport = {
   is_valid: boolean;
   succeeded: boolean;
   check_performed: boolean;
+  reviewer_attempt_count: number;
+  reviewer_repair_status: string | null;
+  reviewer_rejection_reason: string | null;
+  reviewer_diagnostics: string[];
+  reviewer_patch_applied: boolean;
 };
 
 export type WorkflowRunSnapshotResponse = {
@@ -194,6 +199,8 @@ export type RunEventType =
   | "node.completed"
   | "node.failed"
   | "artifact.updated"
+  | "repair.proposed"
+  | "repair.rejected"
   | "repair.applied"
   | "validation.completed"
   | "run.completed";

@@ -259,9 +259,8 @@ artifacts，避免前端和 API 消费方解析文本 summary。
 - 已应用 patch 重新进入 Analyzer、Renderer 和 Checker。
 - Checker 缺少本地 WOMtool/miniwdl 时直接结束，不把环境缺失当作可修复的 IR
   failure，也不调用 Reviewer。
-- P2.4 的上述行为当前只覆盖 `compiler_graph`。带 `event_callback` 的
-  `compile_structured_workflow` 服务路径仍使用 deterministic-only 编译循环；该路径的
-  Reviewer routing、events 与 artifacts 统一留到 P2.5 接入。
+- `compile_structured_workflow` 的直接调用与带 `event_callback` 的服务调用均使用同一
+  Compiler Graph routing；事件回调不再切换到独立的 deterministic-only 编译循环。
 
 ### P2.5 Run Service 与 API Observability
 
@@ -276,6 +275,25 @@ artifacts，避免前端和 API 消费方解析文本 summary。
 - Reviewer 尝试后 run snapshot 包含 Reviewer artifacts。
 - SSE/history replay 中 `workflow_ir` update 早于 `repair.applied`。
 - Reviewer 失败时，run completion 前仍写入 diagnostics。
+
+当前实现：
+
+- 事件化服务路径使用 LangGraph `tasks` stream 观察真实 Compiler Graph 节点执行，
+  直接调用与事件化调用共享 Analyzer、Checker、deterministic repairer 和 Reviewer
+  routing。
+- `reviewer_repair` 记录 `node.started`，并按结果记录 `node.completed` 或
+  `node.failed`；parsed patch 分别记录 `repair.proposed`、`repair.rejected` 或
+  `repair.applied`。
+- 脱敏后的 `reviewer_repair_request` 和 `reviewer_ir_patch` 通过通用 named artifact
+  records 持久化，不增加 Reviewer 专用数据库列；raw provider output 不进入 event、
+  artifact 或 diagnostic。
+- patch 应用后的 `workflow_ir` artifact 先于 `repair.applied` 写入，SSE 实时事件与
+  history replay 使用相同的持久化事件序列。
+- 最终 `diagnostics` artifact 保存 Reviewer attempt count、最终状态、脱敏 rejection
+  reason、diagnostics 和 patch applied 状态；snapshot 优先从该通用 artifact 恢复完整
+  Reviewer 字段，并兼容旧版固定 diagnostics 列。
+- Run Service 支持显式注入已启用的 Reviewer node；默认未注入时仍使用禁用节点，
+  不会让结构化编译自动依赖 API key。
 
 ### P2.6 文档与验收
 
@@ -317,17 +335,17 @@ Windows PowerShell：
 
 ## 验收清单
 
-- [ ] Deterministic repairer 仍然是第一层修复机制。
-- [ ] Reviewer 只在 Analyzer 或 Checker 失败，且没有安全 deterministic repair 时触发。
-- [ ] Reviewer 输出先经过 schema validation，再经过 patch policy validation。
-- [ ] Patch policy 会拒绝 WDL、Catalog、runtime image、command 和 resource sizing
+- [x] Deterministic repairer 仍然是第一层修复机制。
+- [x] Reviewer 只在 Analyzer 或 Checker 失败，且没有安全 deterministic repair 时触发。
+- [x] Reviewer 输出先经过 schema validation，再经过 patch policy validation。
+- [x] Patch policy 会拒绝 WDL、Catalog、runtime image、command 和 resource sizing
   修改。
-- [ ] 已接受 patch 只应用到 Workflow IR，并重新进入 Analyzer、Renderer 和 Checker。
-- [ ] 修复次数有硬上限，不能无限循环。
-- [ ] 未配置 Reviewer 时，结构化编译路径仍可在没有 API key 的情况下运行。
-- [ ] Run history 通过 named artifacts 和 events 暴露 Reviewer 尝试。
-- [ ] 最终 diagnostics 能说明成功、拒绝、次数耗尽或 model error。
-- [ ] 测试覆盖成功、拒绝、no-op、次数耗尽和 Reviewer 不可用路径。
+- [x] 已接受 patch 只应用到 Workflow IR，并重新进入 Analyzer、Renderer 和 Checker。
+- [x] 修复次数有硬上限，不能无限循环。
+- [x] 未配置 Reviewer 时，结构化编译路径仍可在没有 API key 的情况下运行。
+- [x] Run history 通过 named artifacts 和 events 暴露 Reviewer 尝试。
+- [x] 最终 diagnostics 能说明成功、拒绝、次数耗尽或 model error。
+- [x] 测试覆盖成功、拒绝、no-op、次数耗尽和 Reviewer 不可用路径。
 
 ## 已确认的 P2.1 决策
 

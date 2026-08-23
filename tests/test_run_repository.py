@@ -54,6 +54,10 @@ class RunRepositoryTests(unittest.TestCase):
                     validation_message="WDL syntax validation skipped (--no-check).",
                     succeeded=True,
                     check_performed=False,
+                    reviewer_attempt_count=1,
+                    reviewer_repair_status="patch_proposed",
+                    reviewer_diagnostics=["Reviewer patch was accepted."],
+                    reviewer_patch_applied=True,
                 ),
             )
             repository.update_status("run_001", RunStatus.SUCCEEDED)
@@ -72,6 +76,16 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(manifest["diagnostics"].content_type, "application/json")
             self.assertTrue(snapshot.diagnostics.succeeded)
             self.assertFalse(snapshot.diagnostics.check_performed)
+            self.assertEqual(snapshot.diagnostics.reviewer_attempt_count, 1)
+            self.assertEqual(
+                snapshot.diagnostics.reviewer_repair_status,
+                "patch_proposed",
+            )
+            self.assertEqual(
+                snapshot.diagnostics.reviewer_diagnostics,
+                ["Reviewer patch was accepted."],
+            )
+            self.assertTrue(snapshot.diagnostics.reviewer_patch_applied)
 
             events = repository.list_events("run_001")
             self.assertEqual([event.sequence for event in events], [1, 2])
@@ -84,6 +98,10 @@ class RunRepositoryTests(unittest.TestCase):
             )
             wdl_record = next(record for record in artifact_records if record.name == "wdl")
             self.assertIn("workflow Demo", wdl_record.content)
+            diagnostics_record = next(
+                record for record in artifact_records if record.name == "diagnostics"
+            )
+            self.assertEqual(diagnostics_record.content["reviewer_attempt_count"], 1)
 
     def test_has_event_type_checks_event_existence(self):
         with tempfile.TemporaryDirectory() as temp_dir:

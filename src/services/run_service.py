@@ -23,6 +23,7 @@ from src.api.models import (
     WorkflowRunSnapshotResponse,
 )
 from src.nl_planner import DEFAULT_PLANNER_MODEL, NaturalLanguagePlanningError
+from src.nodes.reviewer_repair import ReviewerNode
 from src.services import workflow_service
 from src.services.run_repository import JSON_CONTENT_TYPE, TEXT_CONTENT_TYPE
 from src.services.run_repository import RunRepository
@@ -35,17 +36,38 @@ DEFAULT_SSE_POLL_INTERVAL_SECONDS = 0.25
 REQUEST_SUMMARY_MAX_LENGTH = 160
 PLANNING_NODES = {"catalog_retriever", "planner"}
 ORCHESTRATION_NODES = {"compiler_graph"}
-COMPILER_NODES = {"compiler", "ir_normalizer", "analyzer", "repairer", "renderer", "checker"}
+COMPILER_NODES = {
+    "compiler",
+    "ir_normalizer",
+    "analyzer",
+    "repairer",
+    "reviewer_repair",
+    "renderer",
+    "checker",
+}
 DIAGNOSTIC_NODES = {"diagnostics"}
-JSON_ARTIFACTS = {"catalog_retrieval", "diagnostics", "plan", "workflow_ir"}
+JSON_ARTIFACTS = {
+    "catalog_retrieval",
+    "diagnostics",
+    "plan",
+    "reviewer_ir_patch",
+    "reviewer_repair_request",
+    "workflow_ir",
+}
 TEXT_ARTIFACTS = {"wdl"}
 
 
 class RunService:
     """Create, execute, and read persistent workflow runs."""
 
-    def __init__(self, repository: RunRepository | None = None):
+    def __init__(
+        self,
+        repository: RunRepository | None = None,
+        *,
+        reviewer_node: ReviewerNode | None = None,
+    ):
         self.repository = repository or RunRepository()
+        self.reviewer_node = reviewer_node
 
     def create_natural_language_run(self, request: NaturalLanguageRunRequest) -> RunAcceptedResponse:
         run_id = _new_run_id()
@@ -102,6 +124,7 @@ class RunService:
                 model=planner_model,
                 check=request.check,
                 event_callback=self._workflow_event_callback(run_id),
+                reviewer_node=self.reviewer_node,
             )
         except NaturalLanguagePlanningError as exc:
             self._append_failed_event_if_missing(
@@ -131,6 +154,7 @@ class RunService:
                 request.payload,
                 check=request.check,
                 event_callback=self._workflow_event_callback(run_id),
+                reviewer_node=self.reviewer_node,
             )
         except Exception as exc:
             self._append_compiler_failed_event(run_id, exc)
@@ -256,6 +280,11 @@ class RunService:
             is_valid=result.is_valid,
             succeeded=result.succeeded,
             check_performed=result.check_performed,
+            reviewer_attempt_count=result.reviewer_attempt_count,
+            reviewer_repair_status=result.reviewer_repair_status,
+            reviewer_rejection_reason=result.reviewer_rejection_reason,
+            reviewer_diagnostics=result.reviewer_diagnostics,
+            reviewer_patch_applied=result.reviewer_patch_applied,
         )
         self.repository.save_diagnostics(run_id, diagnostics)
         final_status = RunStatus.SUCCEEDED if result.succeeded else RunStatus.FAILED
@@ -321,6 +350,9 @@ class RunService:
                     "check_performed": diagnostics.check_performed,
                     "is_valid": diagnostics.is_valid,
                     "succeeded": diagnostics.succeeded,
+                    "reviewer_attempt_count": diagnostics.reviewer_attempt_count,
+                    "reviewer_repair_status": diagnostics.reviewer_repair_status,
+                    "reviewer_patch_applied": diagnostics.reviewer_patch_applied,
                 },
             ),
         )
@@ -500,6 +532,8 @@ def _event_status(event_type: str, payload: dict) -> str:
         RunEventType.NODE_COMPLETED.value: "completed",
         RunEventType.NODE_FAILED.value: RunStatus.FAILED.value,
         RunEventType.ARTIFACT_UPDATED.value: "updated",
+        RunEventType.REPAIR_PROPOSED.value: "proposed",
+        RunEventType.REPAIR_REJECTED.value: "rejected",
         RunEventType.REPAIR_APPLIED.value: "applied",
         RunEventType.VALIDATION_COMPLETED.value: "completed",
         RunEventType.RUN_COMPLETED.value: "completed",

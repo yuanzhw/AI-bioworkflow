@@ -1,11 +1,10 @@
 """Workflow planning and compilation service entry points."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Mapping, cast
 
 from src.catalog.loader import ToolCatalog
-from src.graph import MAX_REPAIR_ATTEMPTS, compiler_graph
-from src.nodes.checker import checker_node
+from src.graph import build_compiler_graph
 from src.nl_planner import (
     DEFAULT_PLANNER_MODEL,
     NaturalLanguagePlanningError,
@@ -14,17 +13,14 @@ from src.nl_planner import (
     PlannerLlm,
     PlannerSchemaError,
 )
-from src.nodes.analyzer import analyzer_node
-from src.nodes.ir_normalizer import ir_normalizer_node
-from src.nodes.renderer import renderer_node
-from src.nodes.repairer import repairer_node
+from src.nodes.reviewer_repair import ReviewerNode
 from src.orchestration.graph import build_orchestration_graph
 from src.orchestration.nodes.compiler import make_compile_planned_workflow_node
 from src.orchestration.nodes.planner import make_natural_language_planner_node
 from src.orchestration.state import OrchestrationState, build_initial_orchestration_state
 from src.recipes.loader import RecipeCatalog
+from src.reviewer_repair import ReviewerRepairStatus
 from src.state import WorkflowState
-from src.tools.validator import VALIDATOR_MISSING_MARKER
 
 
 WorkflowEventState = Mapping[str, Any] | None
@@ -50,6 +46,11 @@ class WorkflowCompilationResult:
     succeeded: bool
     check_performed: bool
     state: WorkflowState
+    reviewer_attempt_count: int = 0
+    reviewer_repair_status: str | None = None
+    reviewer_rejection_reason: str | None = None
+    reviewer_diagnostics: list[str] = field(default_factory=list)
+    reviewer_patch_applied: bool = False
     catalog_retrieval: dict[str, Any] | None = None
     planner_prompt: str | None = None
     planner_raw_response: str | None = None
@@ -67,6 +68,11 @@ class WorkflowCompilationResult:
             "is_valid": self.is_valid,
             "succeeded": self.succeeded,
             "check_performed": self.check_performed,
+            "reviewer_attempt_count": self.reviewer_attempt_count,
+            "reviewer_repair_status": self.reviewer_repair_status,
+            "reviewer_rejection_reason": self.reviewer_rejection_reason,
+            "reviewer_diagnostics": self.reviewer_diagnostics,
+            "reviewer_patch_applied": self.reviewer_patch_applied,
             "planner_prompt": self.planner_prompt,
             "planner_raw_response": self.planner_raw_response,
         }
@@ -76,9 +82,16 @@ def compile_structured_workflow(
     parsed_json: dict[str, Any],
     check: bool = True,
     event_callback: CompilerEventCallback | None = None,
+    *,
+    reviewer_node: ReviewerNode | None = None,
 ) -> WorkflowCompilationResult:
     """Compile a Recipe Tool Plan or Workflow IR without natural-language planning."""
-    state = _run_compiler(parsed_json, check=check, event_callback=event_callback)
+    state = _run_compiler(
+        parsed_json,
+        check=check,
+        event_callback=event_callback,
+        reviewer_node=reviewer_node,
+    )
     plan = parsed_json if _is_recipe_tool_plan(parsed_json) else None
     return _result_from_state(state, plan=plan, check=check)
 
@@ -92,6 +105,7 @@ def plan_and_compile_workflow(
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
     event_callback: WorkflowEventCallback | None = None,
+    reviewer_node: ReviewerNode | None = None,
 ) -> WorkflowCompilationResult:
     """Plan from natural language through the orchestration graph, then compile."""
     planner_node = make_natural_language_planner_node(
@@ -101,7 +115,7 @@ def plan_and_compile_workflow(
         event_callback=event_callback,
     )
     compiler_node = make_compile_planned_workflow_node(
-        compiler=_compiler_with_callback(event_callback),
+        compiler=_compiler_with_callback(event_callback, reviewer_node),
         event_callback=event_callback,
     )
     graph = build_orchestration_graph(planner_node=planner_node, compiler_node=compiler_node)
@@ -132,8 +146,9 @@ def plan_and_compile_workflow(
 
 def _compiler_with_callback(
     event_callback: WorkflowEventCallback | None,
+    reviewer_node: ReviewerNode | None,
 ) -> Callable[[dict[str, Any], bool], WorkflowCompilationResult] | None:
-    if event_callback is None:
+    if event_callback is None and reviewer_node is None:
         return None
 
     def compile_with_events(parsed_json: dict[str, Any], check: bool) -> WorkflowCompilationResult:
@@ -141,6 +156,7 @@ def _compiler_with_callback(
             parsed_json,
             check=check,
             event_callback=event_callback,
+            reviewer_node=reviewer_node,
         )
 
     return compile_with_events
@@ -184,63 +200,406 @@ def _run_compiler(
     parsed_json: dict[str, Any],
     check: bool = True,
     event_callback: CompilerEventCallback | None = None,
+    reviewer_node: ReviewerNode | None = None,
 ) -> WorkflowState:
     state = build_initial_state(parsed_json)
-    if check and event_callback is None:
-        return cast(WorkflowState, compiler_graph.invoke(state))
+    graph = build_compiler_graph(reviewer_node=reviewer_node, check=check)
+    if event_callback is None:
+        state = cast(WorkflowState, graph.invoke(state))
+    else:
+        _run_compiler_graph_with_events(
+            graph,
+            state,
+            check=check,
+            event_callback=event_callback,
+        )
 
-    _emit_compiler_event(event_callback, "node.started", "ir_normalizer", "IR normalizer started.", state)
-    _merge_state(state, ir_normalizer_node(state))
-    if state["analysis_errors"]:
+    if not check and state["current_wdl"]:
+        state["validation_message"] = "WDL syntax validation skipped (--no-check)."
+        _emit_compiler_event(
+            event_callback,
+            "validation.completed",
+            "checker",
+            state["validation_message"],
+            state,
+            {"is_valid": state["is_valid"], "check_performed": False},
+        )
+    return state
+
+
+def _run_compiler_graph_with_events(
+    graph: Any,
+    state: WorkflowState,
+    *,
+    check: bool,
+    event_callback: CompilerEventCallback,
+) -> None:
+    active_tasks: dict[str, tuple[str, int]] = {}
+    try:
+        for task in graph.stream(state, stream_mode="tasks"):
+            if not isinstance(task, Mapping):
+                continue
+            task_id = str(task.get("id") or task.get("name") or "compiler-node")
+            node = task.get("name")
+            if not isinstance(node, str):
+                continue
+
+            if "input" in task:
+                active_tasks[task_id] = (
+                    node,
+                    state.get("reviewer_attempt_count", 0),
+                )
+                _emit_compiler_event(
+                    event_callback,
+                    "node.started",
+                    node,
+                    _node_started_summary(node),
+                    state,
+                )
+                continue
+
+            active_node, previous_reviewer_attempt_count = active_tasks.pop(
+                task_id,
+                (node, state.get("reviewer_attempt_count", 0)),
+            )
+            error = task.get("error")
+            if error is not None:
+                _emit_compiler_event(
+                    event_callback,
+                    "node.failed",
+                    active_node,
+                    f"{_node_label(active_node)} failed.",
+                    state,
+                    _task_error_payload(error),
+                )
+                if isinstance(error, BaseException):
+                    raise error
+                raise RuntimeError(f"{_node_label(active_node)} failed: {error}")
+
+            update = task.get("result")
+            if isinstance(update, Mapping):
+                _merge_state(state, update)
+            _emit_node_result_events(
+                event_callback,
+                active_node,
+                state,
+                check=check,
+                previous_reviewer_attempt_count=previous_reviewer_attempt_count,
+            )
+    except Exception as exc:
+        if active_tasks:
+            active_node, _ = list(active_tasks.values())[-1]
+            _emit_compiler_event(
+                event_callback,
+                "node.failed",
+                active_node,
+                f"{_node_label(active_node)} failed.",
+                state,
+                _task_error_payload(exc),
+            )
+        raise
+
+
+def _emit_node_result_events(
+    event_callback: CompilerEventCallback,
+    node: str,
+    state: WorkflowState,
+    *,
+    check: bool,
+    previous_reviewer_attempt_count: int,
+) -> None:
+    if node == "ir_normalizer":
+        if state["analysis_errors"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.failed",
+                node,
+                "IR normalizer failed.",
+                state,
+                {"analysis_errors": state["analysis_errors"]},
+            )
+            return
+        _emit_compiler_event(
+            event_callback,
+            "node.completed",
+            node,
+            "IR normalizer completed.",
+            state,
+        )
+        _emit_artifact_updated(
+            event_callback,
+            node,
+            "Workflow IR artifact updated.",
+            state,
+            "workflow_ir",
+        )
+        return
+
+    if node == "analyzer":
+        if state["analysis_errors"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.failed",
+                node,
+                "Analyzer found Workflow IR errors.",
+                state,
+                {"analysis_errors": state["analysis_errors"]},
+            )
+            return
+        _emit_compiler_event(
+            event_callback,
+            "node.completed",
+            node,
+            "Analyzer completed.",
+            state,
+        )
+        return
+
+    if node == "renderer":
+        _emit_compiler_event(
+            event_callback,
+            "node.completed",
+            node,
+            "Renderer completed.",
+            state,
+        )
+        _emit_artifact_updated(
+            event_callback,
+            node,
+            "WDL artifact updated.",
+            state,
+            "wdl",
+        )
+        return
+
+    if node == "checker":
+        _emit_compiler_event(
+            event_callback,
+            "validation.completed",
+            node,
+            "WDL validation completed.",
+            state,
+            {
+                "is_valid": state["is_valid"],
+                "validation_message": state["validation_message"],
+                "check_performed": check,
+            },
+        )
+        return
+
+    if node == "repairer":
+        if state["repairer_failed"]:
+            _emit_compiler_event(
+                event_callback,
+                "node.failed",
+                node,
+                "Repairer failed.",
+                state,
+                {"repairer_failed": True},
+            )
+            return
+        if state["repair_actions"]:
+            _emit_workflow_ir_artifact_updated(event_callback, state, node=node)
+            _emit_compiler_event(
+                event_callback,
+                "repair.applied",
+                node,
+                "Workflow IR repair applied.",
+                state,
+                {"repair_actions": state["repair_actions"]},
+            )
+            summary = "Repairer completed."
+        else:
+            summary = "Repairer found no safe deterministic fix."
+        _emit_compiler_event(
+            event_callback,
+            "node.completed",
+            node,
+            summary,
+            state,
+        )
+        return
+
+    if node == "reviewer_repair":
+        _emit_reviewer_result_events(
+            event_callback,
+            state,
+            previous_attempt_count=previous_reviewer_attempt_count,
+        )
+
+
+def _emit_reviewer_result_events(
+    event_callback: CompilerEventCallback,
+    state: WorkflowState,
+    *,
+    previous_attempt_count: int,
+) -> None:
+    status = state.get("reviewer_repair_status")
+    current_attempt_count = state.get("reviewer_attempt_count", 0)
+    attempted = current_attempt_count > previous_attempt_count
+    payload = _reviewer_event_payload(state)
+
+    if attempted and state.get("reviewer_repair_request") is not None:
+        _emit_artifact_updated(
+            event_callback,
+            "reviewer_repair",
+            "Reviewer repair request artifact updated.",
+            state,
+            "reviewer_repair_request",
+        )
+
+    current_patch = (
+        attempted
+        and state.get("reviewer_ir_patch") is not None
+        and status
+        in {
+            ReviewerRepairStatus.PATCH_PROPOSED.value,
+            ReviewerRepairStatus.POLICY_REJECTED.value,
+            ReviewerRepairStatus.INVALID_REQUEST.value,
+        }
+    )
+    if current_patch:
+        _emit_artifact_updated(
+            event_callback,
+            "reviewer_repair",
+            "Reviewer IR patch artifact updated.",
+            state,
+            "reviewer_ir_patch",
+        )
+        _emit_compiler_event(
+            event_callback,
+            "repair.proposed",
+            "reviewer_repair",
+            "Reviewer proposed a Workflow IR patch.",
+            state,
+            {
+                **payload,
+                "action_count": len(
+                    (state.get("reviewer_ir_patch") or {}).get("actions", [])
+                ),
+            },
+        )
+
+    if state.get("reviewer_patch_applied"):
+        _emit_workflow_ir_artifact_updated(
+            event_callback,
+            state,
+            node="reviewer_repair",
+        )
+        _emit_compiler_event(
+            event_callback,
+            "repair.applied",
+            "reviewer_repair",
+            "Reviewer patch applied to Workflow IR candidate.",
+            state,
+            payload,
+        )
+        _emit_compiler_event(
+            event_callback,
+            "node.completed",
+            "reviewer_repair",
+            "Reviewer repair completed.",
+            state,
+            payload,
+        )
+        return
+
+    if current_patch and status in {
+        ReviewerRepairStatus.POLICY_REJECTED.value,
+        ReviewerRepairStatus.INVALID_REQUEST.value,
+    }:
+        _emit_compiler_event(
+            event_callback,
+            "repair.rejected",
+            "reviewer_repair",
+            "Reviewer patch was rejected.",
+            state,
+            payload,
+        )
+        _emit_compiler_event(
+            event_callback,
+            "node.completed",
+            "reviewer_repair",
+            "Reviewer repair completed with a rejected patch.",
+            state,
+            payload,
+        )
+        return
+
+    if status in {
+        ReviewerRepairStatus.INVALID_REQUEST.value,
+        ReviewerRepairStatus.MODEL_ERROR.value,
+    }:
         _emit_compiler_event(
             event_callback,
             "node.failed",
-            "ir_normalizer",
-            "IR normalizer failed.",
+            "reviewer_repair",
+            "Reviewer repair failed.",
             state,
-            {"analysis_errors": state["analysis_errors"]},
+            payload,
         )
-        return state
-    _emit_compiler_event(event_callback, "node.completed", "ir_normalizer", "IR normalizer completed.", state)
+        return
+
+    _emit_compiler_event(
+        event_callback,
+        "node.completed",
+        "reviewer_repair",
+        "Reviewer repair completed without an applicable patch.",
+        state,
+        payload,
+    )
+
+
+def _reviewer_event_payload(state: WorkflowState) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "reviewer_status": state.get("reviewer_repair_status"),
+        "reviewer_attempt_count": state.get("reviewer_attempt_count", 0),
+        "failure_stage": state.get("repair_failure_stage"),
+        "patch_applied": bool(state.get("reviewer_patch_applied")),
+    }
+    rejection_reason = state.get("reviewer_rejection_reason")
+    if rejection_reason:
+        payload["rejection_reason"] = rejection_reason
+    return payload
+
+
+def _node_started_summary(node: str) -> str:
+    return f"{_node_label(node)} started."
+
+
+def _node_label(node: str) -> str:
+    return {
+        "ir_normalizer": "IR normalizer",
+        "analyzer": "Analyzer",
+        "renderer": "Renderer",
+        "checker": "Checker",
+        "repairer": "Repairer",
+        "reviewer_repair": "Reviewer repair",
+    }.get(node, node)
+
+
+def _task_error_payload(error: object) -> dict[str, str]:
+    return {
+        "error_type": error.__class__.__name__,
+        "error": str(error),
+    }
+
+
+def _emit_artifact_updated(
+    event_callback: CompilerEventCallback,
+    node: str,
+    summary: str,
+    state: WorkflowState,
+    artifact: str,
+) -> None:
     _emit_compiler_event(
         event_callback,
         "artifact.updated",
-        "ir_normalizer",
-        "Workflow IR artifact updated.",
+        node,
+        summary,
         state,
-        {"artifact": "workflow_ir"},
+        {"artifact": artifact},
     )
-
-    _analyze_with_repair(state, event_callback=event_callback)
-    if state["analysis_errors"]:
-        return state
-
-    _emit_compiler_event(event_callback, "node.started", "renderer", "Renderer started.", state)
-    _merge_state(state, renderer_node(state))
-    _emit_compiler_event(event_callback, "node.completed", "renderer", "Renderer completed.", state)
-    _emit_compiler_event(
-        event_callback,
-        "artifact.updated",
-        "renderer",
-        "WDL artifact updated.",
-        state,
-        {"artifact": "wdl"},
-    )
-
-    if check:
-        _validate_with_repair(state, event_callback=event_callback)
-        return state
-
-    state["validation_message"] = "WDL syntax validation skipped (--no-check)."
-    _emit_compiler_event(
-        event_callback,
-        "validation.completed",
-        "checker",
-        state["validation_message"],
-        state,
-        {"is_valid": state["is_valid"], "check_performed": False},
-    )
-    return state
 
 
 def workflow_succeeded(state: WorkflowState, check: bool) -> bool:
@@ -271,6 +630,11 @@ def _result_from_state(
         is_valid=state["is_valid"],
         succeeded=workflow_succeeded(state, check=check),
         check_performed=check,
+        reviewer_attempt_count=state["reviewer_attempt_count"],
+        reviewer_repair_status=state["reviewer_repair_status"],
+        reviewer_rejection_reason=state["reviewer_rejection_reason"],
+        reviewer_diagnostics=state["reviewer_diagnostics"],
+        reviewer_patch_applied=state["reviewer_patch_applied"],
         state=state,
         catalog_retrieval=catalog_retrieval,
         planner_prompt=planner_prompt,
@@ -322,138 +686,6 @@ def _event_error_type(event: dict[str, Any] | None) -> str | None:
     return error_type if isinstance(error_type, str) else None
 
 
-def _analyze_with_repair(
-    state: WorkflowState,
-    event_callback: CompilerEventCallback | None = None,
-) -> None:
-    while True:
-        _emit_compiler_event(event_callback, "node.started", "analyzer", "Analyzer started.", state)
-        _merge_state(state, analyzer_node(state))
-        if not state["analysis_errors"]:
-            _emit_compiler_event(event_callback, "node.completed", "analyzer", "Analyzer completed.", state)
-            return
-
-        _emit_compiler_event(
-            event_callback,
-            "node.failed",
-            "analyzer",
-            "Analyzer found Workflow IR errors.",
-            state,
-            {"analysis_errors": state["analysis_errors"]},
-        )
-        if not _can_attempt_repair(state):
-            return
-
-        _emit_compiler_event(event_callback, "node.started", "repairer", "Repairer started.", state)
-        _merge_state(state, repairer_node(state))
-        if state["repairer_failed"]:
-            _emit_compiler_event(
-                event_callback,
-                "node.failed",
-                "repairer",
-                "Repairer failed.",
-                state,
-                {"repairer_failed": True},
-            )
-            return
-        if not state["repair_actions"]:
-            _emit_compiler_event(
-                event_callback,
-                "node.completed",
-                "repairer",
-                "Repairer found no safe deterministic fix.",
-                state,
-            )
-            return
-        _emit_workflow_ir_artifact_updated(event_callback, state)
-        _emit_compiler_event(
-            event_callback,
-            "repair.applied",
-            "repairer",
-            "Workflow IR repair applied.",
-            state,
-            {"repair_actions": state["repair_actions"]},
-        )
-        _emit_compiler_event(event_callback, "node.completed", "repairer", "Repairer completed.", state)
-
-
-def _validate_with_repair(
-    state: WorkflowState,
-    event_callback: CompilerEventCallback | None = None,
-) -> None:
-    while True:
-        _emit_compiler_event(event_callback, "node.started", "checker", "Checker started.", state)
-        _merge_state(state, checker_node(state))
-        _emit_compiler_event(
-            event_callback,
-            "validation.completed",
-            "checker",
-            "WDL validation completed.",
-            state,
-            {
-                "is_valid": state["is_valid"],
-                "validation_message": state["validation_message"],
-                "check_performed": True,
-            },
-        )
-        if state["is_valid"] or _missing_local_validator(state) or not _can_attempt_repair(state):
-            return
-
-        _emit_compiler_event(event_callback, "node.started", "repairer", "Repairer started.", state)
-        _merge_state(state, repairer_node(state))
-        if state["repairer_failed"]:
-            _emit_compiler_event(
-                event_callback,
-                "node.failed",
-                "repairer",
-                "Repairer failed.",
-                state,
-                {"repairer_failed": True},
-            )
-            return
-        if not state["repair_actions"]:
-            _emit_compiler_event(
-                event_callback,
-                "node.completed",
-                "repairer",
-                "Repairer found no safe deterministic fix.",
-                state,
-            )
-            return
-        _emit_workflow_ir_artifact_updated(event_callback, state)
-        _emit_compiler_event(
-            event_callback,
-            "repair.applied",
-            "repairer",
-            "Workflow IR repair applied.",
-            state,
-            {"repair_actions": state["repair_actions"]},
-        )
-        _emit_compiler_event(event_callback, "node.completed", "repairer", "Repairer completed.", state)
-        _analyze_with_repair(state, event_callback=event_callback)
-        if state["analysis_errors"]:
-            return
-        _emit_compiler_event(event_callback, "node.started", "renderer", "Renderer started.", state)
-        _merge_state(state, renderer_node(state))
-        _emit_compiler_event(event_callback, "node.completed", "renderer", "Renderer completed.", state)
-        _emit_compiler_event(
-            event_callback,
-            "artifact.updated",
-            "renderer",
-            "WDL artifact updated.",
-            state,
-            {"artifact": "wdl"},
-        )
-
-
-def _can_attempt_repair(state: WorkflowState) -> bool:
-    return bool(state.get("workflow_ir")) and state.get("repair_count", 0) < MAX_REPAIR_ATTEMPTS
-
-
-def _missing_local_validator(state: WorkflowState) -> bool:
-    return VALIDATOR_MISSING_MARKER in state.get("validation_message", "")
-
-
 def _emit_compiler_event(
     event_callback: CompilerEventCallback | None,
     event_type: str,
@@ -469,11 +701,13 @@ def _emit_compiler_event(
 def _emit_workflow_ir_artifact_updated(
     event_callback: CompilerEventCallback | None,
     state: WorkflowState,
+    *,
+    node: str,
 ) -> None:
     _emit_compiler_event(
         event_callback,
         "artifact.updated",
-        "repairer",
+        node,
         "Workflow IR artifact updated.",
         state,
         {"artifact": "workflow_ir"},
