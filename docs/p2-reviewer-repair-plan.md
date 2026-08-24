@@ -4,6 +4,23 @@
 Compiler Graph。它补充 `DEVELOPMENT.md` 中的路线图摘要，并承接 P1
 Orchestration Graph 的分层边界。
 
+## 完成状态
+
+P2 已于 2026-08-24 完成。Reviewer repair contract、受策略约束的 patch application、
+provider boundary、Analyzer / Checker failure routing，以及 run events、named artifacts
+和 diagnostics 已全部落地。下一工程阶段为 P3 Architect 与 Bioinfo Reviewer 分层。
+
+最终验收在配置 Java 17 与 WOMtool 的 Windows 环境执行：
+
+```text
+Ran 274 tests
+OK (skipped=2)
+```
+
+两项跳过测试均为需要显式启用真实执行环境的可选 e2e 路径。此次收尾不改变
+Workflow IR schema、expression rules 或生成的 WDL，因此无需更新 `docs/workflow-ir.md`
+或增加额外 WDL fixture。
+
 ## 背景与现状
 
 P1 已建立双层图边界：
@@ -296,6 +313,8 @@ artifacts，避免前端和 API 消费方解析文本 summary。
   不会让结构化编译自动依赖 API key。
 
 ### P2.6 文档与验收
+
+状态：已完成。
 
 交付：
 

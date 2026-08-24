@@ -339,6 +339,7 @@ Web 产品化拆解与当前 W6 收口计划详见：
 - [x] 引入 Workflow IR、静态分析器与确定性 WDL Renderer。
 - [x] 接入 Recipe / Tool Catalog 输入到 LangGraph Planner。
 - [x] 闭环修复机制初版：当分析器或校验器发现可确定修复的问题时，优先修复 IR 并重新编译 WDL。
+- [x] 完成 [P2 Reviewer IR 修复闭环](./docs/p2-reviewer-repair-plan.md)：Analyzer / Checker 失败在确定性修复无安全动作后进入有界 Reviewer 分支，结构化 patch 经过 policy 与完整编译链验证，并通过 run events、artifacts 和 diagnostics 回放。
 - [x] Tool Catalog 强制显式声明 `runtime.docker`，作为镜像来源的唯一权威。
 - [x] 支持 `workflow.steps` 与 WDL scatter，RNA-seq DEG recipe 升级为多样本 Salmon -> tximport -> DESeq2 -> MultiQC。
 - [x] 抽取 workflow/catalog application service，供 CLI 与 API 复用。
@@ -352,6 +353,7 @@ Web 产品化拆解与当前 W6 收口计划详见：
 - [x] 完成 W4 工作台：结构化示例 / 自然语言 run 创建、snapshot 轮询、SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态展示。
 - [x] 完成 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)：真实 run 列表、详情回放、Workflow IR DAG、结构状态和失败 run 摘要。
 - [ ] 完成 [W6 部署与作品集打磨](./docs/w6-portfolio-launch-plan.md)：在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航。
+- [ ] 完成 P3 Architect 与 Bioinfo Reviewer 分层：Architect 负责候选分析方案，Bioinfo Reviewer 只读输出科学性 warnings。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
 ## 📄 许可证
