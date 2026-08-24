@@ -59,6 +59,11 @@ const emptyDiagnostics: DiagnosticReport = {
   is_valid: false,
   succeeded: false,
   check_performed: false,
+  reviewer_attempt_count: 0,
+  reviewer_repair_status: null,
+  reviewer_rejection_reason: null,
+  reviewer_diagnostics: [],
+  reviewer_patch_applied: false,
 };
 
 const runModeOptions: Array<{

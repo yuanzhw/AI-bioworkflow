@@ -15,6 +15,8 @@ from src.api.models import (
     WorkflowArtifacts,
 )
 from src.nl_planner import NaturalLanguagePlanningError
+from src.nodes.reviewer_repair import make_reviewer_repair_node
+from src.reviewer_provider import ReviewerProviderError
 from src.services.run_repository import RunRepository
 from src.services.run_service import RunService
 from src.services.workflow_service import compile_structured_workflow
@@ -57,6 +59,70 @@ def repairable_forward_reference_ir() -> dict:
     workflow_ir = load_example("rnaseq_workflow_ir.json")
     workflow_ir["workflow"]["steps"].reverse()
     return workflow_ir
+
+
+def reviewer_repairable_ir() -> dict:
+    workflow_ir = load_example("rnaseq_workflow_ir.json")
+    workflow_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+    return workflow_ir
+
+
+def reviewer_patch_result() -> dict:
+    return {
+        "status": "patch_proposed",
+        "patch": {
+            "summary": "Reconnect the QC input to a declared workflow input.",
+            "actions": [
+                {
+                    "operation": "replace",
+                    "path": "/workflow/steps/0/inputs/r1",
+                    "value": "raw_r1",
+                    "reason": "Use the existing workflow input.",
+                }
+            ],
+            "diagnostic_references": [
+                "references unknown value 'missing_input'"
+            ],
+            "confidence": 0.9,
+        },
+        "diagnostics": ["The replacement uses an existing workflow input."],
+    }
+
+
+def reviewer_policy_rejected_result() -> dict:
+    return {
+        "status": "patch_proposed",
+        "patch": {
+            "summary": "Attempt a forbidden runtime edit.",
+            "actions": [
+                {
+                    "operation": "replace",
+                    "path": "/tasks/fastp/runtime/docker",
+                    "value": "ubuntu:22.04",
+                    "reason": "Reviewer must not change runtime images.",
+                }
+            ],
+        },
+    }
+
+
+class RecordingReviewerProvider:
+    def __init__(self, result):
+        self.result = result
+        self.requests = []
+
+    def repair(self, request):
+        self.requests.append(request)
+        return self.result
+
+
+class RaisingReviewerProvider:
+    def __init__(self):
+        self.requests = []
+
+    def repair(self, request):
+        self.requests.append(request)
+        raise ReviewerProviderError("TOP_SECRET provider failure")
 
 
 class RunServiceTests(unittest.TestCase):
@@ -142,14 +208,237 @@ class RunServiceTests(unittest.TestCase):
             self.assertLess(workflow_ir_update_index, repair_index)
             self.assertIn("Reordered workflow steps", events[repair_index].payload["repair_actions"][0])
 
+    def test_structured_compile_run_persists_reviewer_events_and_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = RecordingReviewerProvider(reviewer_patch_result())
+            service = RunService(
+                RunRepository(Path(temp_dir) / "runs.sqlite3"),
+                reviewer_node=make_reviewer_repair_node(
+                    enabled=True,
+                    provider=provider,
+                ),
+            )
+            request = CompileWorkflowRequest(
+                payload=reviewer_repairable_ir(),
+                check=False,
+            )
+
+            accepted = service.create_structured_compile_run(request)
+            service.execute_structured_compile_run(accepted.run_id, request)
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.status, RunStatus.SUCCEEDED)
+            self.assertEqual(snapshot.diagnostics.reviewer_attempt_count, 1)
+            self.assertEqual(
+                snapshot.diagnostics.reviewer_repair_status,
+                "patch_proposed",
+            )
+            self.assertTrue(snapshot.diagnostics.reviewer_patch_applied)
+            self.assertIn("reviewer_repair_request", snapshot.artifacts.extras)
+            self.assertIn("reviewer_ir_patch", snapshot.artifacts.extras)
+            manifest = {artifact.name for artifact in snapshot.artifacts.manifest}
+            self.assertIn("reviewer_repair_request", manifest)
+            self.assertIn("reviewer_ir_patch", manifest)
+            self.assertEqual(
+                snapshot.artifacts.workflow_ir["workflow"]["steps"][0]["inputs"]["r1"],
+                "raw_r1",
+            )
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            reviewer_events = [
+                event for event in events if event.node == "reviewer_repair"
+            ]
+            self.assertEqual(
+                [event.type for event in reviewer_events],
+                [
+                    RunEventType.NODE_STARTED,
+                    RunEventType.ARTIFACT_UPDATED,
+                    RunEventType.ARTIFACT_UPDATED,
+                    RunEventType.REPAIR_PROPOSED,
+                    RunEventType.ARTIFACT_UPDATED,
+                    RunEventType.REPAIR_APPLIED,
+                    RunEventType.NODE_COMPLETED,
+                ],
+            )
+            proposed_index = next(
+                index
+                for index, event in enumerate(events)
+                if event.type == RunEventType.REPAIR_PROPOSED
+            )
+            workflow_ir_index = next(
+                index
+                for index, event in enumerate(events[proposed_index + 1 :], proposed_index + 1)
+                if event.type == RunEventType.ARTIFACT_UPDATED
+                and event.node == "reviewer_repair"
+                and event.payload.get("artifact") == "workflow_ir"
+            )
+            applied_index = next(
+                index
+                for index, event in enumerate(events)
+                if event.type == RunEventType.REPAIR_APPLIED
+                and event.node == "reviewer_repair"
+            )
+            diagnostics_index = next(
+                index
+                for index, event in enumerate(events)
+                if event.type == RunEventType.ARTIFACT_UPDATED
+                and event.node == "diagnostics"
+            )
+            self.assertLess(workflow_ir_index, applied_index)
+            self.assertLess(applied_index, diagnostics_index)
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+
+            stream = asyncio.run(_collect_async(service.iter_sse_events(accepted.run_id)))
+            self.assertIn("event: repair.proposed", stream)
+            self.assertIn("event: repair.applied", stream)
+
+    def test_structured_compile_run_persists_reviewer_failure_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = RaisingReviewerProvider()
+            service = RunService(
+                RunRepository(Path(temp_dir) / "runs.sqlite3"),
+                reviewer_node=make_reviewer_repair_node(
+                    enabled=True,
+                    provider=provider,
+                ),
+            )
+            request = CompileWorkflowRequest(
+                payload=reviewer_repairable_ir(),
+                check=False,
+            )
+
+            accepted = service.create_structured_compile_run(request)
+            service.execute_structured_compile_run(accepted.run_id, request)
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.status, RunStatus.FAILED)
+            self.assertEqual(snapshot.diagnostics.reviewer_attempt_count, 1)
+            self.assertEqual(
+                snapshot.diagnostics.reviewer_repair_status,
+                "model_error",
+            )
+            self.assertFalse(snapshot.diagnostics.reviewer_patch_applied)
+            self.assertIn("ReviewerProviderError", snapshot.diagnostics.reviewer_diagnostics[0])
+            self.assertIn("reviewer_repair_request", snapshot.artifacts.extras)
+            self.assertNotIn("reviewer_ir_patch", snapshot.artifacts.extras)
+            self.assertNotIn(
+                "TOP_SECRET",
+                json.dumps(snapshot.model_dump(mode="json")),
+            )
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            reviewer_events = [
+                event for event in events if event.node == "reviewer_repair"
+            ]
+            self.assertEqual(
+                [event.type for event in reviewer_events],
+                [
+                    RunEventType.NODE_STARTED,
+                    RunEventType.ARTIFACT_UPDATED,
+                    RunEventType.NODE_FAILED,
+                ],
+            )
+            self.assertNotIn(
+                RunEventType.VALIDATION_COMPLETED,
+                [event.type for event in events],
+            )
+            reviewer_failure_index = events.index(reviewer_events[-1])
+            diagnostics_index = next(
+                index
+                for index, event in enumerate(events)
+                if event.type == RunEventType.ARTIFACT_UPDATED
+                and event.node == "diagnostics"
+            )
+            self.assertLess(reviewer_failure_index, diagnostics_index)
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+
+    def test_structured_compile_run_persists_reviewer_rejection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            provider = RecordingReviewerProvider(reviewer_policy_rejected_result())
+            service = RunService(
+                RunRepository(Path(temp_dir) / "runs.sqlite3"),
+                reviewer_node=make_reviewer_repair_node(
+                    enabled=True,
+                    provider=provider,
+                ),
+            )
+            request = CompileWorkflowRequest(
+                payload=reviewer_repairable_ir(),
+                check=False,
+            )
+
+            accepted = service.create_structured_compile_run(request)
+            service.execute_structured_compile_run(accepted.run_id, request)
+
+            snapshot = service.get_snapshot(accepted.run_id)
+            self.assertIsNotNone(snapshot)
+            assert snapshot is not None
+            self.assertEqual(snapshot.status, RunStatus.FAILED)
+            self.assertEqual(
+                snapshot.diagnostics.reviewer_repair_status,
+                "policy_rejected",
+            )
+            self.assertIn(
+                "forbidden",
+                snapshot.diagnostics.reviewer_rejection_reason or "",
+            )
+            self.assertIn("reviewer_repair_request", snapshot.artifacts.extras)
+            self.assertIn("reviewer_ir_patch", snapshot.artifacts.extras)
+
+            events = service.get_events(accepted.run_id)
+            self.assertIsNotNone(events)
+            assert events is not None
+            reviewer_events = [
+                event for event in events if event.node == "reviewer_repair"
+            ]
+            self.assertEqual(
+                [event.type for event in reviewer_events],
+                [
+                    RunEventType.NODE_STARTED,
+                    RunEventType.ARTIFACT_UPDATED,
+                    RunEventType.ARTIFACT_UPDATED,
+                    RunEventType.REPAIR_PROPOSED,
+                    RunEventType.REPAIR_REJECTED,
+                    RunEventType.NODE_COMPLETED,
+                ],
+            )
+            proposed_event = next(
+                event
+                for event in reviewer_events
+                if event.type == RunEventType.REPAIR_PROPOSED
+            )
+            rejected_event = next(
+                event
+                for event in reviewer_events
+                if event.type == RunEventType.REPAIR_REJECTED
+            )
+            self.assertEqual(proposed_event.payload["status"], "proposed")
+            self.assertEqual(rejected_event.payload["status"], "rejected")
+            self.assertEqual(events[-2].node, "diagnostics")
+            self.assertEqual(events[-1].type, RunEventType.RUN_COMPLETED)
+
     def test_structured_compile_run_default_check_records_validation_event(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             service = RunService(RunRepository(Path(temp_dir) / "runs.sqlite3"))
             request = CompileWorkflowRequest(payload=load_example("rnaseq_deg_recipe_plan.json"))
 
             with patch(
-                "src.services.workflow_service.checker_node",
-                return_value={"is_valid": True, "validation_message": "valid WDL", "error_count": 0},
+                "src.graph.checker_node",
+                return_value={
+                    "is_valid": True,
+                    "validation_message": "valid WDL",
+                    "error_count": 0,
+                    "repair_failure_stage": None,
+                    "messages": [],
+                },
             ):
                 accepted = service.create_structured_compile_run(request)
                 service.execute_structured_compile_run(accepted.run_id, request)
@@ -247,6 +536,7 @@ class RunServiceTests(unittest.TestCase):
             self.assertEqual(plan_and_compile.call_args.args, ("Run RNA-seq DEG.",))
             self.assertEqual(plan_and_compile.call_args.kwargs["check"], False)
             self.assertIn("event_callback", plan_and_compile.call_args.kwargs)
+            self.assertIsNone(plan_and_compile.call_args.kwargs["reviewer_node"])
 
             snapshot = service.get_snapshot(accepted.run_id)
             self.assertIsNotNone(snapshot)

@@ -152,10 +152,11 @@ repairer_node       # 始终先尝试确定性修复
 模型。`repair_failure_stage` 显式区分 Analyzer 与 Checker diagnostics；缺少本地 WDL
 validator 时直接结束，不进入 deterministic 或 Reviewer repair。
 
-上述 Reviewer failure recovery 当前只描述 `compiler_graph` 的 P2.4 路由。为保留
-现有 run event 顺序，`compile_structured_workflow(..., event_callback=...)` 暂时继续使用
-deterministic-only 的服务层编译循环；Reviewer events、artifacts 与该路径的行为统一由
-P2.5 Run Service / API Observability 完成。
+`compile_structured_workflow` 的直接调用和带 `event_callback` 的 Run Service 调用均构建
+同一份 Compiler Graph；事件化路径通过 LangGraph task stream 观察节点执行，不再维护
+独立的 deterministic-only 编译循环。Run Service 可显式注入已启用的 Reviewer node，
+默认仍保持禁用，因此结构化确定性编译不依赖 API key。Reviewer 尝试通过 run events、
+named artifacts 和最终 diagnostics 暴露，且不会把 raw provider output 写入持久化记录。
 
 ## 已完成的容器管理边界
 
@@ -457,7 +458,7 @@ W4/W5 Web 界面已接入真实 run 生命周期：`/workspace?example=rnaseq-de
 }
 ```
 
-请求体 schema 错误仍返回 HTTP 422。Planner、Catalog、Analyzer 或 Checker 阶段失败时，run 本身会进入 `failed` 状态，失败信息写入持久化 diagnostics 和事件流，便于历史页回放。
+请求体 schema 错误仍返回 HTTP 422。Planner、Catalog、Analyzer、Reviewer 或 Checker 阶段失败时，run 本身会进入 `failed` 状态，失败信息写入持久化 diagnostics 和事件流，便于历史页回放。
 
 `GET /api/runs/{run_id}` 返回当前或历史快照：
 
@@ -507,7 +508,12 @@ W4/W5 Web 界面已接入真实 run 生命周期：`/workspace?example=rnaseq-de
     "validation_message": "WDL syntax validation skipped (--no-check).",
     "is_valid": false,
     "succeeded": true,
-    "check_performed": false
+    "check_performed": false,
+    "reviewer_attempt_count": 0,
+    "reviewer_repair_status": null,
+    "reviewer_rejection_reason": null,
+    "reviewer_diagnostics": [],
+    "reviewer_patch_applied": false
   }
 }
 ```
@@ -531,11 +537,19 @@ W4/W5 Web 界面已接入真实 run 生命周期：`/workspace?example=rnaseq-de
 }
 ```
 
-第一版事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、`artifact.updated`、`repair.applied`、`validation.completed` 和 `run.completed`。Run service 会为事件 payload 补充稳定的 observability 字段，例如 `stage`、`status`、`node`、`artifact_name`、`artifact_content_type` 和 `error_type`。这些字段用于前端时间线、失败摘要和历史回放；DAG 状态由 Workflow IR 结构与 unresolved references 派生。事件中不保存 API key、原始模型鉴权信息或其他秘密环境变量。
+事件类型包含：`run.created`、`node.started`、`node.completed`、`node.failed`、
+`artifact.updated`、`repair.proposed`、`repair.rejected`、`repair.applied`、
+`validation.completed` 和 `run.completed`。Run service 会为事件 payload 补充稳定的
+observability 字段，例如 `stage`、`status`、`node`、`artifact_name`、
+`artifact_content_type` 和 `error_type`。Reviewer 事件只保存状态、attempt count、failure
+stage、是否应用和脱敏 rejection reason；完整的脱敏 request 与 parsed patch 分别保存为
+`reviewer_repair_request` 和 `reviewer_ir_patch` named artifacts。DAG 状态由 Workflow IR
+结构与 unresolved references 派生。事件和 artifacts 中不保存 API key、raw provider
+output、原始模型鉴权信息或其他秘密环境变量。
 
 ### 持久化与部署边界
 
-- 本地展示和开发第一版使用 SQLite，保存 run、event、artifact 与 diagnostic 等必要信息，减少环境安装成本。`run_artifacts` 保留 Plan / Workflow IR / WDL 的固定兼容列；`run_artifact_records` 保存按名称索引的通用 artifact manifest 和内容，用于后续 `catalog_retrieval`、planner trace 摘要或 execution result 等新增产物，不再为每个新增 artifact 扩展固定列。
+- 本地展示和开发第一版使用 SQLite，保存 run、event、artifact 与 diagnostic 等必要信息，减少环境安装成本。`run_artifacts` 保留 Plan / Workflow IR / WDL 的固定兼容列；`run_artifact_records` 保存按名称索引的通用 artifact manifest 和内容，当前也承载 Reviewer request、parsed patch 和完整 diagnostics，后续新增产物不再扩展固定列。
 - 公开部署并需要并发或长期保存历史记录时，迁移到 PostgreSQL；持久化 schema 不应绑定到 SQLite 特有行为。
 - Agent 调用与 WDL 生成可以先作为 API 进程内任务运行；真正接入耗时 WDL 执行或容器构建后，再引入任务队列或专门 worker。
 - 前端与 API 可以独立部署，但必须基于同一公开 API contract；仓库仍保留为 monorepo，保证演示迭代效率。
@@ -779,6 +793,10 @@ Candidate ToolSpec
 - Run service 保存 run、events、artifacts、diagnostics，并支持 SSE replay。
 - Planner failure、schema failure、catalog failure、compiler failure 会进入 failed run。
 - Deterministic repairer 可处理安全的 IR 修复，例如拓扑顺序和有限 literal 问题。
+- Reviewer repair 在 deterministic repair 无安全动作后提供默认一次的有界 IR patch
+  尝试；事件化和非事件化服务路径共享同一 Compiler Graph routing。
+- Run snapshot 可回放脱敏 Reviewer request、parsed patch、接受或拒绝事件以及最终
+  Reviewer diagnostics。
 - Execution backend 抽象和 Cromwell backend contract tests 已存在，但不混入默认前端 demo 路径。
 
 | 阶段 | 建设内容 | 主要交付 |

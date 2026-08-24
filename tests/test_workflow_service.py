@@ -4,10 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from src.graph import build_compiler_graph
+from src.nodes.reviewer_repair import make_reviewer_repair_node
+from src.reviewer_provider import ReviewerProviderError
 from src.services.workflow_service import (
     _raise_orchestration_error,
-    _validate_with_repair,
-    build_initial_state,
     compile_structured_workflow,
     plan_and_compile_workflow,
 )
@@ -26,6 +27,25 @@ class FakePlannerLlm:
     def invoke(self, prompt: str):
         self.prompts.append(prompt)
         return SimpleNamespace(content=self.response)
+
+
+class RecordingReviewerProvider:
+    def __init__(self, result):
+        self.result = result
+        self.requests = []
+
+    def repair(self, request):
+        self.requests.append(request)
+        return self.result
+
+
+class RaisingReviewerProvider:
+    def __init__(self):
+        self.requests = []
+
+    def repair(self, request):
+        self.requests.append(request)
+        raise ReviewerProviderError("TOP_SECRET provider failure")
 
 
 def load_example(name: str) -> dict:
@@ -108,6 +128,51 @@ def repairable_forward_reference_ir() -> dict:
     }
 
 
+def reviewer_repairable_ir() -> dict:
+    workflow_ir = load_example("rnaseq_workflow_ir.json")
+    workflow_ir["workflow"]["steps"][0]["inputs"]["r1"] = "missing_input"
+    return workflow_ir
+
+
+def reviewer_patch_result() -> dict:
+    return {
+        "status": "patch_proposed",
+        "patch": {
+            "summary": "Reconnect the QC input to a declared workflow input.",
+            "actions": [
+                {
+                    "operation": "replace",
+                    "path": "/workflow/steps/0/inputs/r1",
+                    "value": "raw_r1",
+                    "reason": "Use the existing workflow input.",
+                }
+            ],
+            "diagnostic_references": [
+                "references unknown value 'missing_input'"
+            ],
+            "confidence": 0.9,
+        },
+        "diagnostics": ["The replacement uses an existing workflow input."],
+    }
+
+
+def reviewer_policy_rejected_result() -> dict:
+    return {
+        "status": "patch_proposed",
+        "patch": {
+            "summary": "Attempt a forbidden runtime edit.",
+            "actions": [
+                {
+                    "operation": "replace",
+                    "path": "/tasks/fastp/runtime/docker",
+                    "value": "ubuntu:22.04",
+                    "reason": "Reviewer must not change runtime images.",
+                }
+            ],
+        },
+    }
+
+
 class WorkflowServiceTests(unittest.TestCase):
     def test_compile_structured_workflow_compiles_recipe_plan_without_check(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")
@@ -133,18 +198,18 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(result.workflow_ir["workflow"]["name"], "RNASeqPipeline")
         self.assertIn("workflow RNASeqPipeline", result.wdl)
 
-    def test_compile_structured_workflow_without_check_does_not_invoke_graph(self):
+    def test_compile_structured_workflow_without_check_uses_unchecked_graph(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")
 
         with patch(
-            "src.services.workflow_service.compiler_graph.invoke",
-            side_effect=AssertionError("compiled graph should not run when check=False"),
-        ) as graph:
+            "src.services.workflow_service.build_compiler_graph",
+            wraps=build_compiler_graph,
+        ) as graph_builder:
             result = compile_structured_workflow(plan, check=False)
 
         self.assertTrue(result.succeeded, result.analysis_errors)
         self.assertFalse(result.check_performed)
-        graph.assert_not_called()
+        graph_builder.assert_called_once_with(reviewer_node=None, check=False)
 
     def test_compile_structured_workflow_returns_diagnostics_for_invalid_plan(self):
         plan = load_example("rnaseq_deg_recipe_plan.json")
@@ -225,11 +290,10 @@ class WorkflowServiceTests(unittest.TestCase):
             {"repairer_failed": True},
         )
 
-    def test_validation_repair_emits_workflow_ir_artifact_update_before_repair_event(self):
+    def test_evented_reviewer_patch_emits_artifacts_before_repair_events(self):
         events = []
-        state = build_initial_state(repairable_forward_reference_ir())
-        state["workflow_ir"] = repairable_forward_reference_ir()
-        state["current_wdl"] = "broken wdl"
+        provider = RecordingReviewerProvider(reviewer_patch_result())
+        reviewer_node = make_reviewer_repair_node(enabled=True, provider=provider)
 
         def event_callback(event_type, node, summary, state, payload):
             events.append(
@@ -242,43 +306,163 @@ class WorkflowServiceTests(unittest.TestCase):
                 }
             )
 
-        repaired_ir = repairable_forward_reference_ir()
-        repaired_ir["workflow"]["steps"].reverse()
-        with (
-            patch(
-                "src.services.workflow_service.checker_node",
-                side_effect=[
-                    {"is_valid": False, "validation_message": "invalid WDL", "error_count": 1},
-                    {"is_valid": True, "validation_message": "valid WDL", "error_count": 1},
-                ],
-            ),
-            patch(
-                "src.services.workflow_service.repairer_node",
-                return_value={
-                    "workflow_ir": repaired_ir,
-                    "analysis_errors": [],
-                    "analysis_warnings": [],
-                    "current_wdl": "",
-                    "is_valid": False,
-                    "repair_actions": ["Reordered workflow steps."],
-                    "repair_count": 1,
-                    "messages": [],
-                },
-            ),
-            patch("src.services.workflow_service._analyze_with_repair"),
-            patch("src.services.workflow_service.renderer_node", return_value={"current_wdl": "fixed wdl"}),
-        ):
-            _validate_with_repair(state, event_callback=event_callback)
+        result = compile_structured_workflow(
+            reviewer_repairable_ir(),
+            check=False,
+            event_callback=event_callback,
+            reviewer_node=reviewer_node,
+        )
 
-        event_types = [event["type"] for event in events]
-        artifact_index = event_types.index("artifact.updated", event_types.index("repair.applied") - 1)
-        repair_index = event_types.index("repair.applied")
-        self.assertLess(artifact_index, repair_index)
-        self.assertEqual(events[artifact_index]["node"], "repairer")
-        self.assertEqual(events[artifact_index]["payload"], {"artifact": "workflow_ir"})
+        self.assertTrue(result.succeeded, result.analysis_errors)
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(result.reviewer_attempt_count, 1)
+        self.assertEqual(result.reviewer_repair_status, "patch_proposed")
+        self.assertTrue(result.reviewer_patch_applied)
+        reviewer_events = [
+            event for event in events if event["node"] == "reviewer_repair"
+        ]
         self.assertEqual(
-            [step["id"] for step in events[artifact_index]["workflow_ir"]["workflow"]["steps"]],
-            ["qc", "align"],
+            [event["type"] for event in reviewer_events],
+            [
+                "node.started",
+                "artifact.updated",
+                "artifact.updated",
+                "repair.proposed",
+                "artifact.updated",
+                "repair.applied",
+                "node.completed",
+            ],
+        )
+        self.assertEqual(
+            [
+                event["payload"].get("artifact")
+                for event in reviewer_events
+                if event["type"] == "artifact.updated"
+            ],
+            ["reviewer_repair_request", "reviewer_ir_patch", "workflow_ir"],
+        )
+        workflow_ir_index = next(
+            index
+            for index, event in enumerate(reviewer_events)
+            if event["payload"].get("artifact") == "workflow_ir"
+        )
+        repair_index = next(
+            index
+            for index, event in enumerate(reviewer_events)
+            if event["type"] == "repair.applied"
+        )
+        self.assertLess(workflow_ir_index, repair_index)
+        self.assertEqual(
+            reviewer_events[workflow_ir_index]["workflow_ir"]["workflow"]["steps"][0]["inputs"]["r1"],
+            "raw_r1",
+        )
+
+    def test_evented_and_non_evented_reviewer_results_match(self):
+        direct_provider = RecordingReviewerProvider(reviewer_patch_result())
+        evented_provider = RecordingReviewerProvider(reviewer_patch_result())
+
+        direct_result = compile_structured_workflow(
+            reviewer_repairable_ir(),
+            check=False,
+            reviewer_node=make_reviewer_repair_node(
+                enabled=True,
+                provider=direct_provider,
+            ),
+        )
+        evented_result = compile_structured_workflow(
+            reviewer_repairable_ir(),
+            check=False,
+            event_callback=lambda *args: None,
+            reviewer_node=make_reviewer_repair_node(
+                enabled=True,
+                provider=evented_provider,
+            ),
+        )
+
+        self.assertEqual(evented_result.to_dict(), direct_result.to_dict())
+        self.assertEqual(len(direct_provider.requests), 1)
+        self.assertEqual(len(evented_provider.requests), 1)
+
+    def test_evented_reviewer_policy_rejection_emits_proposed_and_rejected(self):
+        events = []
+        provider = RecordingReviewerProvider(reviewer_policy_rejected_result())
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "payload": payload or {},
+                }
+            )
+
+        result = compile_structured_workflow(
+            reviewer_repairable_ir(),
+            check=False,
+            event_callback=event_callback,
+            reviewer_node=make_reviewer_repair_node(
+                enabled=True,
+                provider=provider,
+            ),
+        )
+
+        self.assertFalse(result.succeeded)
+        self.assertEqual(result.reviewer_repair_status, "policy_rejected")
+        self.assertFalse(result.reviewer_patch_applied)
+        self.assertIn("forbidden", result.reviewer_rejection_reason or "")
+        reviewer_events = [
+            event for event in events if event["node"] == "reviewer_repair"
+        ]
+        self.assertEqual(
+            [event["type"] for event in reviewer_events],
+            [
+                "node.started",
+                "artifact.updated",
+                "artifact.updated",
+                "repair.proposed",
+                "repair.rejected",
+                "node.completed",
+            ],
+        )
+        self.assertNotIn("repair.applied", [event["type"] for event in reviewer_events])
+
+    def test_evented_reviewer_model_error_emits_request_then_failure(self):
+        events = []
+        provider = RaisingReviewerProvider()
+
+        def event_callback(event_type, node, summary, state, payload):
+            events.append(
+                {
+                    "type": event_type,
+                    "node": node,
+                    "payload": payload or {},
+                }
+            )
+
+        result = compile_structured_workflow(
+            reviewer_repairable_ir(),
+            check=False,
+            event_callback=event_callback,
+            reviewer_node=make_reviewer_repair_node(
+                enabled=True,
+                provider=provider,
+            ),
+        )
+
+        self.assertFalse(result.succeeded)
+        self.assertEqual(result.reviewer_repair_status, "model_error")
+        self.assertEqual(result.reviewer_attempt_count, 1)
+        self.assertNotIn("TOP_SECRET", json.dumps(result.to_dict()))
+        reviewer_events = [
+            event for event in events if event["node"] == "reviewer_repair"
+        ]
+        self.assertEqual(
+            [event["type"] for event in reviewer_events],
+            ["node.started", "artifact.updated", "node.failed"],
+        )
+        self.assertEqual(
+            reviewer_events[1]["payload"]["artifact"],
+            "reviewer_repair_request",
         )
 
     def test_compile_structured_workflow_check_true_event_callback_runs_validation_repair_loop(self):
@@ -308,20 +492,28 @@ class WorkflowServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "src.services.workflow_service.checker_node",
+                "src.graph.checker_node",
                 side_effect=[
-                    {"is_valid": False, "validation_message": "invalid WDL", "error_count": 1},
-                    {"is_valid": True, "validation_message": "valid WDL", "error_count": 1},
+                    {
+                        "is_valid": False,
+                        "validation_message": "invalid WDL",
+                        "error_count": 1,
+                        "repair_failure_stage": "checker",
+                        "messages": [],
+                    },
+                    {
+                        "is_valid": True,
+                        "validation_message": "valid WDL",
+                        "error_count": 1,
+                        "repair_failure_stage": None,
+                        "messages": [],
+                    },
                 ],
             ) as checker,
             patch(
-                "src.services.workflow_service.repairer_node",
+                "src.graph.repairer_node",
                 side_effect=repairer_update,
             ) as repairer,
-            patch(
-                "src.services.workflow_service.compiler_graph.invoke",
-                side_effect=AssertionError("event callbacks should use the manual compiler path"),
-            ) as graph,
         ):
             result = compile_structured_workflow(
                 load_example("rnaseq_workflow_ir.json"),
@@ -336,7 +528,6 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(result.repair_actions, ["Repaired WDL validation issue."])
         self.assertEqual(checker.call_count, 2)
         repairer.assert_called_once()
-        graph.assert_not_called()
 
         event_types = [event["type"] for event in events]
         self.assertEqual(event_types.count("validation.completed"), 2)
@@ -466,6 +657,11 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertIn("workflow RNASeqDEG", result["wdl"])
         self.assertEqual(result["analysis_errors"], [])
         self.assertTrue(result["succeeded"])
+        self.assertEqual(result["reviewer_attempt_count"], 0)
+        self.assertIsNone(result["reviewer_repair_status"])
+        self.assertIsNone(result["reviewer_rejection_reason"])
+        self.assertEqual(result["reviewer_diagnostics"], [])
+        self.assertFalse(result["reviewer_patch_applied"])
 
 
 if __name__ == "__main__":

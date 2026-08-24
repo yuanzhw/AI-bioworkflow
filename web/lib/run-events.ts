@@ -6,6 +6,8 @@ export const runEventTypes: RunEventType[] = [
   "node.completed",
   "node.failed",
   "artifact.updated",
+  "repair.proposed",
+  "repair.rejected",
   "repair.applied",
   "validation.completed",
   "run.completed",
@@ -17,6 +19,8 @@ export const runEventLabels: Record<RunEventType, string> = {
   "node.completed": "节点完成",
   "node.failed": "节点失败",
   "artifact.updated": "产物更新",
+  "repair.proposed": "修复提议",
+  "repair.rejected": "修复拒绝",
   "repair.applied": "修复应用",
   "validation.completed": "校验完成",
   "run.completed": "Run 完成",
@@ -33,12 +37,15 @@ export const runNodeLabels: Record<string, string> = {
   planner: "Planner",
   renderer: "Renderer",
   repairer: "Repairer",
+  reviewer_repair: "Reviewer Repair",
 };
 
 export const artifactLabels: Record<string, string> = {
   catalog_retrieval: "Catalog Retrieval",
   diagnostics: "Diagnostics",
   plan: "Recipe Tool Plan",
+  reviewer_ir_patch: "Reviewer IR Patch",
+  reviewer_repair_request: "Reviewer Repair Request",
   wdl: "WDL",
   workflow_ir: "Workflow IR",
 };

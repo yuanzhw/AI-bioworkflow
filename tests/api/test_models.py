@@ -66,6 +66,11 @@ class WorkflowDtoTests(unittest.TestCase):
         self.assertTrue(response.diagnostics.succeeded)
         self.assertFalse(response.diagnostics.check_performed)
         self.assertEqual(response.diagnostics.analysis_errors, [])
+        self.assertEqual(response.diagnostics.reviewer_attempt_count, 0)
+        self.assertIsNone(response.diagnostics.reviewer_repair_status)
+        self.assertIsNone(response.diagnostics.reviewer_rejection_reason)
+        self.assertEqual(response.diagnostics.reviewer_diagnostics, [])
+        self.assertFalse(response.diagnostics.reviewer_patch_applied)
         self.assertIsNone(response.artifacts.catalog_retrieval)
         self.assertEqual(response.artifacts.workflow_ir["workflow"]["name"], "RNASeqDEG")
         self.assertIn("workflow RNASeqDEG", response.artifacts.wdl)
@@ -187,6 +192,10 @@ class CatalogDtoTests(unittest.TestCase):
 
 
 class EventDtoTests(unittest.TestCase):
+    def test_run_event_types_include_reviewer_repair_lifecycle(self):
+        self.assertEqual(RunEventType.REPAIR_PROPOSED.value, "repair.proposed")
+        self.assertEqual(RunEventType.REPAIR_REJECTED.value, "repair.rejected")
+
     def test_run_event_defines_persistable_event_envelope(self):
         event = RunEvent(
             event_id="evt_001",

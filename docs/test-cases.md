@@ -197,6 +197,7 @@ OK (skipped=2)
 - diagnostics 中 `succeeded == True`。
 - diagnostics 中 `check_performed == False`。
 - analysis errors 为空。
+- Reviewer attempt count 为零，其余 Reviewer diagnostics 使用空值或空列表默认值。
 - artifacts 中 workflow 名称为 `RNASeqDEG`。
 - artifacts 中 WDL 包含 `workflow RNASeqDEG`。
 
@@ -338,6 +339,18 @@ OK (skipped=2)
 
 - Catalog service 的 tool records 与 API DTO 兼容。
 - Tool runtime、Catalog admission 与 execution verification 可以分别暴露给前端。
+
+### `test_run_event_types_include_reviewer_repair_lifecycle`
+
+期望输出：
+
+- `RunEventType.REPAIR_PROPOSED == "repair.proposed"`。
+- `RunEventType.REPAIR_REJECTED == "repair.rejected"`。
+
+覆盖点：
+
+- API event enum 显式包含 Reviewer patch 提议与拒绝生命周期，SSE 和 history replay
+  不需要复用含义不清的通用事件。
 
 ### `test_run_event_defines_persistable_event_envelope`
 
@@ -700,7 +713,8 @@ OK (skipped=2)
 - 一个 structured compile run。
 - 两个 run events：`run.created` 与 `node.started`。
 - `WorkflowArtifacts`，包含 plan、Workflow IR 和 WDL。
-- `DiagnosticReport`，表示跳过 WDL syntax validation 且 run 成功。
+- `DiagnosticReport`，表示跳过 WDL syntax validation、Reviewer 已应用一次 patch 且
+  run 成功。
 
 执行：
 
@@ -713,11 +727,15 @@ OK (skipped=2)
 - snapshot artifacts 保留 Workflow IR、WDL 和 manifest。
 - manifest 中包含 `plan`、`workflow_ir`、`wdl` 和 `diagnostics`。
 - named artifact records 中 `wdl` content type 为 `text/plain`，其余核心 JSON artifact 为 `application/json`。
+- snapshot 从 `diagnostics` named artifact 恢复 Reviewer attempt count、最终状态、
+  Reviewer diagnostics 和 patch applied 状态。
 
 覆盖点：
 
 - 固定 artifact 列与通用 `run_artifact_records` manifest 会同步写入。
 - diagnostics 既保留在专用 diagnostic 表中，也作为命名 artifact 进入 manifest，方便后续统一 artifact 展示。
+- 新增 Reviewer diagnostics 字段不要求扩展旧版固定 diagnostics 表；snapshot 优先读取
+  通用 diagnostics artifact，同时保留旧数据库 fallback。
 
 ### `test_list_runs_returns_paginated_summaries_with_status_filter`
 
@@ -907,6 +925,72 @@ OK (skipped=2)
 - 修复发生时，历史事件先通知 Workflow IR artifact 更新，再记录 repair action。
 - 前端和 SSE 消费方不需要根据 summary 文案推断 repair 后的 artifact 类型。
 
+### `test_structured_compile_run_persists_reviewer_events_and_artifacts`
+
+输入：
+
+- Analyzer 无法解析 `missing_input` 的 Workflow IR。
+- 注入启用的 Reviewer node 和返回合法 wiring patch 的 fake provider。
+- `check=False`。
+
+期望输出：
+
+- run 成功，diagnostics 记录一次 Reviewer 尝试、`patch_proposed` 和
+  `reviewer_patch_applied == true`。
+- snapshot extras/manifest 包含脱敏 `reviewer_repair_request` 与 parsed
+  `reviewer_ir_patch`。
+- Reviewer 事件依次包含 started、request artifact、patch artifact、proposed、
+  workflow_ir artifact、applied 和 completed。
+- `workflow_ir` 更新早于 `repair.applied`，diagnostics 更新早于 `run.completed`。
+- SSE replay 包含 `repair.proposed` 和 `repair.applied`。
+
+覆盖点：
+
+- P2.5 成功路径的实时事件、历史回放、named artifacts 和最终 diagnostics 使用同一
+  持久化 run 记录。
+- Reviewer patch 只修改 Workflow IR candidate，随后仍由真实 Compiler Graph 完成
+  Analyzer 与 Renderer 路径。
+
+### `test_structured_compile_run_persists_reviewer_failure_diagnostics`
+
+输入：
+
+- Analyzer failure Workflow IR。
+- fake Reviewer provider 抛出带敏感原始消息的 `ReviewerProviderError`。
+
+期望输出：
+
+- run 以 `failed` 完成，diagnostics 记录一次尝试、`model_error` 和未应用 patch。
+- snapshot 保存脱敏 request，不保存 patch，也不包含 provider 原始敏感消息。
+- Reviewer 事件依次为 started、request artifact、node failed。
+- 未生成 WDL，因此不会追加 `validation.completed` 跳过校验事件。
+- Reviewer failure 后仍先写 diagnostics artifact，再写 `run.completed`。
+
+覆盖点：
+
+- Provider 失败不会丢失 Reviewer 可观测信息，也不会泄漏 raw provider output。
+- 失败结果作为正常 Compiler Graph diagnostic 结束，不被 Run Service 误记为缺少上下文
+  的 generic compiler exception。
+
+### `test_structured_compile_run_persists_reviewer_rejection`
+
+输入：
+
+- fake Reviewer provider 提议修改被 policy 禁止的 runtime Docker image。
+
+期望输出：
+
+- run 失败，diagnostics 状态为 `policy_rejected` 并保存脱敏 rejection reason。
+- snapshot 同时保留 Reviewer request 和被拒绝的 parsed patch artifacts。
+- history 依次记录 `repair.proposed`、`repair.rejected`，对应 payload status 分别为
+  `proposed` 和 `rejected`。
+- diagnostics artifact 仍在 `run.completed` 前写入。
+
+覆盖点：
+
+- P2.5 policy rejection 可通过 SSE/history 审计，但不会产生 `repair.applied` 或改变
+  Workflow IR。
+
 ### `test_natural_language_run_succeeds_after_planning`
 
 输入：
@@ -923,7 +1007,8 @@ OK (skipped=2)
 期望输出：
 
 - `plan_and_compile_workflow` 被调用一次。
-- 调用参数包含自然语言 request、`check=False` 和 `event_callback`。
+- 调用参数包含自然语言 request、`check=False`、`event_callback` 和当前
+  `reviewer_node` 配置。
 - snapshot `status == "succeeded"`。
 - snapshot artifacts 包含 catalog retrieval、Recipe Tool Plan 和 WDL。
 
@@ -3940,13 +4025,13 @@ Agent 占位逻辑。
 - 结构化 Workflow IR 入口不会触发自然语言 planner。
 - service 能区分 Recipe Tool Plan 与标准 Workflow IR。
 
-### `test_compile_structured_workflow_without_check_does_not_invoke_graph`
+### `test_compile_structured_workflow_without_check_uses_unchecked_graph`
 
 输入：
 
 - `examples/rnaseq_deg_recipe_plan.json`
 - `check=False`
-- mock `src.services.workflow_service.compiler_graph.invoke`，如果被调用则抛出错误。
+- spy `build_compiler_graph(...)`。
 
 执行：
 
@@ -3956,12 +4041,12 @@ Agent 占位逻辑。
 
 - `result.succeeded == True`。
 - `result.check_performed == False`。
-- compiled graph 的 `compiler_graph.invoke` 未被调用。
+- graph builder 以 `reviewer_node=None, check=False` 调用一次。
 
 覆盖点：
 
-- `check=False` 路径走手动 deterministic compiler nodes。
-- 跳过 checker 时不会进入包含 checker 的 compiled graph。
+- `check=False` 仍使用与事件化路径一致的 Compiler Graph routing。
+- graph 在 Renderer 后直接结束，因此跳过 Checker 的同时不会维护第二份手工编译循环。
 
 ### `test_compile_structured_workflow_returns_diagnostics_for_invalid_plan`
 
@@ -4008,6 +4093,74 @@ Agent 占位逻辑。
 
 - workflow service 保留 deterministic repairer 的显式失败状态。
 - repairer 异常不会被错误记录为“正常完成但无安全修复动作”。
+
+### `test_evented_reviewer_patch_emits_artifacts_before_repair_events`
+
+输入：
+
+- Analyzer failure Workflow IR。
+- fake Reviewer provider 返回合法 call-input wiring patch。
+- `check=False` 与 event callback。
+
+期望输出：
+
+- 编译成功，Reviewer attempt count 为一，状态为 `patch_proposed`，patch 已应用。
+- Reviewer 事件依次为 started、request artifact、patch artifact、proposed、Workflow IR
+  artifact、applied、completed。
+- patch 后的 Workflow IR artifact 在 `repair.applied` 前可见。
+
+覆盖点：
+
+- event callback 观察真实 Compiler Graph Reviewer branch，不再旁路到
+  deterministic-only 服务循环。
+- 结构化 request/patch 通过 artifact 传递，事件 payload 只保留稳定摘要。
+
+### `test_evented_and_non_evented_reviewer_results_match`
+
+执行：
+
+- 使用相同输入和等价 fake Reviewer provider，分别调用直接编译和事件化编译。
+
+期望输出：
+
+- 两个 `WorkflowCompilationResult.to_dict()` 完全一致。
+- 两条路径各调用 Reviewer provider 一次。
+
+覆盖点：
+
+- 可观测性适配器不改变 Compiler Graph 的状态转移或最终编译结果。
+
+### `test_evented_reviewer_policy_rejection_emits_proposed_and_rejected`
+
+输入：
+
+- fake Reviewer provider 提议修改 `/tasks/fastp/runtime/docker`。
+
+期望输出：
+
+- 编译失败，最终 Reviewer 状态为 `policy_rejected`，Workflow IR 未应用 patch。
+- Reviewer 事件包含 request/patch artifacts、`repair.proposed`、`repair.rejected` 和
+  completed，不包含 `repair.applied`。
+
+覆盖点：
+
+- 被 policy 拒绝的 parsed patch 仍可审计，但不会改变 Compiler state。
+
+### `test_evented_reviewer_model_error_emits_request_then_failure`
+
+输入：
+
+- fake Reviewer provider 抛出带敏感消息的 typed provider error。
+
+期望输出：
+
+- Reviewer 最终状态为 `model_error`，attempt count 为一。
+- 事件先保存 request artifact，再记录 Reviewer `node.failed`。
+- service result 不包含 provider 原始敏感消息。
+
+覆盖点：
+
+- Reviewer provider failure 具有脱敏、可持久化的失败事件语义。
 
 ### `test_plan_and_compile_workflow_plans_then_compiles`
 
@@ -4105,11 +4258,12 @@ Agent 占位逻辑。
 - dict 中 `wdl` 包含 `workflow RNASeqDEG`。
 - dict 中 `analysis_errors == []`。
 - dict 中 `succeeded == True`。
+- dict 中包含 Reviewer attempt、status、rejection reason、diagnostics 和 applied 字段。
 
 覆盖点：
 
 - `WorkflowCompilationResult` 可以转换为 API 友好的 dict。
-- API 层后续可以稳定读取 plan、IR、WDL、diagnostics 和状态字段。
+- API 层可以稳定读取 plan、IR、WDL、Reviewer diagnostics 和状态字段。
 
 ## `tests/test_nl_planner.py`
 
@@ -5119,6 +5273,9 @@ retrieval artifact。
 - Renderer 对 call、scatter、array flatten、workflow output 和 task 的 WDL 渲染。
 - Deterministic repairer 对 call 顺序和 output 字面量的安全修复。
 - Reviewer repair request / patch / result 契约模型与 P2 patch policy skeleton。
+- Reviewer Compiler Graph routing 在直接与事件化 service 路径中的结果一致性。
+- Reviewer 成功、policy 拒绝和 provider 失败的 run events、named artifacts、SSE replay
+  与最终 diagnostics 持久化。
 - Workflow service 对结构化编译入口、自然语言规划后编译入口和 API 友好结果对象的封装。
 - FastAPI DTO 对 workflow、catalog 和 event envelope 的输入输出契约。
 - FastAPI endpoints 对 W0 workflow/catalog services 的复用、HTTP 状态映射和响应序列化。
@@ -5134,8 +5291,7 @@ retrieval artifact。
 - 多 recipe、多工具候选和更复杂 tool selection。
 - 参数范围错误以外的更多 Tool Catalog schema 边界。
 - nested scatter、conditional step、subworkflow 等 roadmap feature。
-- Reviewer 在线 provider 集成、Run observability、Resource Agent 和 Bioinfo
-  Reviewer 等规划中 Agent。
+- Reviewer 在线 provider 集成、Resource Agent 和 Bioinfo Reviewer 等规划中 Agent。
 - Nextflow 或其他 backend。
 - 真实自然语言模型调用的在线集成测试。
 - Next.js 工作台、DAG 可视化和 run history 的浏览器级视觉回归测试。
