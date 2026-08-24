@@ -17,9 +17,10 @@ Ran 274 tests
 OK (skipped=2)
 ```
 
-两项跳过测试均为需要显式启用真实执行环境的可选 e2e 路径。此次收尾不改变
-Workflow IR schema、expression rules 或生成的 WDL，因此无需更新 `docs/workflow-ir.md`
-或增加额外 WDL fixture。
+跳过项为需要设置 `AI_BIOWORKFLOW_RUN_E2E=1` 的真实 Cromwell tiny e2e，
+以及当前环境未安装 miniwdl 时按设计跳过的本地 miniwdl tiny run。此次收尾不改变
+Workflow IR schema、expression rules 或生成的 WDL，因此无需更新
+`docs/workflow-ir.md` 或增加额外 WDL fixture。
 
 ## 背景与现状
 
