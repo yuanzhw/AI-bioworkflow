@@ -162,8 +162,14 @@ README 应提供：
 | W6 portfolio landing polish | 已完成 | 首页和导航已形成 demo hub，稳定入口覆盖 RNA-seq 示例、run history、Catalog 和 API 文档。 |
 | W6 demo readiness | 已完成 | 工作台、历史、详情和 Catalog 已统一恢复入口，并补充 API 不可达等可读失败状态。 |
 | W6 architecture visuals | 已完成 | README 已补充确定性编译链、Web/service 边界和 DAG 结构语义。 |
-| W6 deployment docs | 进行中 | 部署手册正在收口本地/公开拓扑、环境变量、CORS、SQLite 持久化和匿名 demo 安全边界。 |
-| W6 screenshots and final QA | 待开始 | 在部署说明稳定后统一制作展示资产并执行最终前端 QA。 |
+| W6 deployment docs | 已完成 | 部署手册已覆盖本地/公开拓扑、环境变量、CORS、SQLite 持久化、回滚和匿名 demo 安全边界。 |
+| W6 screenshots and final QA | 已完成 | README 已加入 3 张固定视口截图与 [90 秒演示分镜](./portfolio-demo-script.md)，并完成桌面/移动响应式检查和前端 lint/test/build。 |
+
+展示资产：
+
+- [RNA-seq 工作台成功 run](./assets/workspace-rnaseq-run.png)
+- [Workflow IR DAG 与节点详情](./assets/run-workflow-dag.png)
+- [Recipe / Tool Catalog 边界](./assets/catalog-boundary.png)
 
 如果某个 PR 只改文档，可以不运行前端 build，但应至少检查 Markdown 链接和文案一致性。涉及前端代码的 PR 应运行前端验证。
 
@@ -173,7 +179,7 @@ README 应提供：
 - 不实现用户权限、登录、计费、多租户或长期审计系统。
 - 不接入真实 Cromwell / miniwdl 执行监控 UI；真实执行仍属于 execution backend 轨道。
 - 不把 DAG 改成 call-level running / completed / failed 状态，除非后端未来提供 `step_id` / `call_id` 级事件。
-- 不实现 roadmap-only Reviewer LLM、Bioinfo Reviewer、Resource Agent、External Retrieval 或容器构建 UI。
+- 不实现 Architect Agent、Bioinfo Reviewer、Resource Agent、External Retrieval 或容器构建 UI；P2 有界 Reviewer IR 修复已在后端独立完成。
 - 不让前端生成、修复或补全 Plan、Workflow IR、WDL。
 
 ## 验收标准
@@ -211,9 +217,9 @@ npm run build
 
 当 `W6` 验收标准全部满足后，前端可以正式标记为“作品集 demo 主线完成”。后续主要精力应转向：
 
-- P2 Reviewer IR 修复闭环。
-- 更丰富的 recipe / tool catalog。
-- 后端/Agent 产物的结构化记录。
+- P3 Architect 与 Bioinfo Reviewer 的职责分层。
+- 更丰富的 recipe / tool catalog 与检索评估。
+- 新增后端/Agent 产物的配套结构化展示。
 - 真实执行与容器生命周期能力。
 
 前端只随着这些后端能力做必要展示，而不再独立扩展新的产品框架。
