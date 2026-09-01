@@ -1,6 +1,6 @@
-# P0 Cromwell Tiny E2E 验证摘要
+# Cromwell Tiny E2E 验证摘要
 
-本文档记录一次真实的 P0 Cromwell e2e 验证运行，验证对象是 RNA-seq
+本文档记录一次真实的 Cromwell tiny E2E 验证运行，验证对象是 RNA-seq
 差异表达分析工作流。它作为可复现的里程碑记录，不替代自动化测试本身。
 
 ## 摘要
@@ -19,7 +19,7 @@
 
 ## 运行命令
 
-本次运行通过 P0 检查入口触发，并只启用真实 e2e 路径：
+本次运行通过兼容命名的 `check_p0.ps1` 检查入口触发，并只启用真实 e2e 路径：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
@@ -44,7 +44,7 @@ Ran 1 test in 76.821s
 OK
 ```
 
-P0 wrapper 输出：
+兼容检查 wrapper 的原始输出：
 
 ```text
 OK: Cromwell tiny RNA-seq e2e (79.7s)
@@ -128,14 +128,14 @@ multiqc_report.html          4.4M
 
 ## 结论
 
-P0 已具备 RNA-seq DEG 路径的真实执行基线：
+该记录建立了 RNA-seq DEG 路径的真实执行基线：
 
 - Recipe Tool Plan 可以编译为通过校验的 WDL。
 - Cromwell 可以接受并运行生成的 WDL。
 - 已配置的 Docker execution backend 可以完成整个 workflow。
 - 预期 workflow outputs 已生成，并能通过 Cromwell 查询到。
 
-以下后续工作不是证明 P0 可执行性的前置条件，但可以提高可重复性和发布质量：
+以下后续工作不是这份执行证据成立的前置条件，但可以提高可重复性和发布质量：
 
 - 评估后续 e2e 是否应在检查 Cromwell output keys 之外，同时断言输出文件存在且非空。
 - 在镜像发布流程稳定后，将可复用容器引用从 mutable tags 推进到 validated digests。

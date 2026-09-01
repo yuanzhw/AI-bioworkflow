@@ -91,6 +91,9 @@ jobs:
       - name: Run Python test suite
         run: .venv/bin/python -m unittest discover -v
 
+      - name: Check public presentation surface
+        run: .venv/bin/python scripts/check_public_surface.py
+
       - name: Validate container build contracts
         run: |
           .venv/bin/python -m py_compile scripts/build_container.py

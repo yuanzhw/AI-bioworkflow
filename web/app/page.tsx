@@ -141,7 +141,7 @@ export default function Home() {
           <div className="w-full max-w-[calc(100vw-3rem)] sm:max-w-2xl">
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="secondary">Bioinformatics workflow compiler</Badge>
-              <Badge variant="outline">W6 portfolio demo hub</Badge>
+              <Badge variant="outline">Public alpha demo</Badge>
             </div>
             <h1 className="mt-6 text-4xl font-semibold tracking-normal text-foreground sm:text-5xl lg:text-6xl">
               AI-bioworkflow

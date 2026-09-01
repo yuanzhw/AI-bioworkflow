@@ -47,12 +47,13 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tools.py`：没有 WOMtool 或 miniwdl 时跳过 WDL validator 测试。
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
+- `tests/test_public_surface.py`：纯标准库单元测试；临时 fixture 不访问网络，也不读取 `docs/portfolio/`。
 
 当前 WOMtool 92 CI 门禁实现后的完整验证结果：
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 283 tests
+Ran 299 tests
 OK (skipped=2)
 ```
 
@@ -5092,6 +5093,35 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 
 - 从 Recipe Tool Plan 到实际 miniwdl 执行的完整路径。
 - 依赖真实本地容器镜像和 tiny 数据，因此默认开发环境中可能跳过。
+
+## `tests/test_public_surface.py`
+
+该文件验证 `scripts/check_public_surface.py` 的公共展示面契约。实现只使用
+Python 标准库，并以 Git 已跟踪文件清单为准，因此本地未跟踪产物不能让
+失效链接在开发机上假通过。共 16 个用例覆盖：
+
+- Git inventory 显式排除临时 `docs/portfolio/` 目录及子目录。
+- Markdown 正文链接和图片能够按源文件目录解析；外部 URL 不发起网络请求。
+- fenced code、inline code 与 GFM footnote 文本不会被误当作链接，同时支持
+  合法的平衡括号和反斜杠转义目标。
+- inline 与 reference definition 的目标使用相同反斜杠反转义规则；
+  reference-style 图片按大小写不敏感、空白归一化的 label 关联定义，并以
+  usage 行号报告空 alt。
+- 仓库外、未跟踪、临时目录目标和空图片 alt 会产生可定位诊断。
+- 中英文 README 都必须保留彼此入口、在线 Demo、Runs、Catalog、API、CI、
+  OSS 治理链接、RNA-seq case study 与三张核心证据图。
+- Next.js fixture 使用真实 `Metadata` / `MetadataRoute` 字段语法；校验器先
+  屏蔽 TypeScript 注释，再解析 layout、Catalog、Runs、Workspace 和动态
+  Run detail 的 metadata 对象。
+- 每个页面必须保留 canonical、`openGraph.type/url/images` 与 Twitter image；
+  空数组或只存在于注释中的字段不能让测试通过。
+- 动态 Run detail 的 canonical 与 Open Graph URL 必须通过模板插值引用
+  `runId`（包括 `encodeURIComponent(runId)`）；常量 `/runs/static` 不通过。
+- robots 返回对象和 sitemap 返回数组必须使用对应 `MetadataRoute` 类型，并
+  保留 sitemap URL 与三个公开页面路由。
+
+这些测试只锁定公开发现与证据入口，不约束 README 文案、章节顺序或页面
+视觉实现。
 
 ## `tests/test_container_build.py`
 

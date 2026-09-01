@@ -470,7 +470,7 @@ export function WorkspaceWorkbench({
         artifacts={artifacts}
         diagnostics={diagnostics}
         title="Plan / IR / WDL / Diagnostics"
-        description="工作台不在前端生成或修复结构化产物；这里展示持久化 snapshot 中保存的真实结果。"
+        description="工作台不在前端生成或修复结构化产物；这里展示后端持久化 snapshot 中保存的编译结果。"
       />
     </>
   );

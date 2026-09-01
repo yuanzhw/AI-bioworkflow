@@ -11,6 +11,8 @@ report the same required check as compiler, API, Web, and deployment changes.
 1. **Python tests and WOMtool validation**
    - Python 3.13 and the locked `uv` environment.
    - The complete `unittest` suite.
+   - Tracked Markdown links and the stable README/Web public presentation
+     contract. Temporary `docs/portfolio/` output is explicitly excluded.
    - Container build-script compilation and a dry run of every maintained
      container definition.
    - Deterministic compilation of representative Recipe Tool Plans and
@@ -69,6 +71,21 @@ $env:WDL_VALIDATOR = "womtool"
 $env:WOMTOOL_JAR = (Resolve-Path ".cache\womtool\womtool-92.jar").Path
 powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 ```
+
+When changing README navigation, documentation links, screenshots, or Web
+metadata, run the dependency-free public surface check directly:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_public_surface.py
+```
+
+The check inventories tracked files through Git. It validates local relative
+links and image alt text across tracked Markdown, the bilingual README and
+RNA-seq case-study entry points/evidence assets, and the Next.js metadata,
+robots, and sitemap files. Page metadata checks parse actual object fields
+after masking TypeScript comments, including canonical URLs, Open Graph
+type/URL/images, and Twitter images. It never reads or admits generated files
+under `docs/portfolio/`.
 
 Run the production validator compatibility check when changing WDL generation,
 validation, or deployment behavior from Linux, macOS, or WSL:
