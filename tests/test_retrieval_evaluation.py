@@ -147,9 +147,53 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 21)
         self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 7)
         self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 6)
+        self.assertEqual(
+            result["family_metrics"]["bulk_rnaseq"]["metrics"]["tool_recall_at_5"],
+            0.819,
+        )
+        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.9048)
+        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.8484)
         for metric in result["macro_family_metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
+
+    def test_macro_family_metrics_use_unrounded_family_values(self):
+        queries = [
+            RetrievalQuery(
+                id=f"family-a-{index}",
+                query="supported hit" if index < 17 else "supported miss",
+                supported=True,
+                workflow_family="family_a",
+                expected_recipe="rnaseq_differential_expression",
+                expected_tools=[],
+                expected_roles={},
+            )
+            for index in range(21)
+        ]
+        queries.append(
+            RetrievalQuery(
+                id="family-b-0",
+                query="supported hit",
+                supported=True,
+                workflow_family="family_b",
+                expected_recipe="rnaseq_differential_expression",
+                expected_tools=[],
+                expected_roles={},
+            )
+        )
+
+        result = evaluate_retrieval_queries(
+            queries,
+            self.tool_catalog,
+            self.recipe_catalog,
+            retriever=fake_retriever,
+        )
+
+        self.assertEqual(
+            result["family_metrics"]["family_a"]["metrics"]["recipe_recall_at_1"],
+            0.8095,
+        )
+        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.9048)
 
     def test_computes_supported_metrics_and_tracks_unsupported_matches(self):
         queries = [

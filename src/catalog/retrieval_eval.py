@@ -15,6 +15,7 @@ from src.recipes.loader import RecipeCatalog
 
 DEFAULT_TOP_K_RECIPES = 3
 DEFAULT_TOP_K_TOOLS = 8
+METRIC_PRECISION = 4
 STRICT_TOOL_RECALL_CUTOFFS = (3, 5)
 MACRO_FAMILY_METRIC_KEYS = (
     "recipe_recall_at_1",
@@ -26,6 +27,16 @@ MACRO_FAMILY_METRIC_KEYS = (
     "tool_mrr",
     "role_coverage",
     "planner_context_tool_recall",
+    "planner_context_role_coverage",
+)
+PER_QUERY_METRIC_KEYS = (
+    "expected_recipe_reciprocal_rank",
+    "tool_recall_at_3",
+    "tool_recall_at_5",
+    "tool_recall",
+    "first_expected_tool_reciprocal_rank",
+    "planner_context_tool_recall",
+    "role_coverage",
     "planner_context_role_coverage",
 )
 RetrievalFn = Callable[[str, ToolCatalog, RecipeCatalog, int, int], dict[str, Any]]
@@ -141,6 +152,7 @@ def evaluate_retrieval_queries(
         result["id"] for result in unsupported_results if not result["fallback_used"]
     ]
     family_metrics = _family_metrics(per_query)
+    macro_family_metrics = _macro_family_metrics(family_metrics)
 
     return {
         "strategy": _first_strategy(per_query),
@@ -149,12 +161,12 @@ def evaluate_retrieval_queries(
         "query_count": len(per_query),
         "supported_query_count": len(supported_results),
         "unsupported_query_count": len(unsupported_results),
-        "metrics": _aggregate_metrics(per_query),
-        "family_metrics": family_metrics,
-        "macro_family_metrics": _macro_family_metrics(family_metrics),
+        "metrics": _round_metrics(_aggregate_metrics(per_query)),
+        "family_metrics": _round_family_metrics(family_metrics),
+        "macro_family_metrics": _round_metrics(macro_family_metrics),
         "fallback_query_ids": fallback_query_ids,
         "unsupported_direct_match_query_ids": unsupported_direct_match_query_ids,
-        "queries": per_query,
+        "queries": [_round_query_metrics(result) for result in per_query],
     }
 
 
@@ -342,6 +354,32 @@ def _macro_family_metrics(
     }
 
 
+def _round_metrics(metrics: dict[str, float]) -> dict[str, float]:
+    return {
+        metric: round(value, METRIC_PRECISION)
+        for metric, value in metrics.items()
+    }
+
+
+def _round_family_metrics(
+    family_metrics: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    return {
+        family_id: {
+            **family,
+            "metrics": _round_metrics(family["metrics"]),
+        }
+        for family_id, family in family_metrics.items()
+    }
+
+
+def _round_query_metrics(result: dict[str, Any]) -> dict[str, Any]:
+    rounded = dict(result)
+    for metric in PER_QUERY_METRIC_KEYS:
+        rounded[metric] = round(rounded[metric], METRIC_PRECISION)
+    return rounded
+
+
 def _planner_context_tool_ids(
     retrieved_recipe_ids: list[str],
     retrieved_tool_ids: list[str],
@@ -428,13 +466,13 @@ def _mean(values: Any) -> float:
     concrete_values = list(values)
     if not concrete_values:
         return 0.0
-    return round(sum(concrete_values) / len(concrete_values), 4)
+    return sum(concrete_values) / len(concrete_values)
 
 
 def _rate(numerator: int, denominator: int) -> float:
     if denominator == 0:
         return 0.0
-    return round(numerator / denominator, 4)
+    return numerator / denominator
 
 
 def _required_str(data: dict[str, Any], key: str) -> str:

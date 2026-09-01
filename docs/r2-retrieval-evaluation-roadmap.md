@@ -174,6 +174,9 @@ tool 数量从 9 增加到 12，但 recipe 仍只有两个 RNA-seq workflow。�
 | `Unsupported Direct-Match Rate` | unsupported query 未触发 fallback 的比例 | 暴露 Retriever 不具备 intent rejection 的风险 |
 | `Family / Macro Metrics` | 分 family 统计，并仅对 supported families 做宏平均 | 防止样本量较大的 family 掩盖新 family 的排序问题 |
 
+Evaluation 在 per-query、family 和 macro 聚合期间保留原始浮点精度，只在最终公开
+artifact 边界统一舍入四位，避免从已舍入 family score 再求 macro average。
+
 初始目标不是追求高分，而是建立可重复 baseline：
 
 ```text
@@ -255,11 +258,11 @@ R2d ChIP-seq recipe 与 31-query cross-family baseline：
 | Query count | 31 | 21 | 7 | - |
 | Supported queries | 27 | 21 | 6 | 2 families |
 | Unsupported queries | 4 | 0 | 1 | - |
-| Recipe Recall@1 | 0.8519 | 0.8095 | 1.0000 | 0.9047 |
+| Recipe Recall@1 | 0.8519 | 0.8095 | 1.0000 | 0.9048 |
 | Recipe Recall@3 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
 | Recipe MRR | 0.9259 | 0.9048 | 1.0000 | 0.9524 |
 | Tool Recall@3 | 0.7136 | 0.7167 | 0.7028 | 0.7097 |
-| Tool Recall@5 | 0.8321 | 0.8191 | 0.8778 | 0.8485 |
+| Tool Recall@5 | 0.8321 | 0.8190 | 0.8778 | 0.8484 |
 | Tool Recall@8 | 0.9185 | 0.8952 | 1.0000 | 0.9476 |
 | Tool MRR | 0.9506 | 0.9365 | 1.0000 | 0.9683 |
 | Role Coverage | 0.9210 | 0.8984 | 1.0000 | 0.9492 |
@@ -283,7 +286,7 @@ R2d ChIP-seq recipe 与 31-query cross-family baseline：
 - R2d 中 ChIP-seq Recipe Recall@1 为 `1.0000`，说明新增 recipe 的 family intent
   在当前样本上可以稳定排首位；bulk RNA-seq Recipe Recall@1 为 `0.8095`，说明
   共享 QC、paired-end 和 reporting 词汇仍会造成首位排序 crowding。
-- R2d 的 macro Recipe Recall@1 为 `0.9047`，但当前只有两个 supported family，
+- R2d 的 macro Recipe Recall@1 为 `0.9048`，但当前只有两个 supported family，
   尚不足以决定引入 vector / hybrid backend。
 - `unsupported_chipseq_peak_annotation_en`、`unsupported_scrnaseq_clustering_en`
   和 `unsupported_variant_calling_en` 产生 direct lexical match，说明当前

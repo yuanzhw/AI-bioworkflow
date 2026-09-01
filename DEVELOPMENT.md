@@ -869,7 +869,7 @@ annotation 或 motif analysis，也未通过真实 ChIP-seq 数据执行验证�
 
 当前 query set 包含 31 条 family-labeled query，覆盖 21 条 supported bulk RNA-seq、
 6 条 supported ChIP-seq 和 4 条 unsupported 负例。`lexical_v1` 的 Recipe Recall@1
-为 `0.8519`，两个 supported family 的 macro Recipe Recall@1 为 `0.9047`，Planner
+为 `0.8519`，两个 supported family 的 macro Recipe Recall@1 为 `0.9048`，Planner
 Context Tool Recall / Role Coverage 均为 `1.0000`。下一步按扩展计划实现最小
 `scrnaseq_qc_clustering` family；完成 scRNA-seq 与 variant calling 后再决定是否进入
 R3 vector / hybrid backend。

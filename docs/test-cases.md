@@ -2016,6 +2016,8 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - `family_metrics` 包含 `bulk_rnaseq`、`chipseq`、`scrnaseq`、
   `variant_calling` 和 `metagenomics`。
 - bulk RNA-seq family 共 21 条 query；ChIP-seq family 共 7 条，其中 6 条 supported。
+- bulk RNA-seq Tool Recall@5 为 `0.8190`。
+- macro Recipe Recall@1 为 `0.9048`，macro Tool Recall@5 为 `0.8484`。
 - `macro_family_metrics` 中每个值都在 0 到 1 之间。
 
 覆盖点：
@@ -2025,6 +2027,24 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - Family-level 和 macro metrics 可以区分 overall 分数、样本量较大的 bulk RNA-seq
   family 与新增 ChIP-seq family。
 - Recipe expansion 保持 Planner context 完整，但 raw top-K crowding 仍可见。
+
+### `test_macro_family_metrics_use_unrounded_family_values`
+
+输入：
+
+- `family_a` 包含 21 条 supported query，其中 17 条 recipe rank-1 hit、4 条 miss。
+- `family_b` 包含 1 条 recipe rank-1 hit。
+
+执行：调用 `evaluate_retrieval_queries(..., retriever=fake_retriever)`。
+
+期望输出：
+
+- 对外暴露的 `family_a` Recipe Recall@1 舍入为 `0.8095`。
+- macro Recipe Recall@1 使用未舍入的 `17 / 21` 参与计算，最终为 `0.9048`，而非
+  从 `0.8095` 二次求平均得到的 `0.9047`。
+
+覆盖点：per-query、family 和 macro 聚合链路保持原始精度，只在最终 evaluation
+artifact 边界统一舍入四位。
 
 ### `test_computes_supported_metrics_and_tracks_unsupported_matches`
 

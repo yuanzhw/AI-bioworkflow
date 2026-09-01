@@ -77,8 +77,8 @@ Recall@3 `1.0000`、Recipe MRR `0.9259`；Tool Recall@3 `0.7136`、Tool Recall@5
 `0.7500`。
 
 Family-level 结果显示：ChIP-seq Recipe Recall@1 为 `1.0000`，bulk RNA-seq 为
-`0.8095`；两个 supported family 的 macro Recipe Recall@1 为 `0.9047`，macro Tool
-Recall@3/5 分别为 `0.7097` / `0.8485`。这说明正式 recipe expansion 已能补齐 Planner
+`0.8095`；两个 supported family 的 macro Recipe Recall@1 为 `0.9048`，macro Tool
+Recall@3/5 分别为 `0.7097` / `0.8484`。这说明正式 recipe expansion 已能补齐 Planner
 context，但 lexical top-K 仍存在 crowding；同时 direct-match 风险进一步确认 Retriever
 不是 unsupported intent detector。当前只有两个 supported family，仍不足以据此启动
 R3 vector / hybrid backend。
