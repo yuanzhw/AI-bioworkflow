@@ -1,17 +1,59 @@
-# AI-bioworkflow 🧬🤖
+# AI-bioworkflow
 
-[![Python Version](https://img.shields.io/badge/Python-3.13+-blue.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+将自然语言或结构化生信需求转换为 Catalog-bound Recipe Tool Plan 与 Workflow IR，再确定性编译成经验证的 WDL 1.0。
+
+[在线 RNA-seq 示例](https://yuanzhw.com/workspace?example=rnaseq-deg) · [Run 历史](https://yuanzhw.com/runs) · [Catalog](https://yuanzhw.com/catalog) · [API 文档](https://yuanzhw.com/docs) · [90 秒演示分镜](./docs/portfolio-demo-script.md)
+
+[![Python Version](https://img.shields.io/badge/Python-3.13+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![WDL](https://img.shields.io/badge/WDL-1.0-167D73.svg?style=flat-square)](https://github.com/openwdl/wdl)
 [![Package Manager: uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](./LICENSE)
-[![Framework](https://img.shields.io/badge/Agent-LangGraph-1C3C3C?style=flat-square)](https://github.com/langchain-ai/langgraph)
-[![Model](https://img.shields.io/badge/Model-DeepSeek_V4_Pro-4D6BFE?style=flat-square)](https://www.deepseek.com/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+[![License](https://img.shields.io/badge/License-Apache%202.0-4B5563.svg?style=flat-square)](./LICENSE)
 
+LLM 只在显式结构化边界内承担自然语言规划和可选的 Reviewer IR 修复；Catalog 约束 recipe、tool、command 与 runtime container，最终 WDL 始终由普通代码生成并重新经过 Analyzer、Renderer 和 Checker。Next.js 工作台记录同一次 run 的 timeline、artifacts、diagnostics 与 Workflow IR DAG，便于审阅和失败回放。
 
-AI-bioworkflow 是一个面向生物信息学工作流生成的 Agent / 编译器原型。
-项目利用 **LangGraph** 构建状态流转架构，将用户提供的结构化 JSON 标准化为内部 **Workflow IR**，再通过确定性的 Renderer 编译为标准、合规的 **WDL (Workflow Description Language) 1.0** 代码，并使用可配置 WDL validator 做本地语法校验。
+![RNA-seq 结构化示例成功编译并通过 WOMtool 校验](./docs/assets/workspace-rnaseq-run.png)
 
-LLM 在这个架构中更适合承担规划、补全、修复与解释任务；从标准 IR 到 WDL 的最终生成由普通代码完成，保证输出稳定、可测试、可维护。
+## 架构边界
+
+```mermaid
+flowchart TD
+    NL["Natural Language"] --> PLANNER["Planner + Approved Catalog Retrieval"]
+    PLANNER --> PLAN["Recipe Tool Plan"]
+    STRUCT["Structured Payload<br/>Recipe Tool Plan / Workflow IR"] --> NORMALIZER["IR Normalizer<br/>Schema + Catalog Validation"]
+    PLAN --> NORMALIZER
+    NORMALIZER --> IR["Workflow IR<br/>Canonical DAG Contract"]
+    IR --> ANALYZER["Analyzer"]
+    ANALYZER -- "valid" --> RENDERER["Deterministic WDL Renderer"]
+    ANALYZER -. "failure" .-> REPAIRER["Deterministic Repairer"]
+    CHECKER -. "failure" .-> REPAIRER
+    REPAIRER -. "safe fix" .-> ANALYZER
+    REPAIRER -. "no safe fix" .-> REVIEWER["Bounded Reviewer IR Patch<br/>optional, default off"]
+    REVIEWER --> POLICY["Schema + Patch Policy"]
+    POLICY --> ANALYZER
+    RENDERER --> CHECKER["WDL Checker"]
+    CHECKER -- "valid" --> OUTPUTS["Run Events + Artifacts<br/>Diagnostics + DAG"]
+```
+
+Reviewer 不能生成 WDL、修改 Catalog、command template 或 runtime image；被接受的 patch 也必须重新通过完整编译链。公开结构化 demo 不依赖 Planner 或 Reviewer API key。
+
+## 产品界面
+
+**Workflow IR DAG：** 展示 inputs、scatter、calls、outputs、依赖边和 Catalog 声明的 runtime，表达编译时结构，不冒充真实任务执行状态。
+
+![成功 run 的 Workflow IR DAG、校验摘要与节点详情](./docs/assets/run-workflow-dag.png)
+
+**Catalog boundary：** 区分正式准入与执行验证状态，并把工具 schema、命令模板和容器来源留在后端 Catalog 内。
+
+![RNA-seq recipe 与已准入 Tool Catalog](./docs/assets/catalog-boundary.png)
+
+## 当前完成状态
+
+- **规划与检索**：自然语言入口先检索 approved Catalog，再生成 Recipe Tool Plan；结构化入口可绕过 Planner。
+- **确定性编译**：canonical `workflow.steps`、Analyzer、deterministic repair、WDL Renderer 和 Checker 已形成闭环。
+- **有界 Reviewer**：P2 已实现 Analyzer / Checker 失败路由、IR patch policy、完整重校验、尝试预算和可回放 artifacts；默认禁用。
+- **可观测工作台**：FastAPI + SQLite + SSE + Next.js 已覆盖 run 创建、历史、DAG、diagnostics、失败回放和 Catalog 边界。
+- **部署状态**：公开 demo 已上线；execution backend 抽象、Cromwell contract tests 与 tiny e2e 已具备，但公开 demo 的真实执行后端保持禁用。
+- **明确边界**：当前没有登录、多租户、配额或 API rate limit；长期保存和更高并发需迁移 PostgreSQL 或制定重置策略。
 
 ## ✨ 核心特性
 
@@ -19,11 +61,11 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 - **确定性 WDL 编译**：通过 Jinja2 Renderer 从 IR 生成 WDL，避免让 LLM 承担模板引擎职责。
 - **静态分析**：在渲染前检查 task/call 引用、输入完整性、上游输出引用和基础类型匹配。
 - **Recipe / Tool Catalog**：支持用预定义生信工具目录和分析配方生成 Workflow IR。
-- **Agentic 架构**：基于 LangGraph 串联 IR Normalizer、Analyzer、Repairer、Renderer 与 Checker 节点，支持继续扩展 LLM planner / repairer。
+- **受控 Agent 边界**：基于 LangGraph 串联 Planner、IR Normalizer、Analyzer、Repairer、可选 Reviewer、Renderer 与 Checker；模型只能返回显式 schema 约束的计划或 IR patch。
 - **可复用服务与 API**：CLI 与 FastAPI 复用同一套 workflow/catalog service，避免界面层复制编译逻辑。
 - **执行后端边界**：提供可配置的 Execution Backend 抽象和 Cromwell REST client，用 contract tests 覆盖提交、轮询、outputs/metadata 与失败语义。
 - **Run history 与 DAG 审阅**：Next.js 工作台接入真实 run snapshot、SSE 时间线、历史详情、Workflow IR DAG 和失败 run 回放。
-- **模块化设计**：高度解耦的 State、Prompts、Nodes 与 Tools 设计，极佳的代码可维护性。
+- **模块化设计**：State、Prompts、Nodes、Catalog、application service 与 API/UI 边界彼此独立，便于单元测试和契约验证。
 
 ## 🛠️ 快速开始
 
@@ -38,7 +80,7 @@ LLM 在这个架构中更适合承担规划、补全、修复与解释任务；�
 
 ```bash
 # 克隆仓库
-git clone [https://github.com/yourusername/AI-bioworkflow.git](https://github.com/yourusername/AI-bioworkflow.git)
+git clone https://github.com/yuanzhw/AI-bioworkflow.git
 cd AI-bioworkflow
 
 # 使用 uv 同步依赖并创建虚拟环境
@@ -269,27 +311,11 @@ Recipe Tool Plan 示例：
 
 `tool_calls[].inputs` 的值既可以是单个表达式字符串，也可以是表达式数组。数组会被编译成 WDL `Array[...]` 输入；例如 MultiQC 的 `report_files` 可以写成 `["qc.html_report", "qc.json_report", "quantify.log_file"]`，scatter 内产生的多个 `Array[File]` 会在渲染时自动展开为 `flatten([...])`。Catalog output 也可以用 `tags: [multiqc_input]` 标记可汇总文件；MultiQC 未显式提供 `report_files` 时会自动收集前序带标签输出。
 
-## 🏗️ 架构总览与开发指南
+## 🏗️ 架构与开发指南
 
-系统提供自然语言和结构化输入两条入口，但最终都进入同一条以 Workflow IR
-为核心的编译链。自然语言入口先生成结构化 Recipe Tool Plan；结构化入口可以直接
-提交 Recipe Tool Plan 或 Workflow IR，不依赖 Planner API key。
-
-```mermaid
-flowchart TD
-    NL["自然语言需求"] --> ORCH["Orchestration Graph<br/>Planner + Catalog Retrieval"]
-    ORCH --> PLAN["Recipe Tool Plan"]
-    STRUCT["结构化输入<br/>Recipe Tool Plan / Workflow IR"] --> NORMALIZER["IR Normalizer<br/>Schema + Catalog Validation"]
-    PLAN --> NORMALIZER
-    NORMALIZER --> IR["Workflow IR<br/>Canonical DAG Contract"]
-    IR --> ANALYZER["Analyzer"]
-    ANALYZER --> RENDERER["Deterministic<br/>WDL Renderer"]
-    ANALYZER -- "有界修复" --> REPAIRER["Deterministic Repairer"]
-    REPAIRER -- "重新分析" --> ANALYZER
-    RENDERER --> CHECKER["WDL Checker"]
-    CHECKER --> OUTPUTS["Run Events + Artifacts<br/>Plan / IR / WDL / Diagnostics"]
-    IR -. "结构审阅" .-> DAG["Workflow IR DAG"]
-```
+上方流程图是当前真实编译链：自然语言和结构化输入最终共享 Workflow IR、
+Analyzer、Renderer 与 Checker；deterministic repair 优先于可选 Reviewer，任何模型
+修复都不能越过 IR patch policy 或完整重校验。
 
 Web 层与编译器核心通过显式 API 和 application service 隔离：
 
@@ -306,7 +332,7 @@ flowchart LR
 
 关键边界：
 
-- 当前公开演示主路径中，LLM Planner 只把自然语言需求规划为 Recipe Tool Plan，不直接生成最终 WDL。
+- LLM Planner 只把自然语言需求规划为 Recipe Tool Plan；可选 Reviewer 只提出受 policy 约束的 Workflow IR patch，两者都不能直接生成最终 WDL。
 - FastAPI 与 CLI 复用 Python application service；API 不通过 shell 调用 CLI。
 - Next.js 只提交请求并展示 API 返回的事件和产物，不生成或修复 Plan、Workflow IR 或 WDL。
 - DAG 从 Workflow IR 派生，用于审阅 step、scatter 和依赖关系，不表示真实 workflow call 的运行状态。
@@ -352,7 +378,7 @@ Web 产品化拆解与当前 W6 收口计划详见：
 - [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
 - [x] 完成 W4 工作台：结构化示例 / 自然语言 run 创建、snapshot 轮询、SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态展示。
 - [x] 完成 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)：真实 run 列表、详情回放、Workflow IR DAG、结构状态和失败 run 摘要。
-- [ ] 完成 [W6 部署与作品集打磨](./docs/w6-portfolio-launch-plan.md)：在线 demo、示例数据、架构图、截图/录屏、API 文档与 README 导航。
+- [x] 完成 [W6 部署与作品集打磨](./docs/w6-portfolio-launch-plan.md)：在线 demo、稳定示例、架构图、截图、演示分镜、部署文档与 README 导航。
 - [ ] 完成 P3 Architect 与 Bioinfo Reviewer 分层：Architect 负责候选分析方案，Bioinfo Reviewer 只读输出科学性 warnings。
 - [ ] 扩展更多常用生信 recipe 与 tool catalog。
 
