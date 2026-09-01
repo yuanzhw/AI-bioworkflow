@@ -360,6 +360,13 @@ Web 产品化拆解与当前 W6 收口计划详见：
 
 👉 **[部署与运维手册](./docs/deployment.md)**
 
+## 🤝 参与贡献与治理
+
+欢迎提交可复现的 bug、文档改进、测试、Recipe / Tool Catalog 扩展和聚焦的功能建议。
+开始前请阅读 [贡献指南](./CONTRIBUTING.md)。社区行为、安全报告和维护决策分别遵循
+[行为准则](./CODE_OF_CONDUCT.md)、[安全策略](./SECURITY.md) 与
+[维护者治理](./MAINTAINERS.md)。
+
 ## 📅 未来路线图 (Roadmap)
 
 - [x] 搭建基础 LangGraph 状态机。

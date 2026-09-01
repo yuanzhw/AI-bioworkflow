@@ -1,0 +1,166 @@
+name: Feature request
+description: Propose a compiler, Catalog, API, UI, execution, or documentation improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user problem before the implementation.
+
+        Keep examples public and sanitized. Do not include credentials, patient or sample identifiers, restricted genomic or clinical data, private registry details, or internal endpoints.
+
+        The current trust boundaries are intentional: a model may produce a Recipe Tool Plan or a bounded Workflow IR patch, but final WDL remains deterministically rendered from validated Workflow IR. Tool, command, and runtime choices remain owned by the formal Catalog.
+
+  - type: dropdown
+    id: feature_kind
+    attributes:
+      label: Request type
+      options:
+        - New Tool Catalog entry
+        - New or expanded recipe
+        - Workflow IR, Analyzer, repair, Renderer, or Checker
+        - Natural-language Planner or Catalog retrieval
+        - Reviewer policy or bounded IR repair
+        - CLI or shared service
+        - FastAPI, persistence, or SSE
+        - Next.js workbench, history, or DAG
+        - Execution backend or Cromwell integration
+        - Project-maintained container
+        - Documentation, examples, or contributor tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user need
+      description: Who is affected, what bioinformatics task is blocked, and why is current behavior insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Concrete use case
+      description: Provide a safe example request or workflow shape using synthetic or public data.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe observable behavior and contracts, not only an implementation.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_areas
+    attributes:
+      label: Affected contracts or layers
+      multiple: true
+      options:
+        - Natural language to Recipe Tool Plan
+        - Approved Catalog retrieval and final Catalog validation
+        - Recipe Tool Plan to Workflow IR normalization
+        - Canonical workflow.steps DAG
+        - Analyzer or bounded repair
+        - Reviewer IR patch policy
+        - Deterministic Workflow IR to WDL rendering
+        - WDL syntax validation
+        - API, run persistence, or SSE
+        - Web visualization
+        - Execution backend policy
+        - Tool container or runtime supply chain
+        - Documentation only
+    validations:
+      required: true
+
+  - type: dropdown
+    id: boundary_impact
+    attributes:
+      label: Trust-boundary impact
+      options:
+        - Preserves the existing architecture boundaries
+        - Extends structured contracts while preserving the boundaries
+        - May change an architecture boundary and needs design review
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Architecture and safety analysis
+      description: Explain the impact on Recipe Tool Plan, Catalog validation, workflow.steps, Analyzer/Renderer/Checker, Reviewer patch policy, src.execution, and the compile-time DAG. Write "Not applicable" for documentation-only requests.
+    validations:
+      required: true
+
+  - type: textarea
+    id: catalog_details
+    attributes:
+      label: Tool, recipe, or container admission details
+      description: Required for Catalog/container proposals. Include version, purpose, schemas, command, explicit runtime image, execution verification/evidence, trusted upstream source, license, and wrapper/smoke-test needs.
+      placeholder: |
+        Tool or recipe ID:
+        Version:
+        Inputs, outputs, and parameters:
+        Command:
+        Runtime image or digest:
+        Execution verification and evidence:
+        Upstream source and license:
+        Recipe role:
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List measurable outcomes that would make the request complete.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Test and documentation plan
+      description: Identify applicable tests, representative WDL validation, frontend checks, backend contracts, container smoke tests, and documentation updates.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe existing recipes, tools, or smaller solutions that were considered.
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - I can prepare a pull request after design agreement
+        - I can help with fixtures, testing, or documentation
+        - I can provide domain feedback
+        - I am not able to contribute an implementation
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues, recipes, Tool Catalog entries, and roadmap documents for overlap.
+          required: true
+        - label: I removed secrets, credentials, private identifiers, and restricted genomic or clinical data.
+          required: true
+        - label: I understand that architecture-boundary changes require explicit maintainer design review.
+          required: true
