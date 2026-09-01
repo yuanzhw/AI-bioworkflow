@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/yuanzhw/AI-bioworkflow/security/policy
+    about: Do not disclose vulnerabilities, credentials, or sensitive data in a public issue. Follow the private contact instructions in the security policy.
+  - name: Read the project documentation
+    url: https://github.com/yuanzhw/AI-bioworkflow#readme
+    about: Check setup, supported input contracts, architecture boundaries, and verification commands before filing an issue.

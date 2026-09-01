@@ -1,0 +1,166 @@
+name: Bug report
+description: Report a reproducible compiler, Catalog, API, UI, or execution defect.
+title: "[Bug]: "
+labels:
+  - bug
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve AI-bioworkflow.
+
+        **This is a public issue.** Never include API keys, `.env` contents, credentials, signed URLs, private endpoints, patient or sample identifiers, or restricted genomic or clinical data. Use synthetic or public fixtures.
+
+        Do not disclose a suspected security vulnerability here. Follow the security policy from the issue chooser.
+
+  - type: input
+    id: revision
+    attributes:
+      label: Version or revision
+      description: Release tag, commit SHA, or branch where the problem occurs.
+      placeholder: v0.1.0-alpha.1, 23c6660, or main
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - CLI or shared workflow service
+        - Natural-language Planner or Catalog retrieval
+        - Recipe or Tool Catalog resolution
+        - Workflow IR schema or normalization
+        - Analyzer, deterministic repair, or Reviewer patch
+        - Deterministic WDL Renderer or Checker
+        - FastAPI, run storage, or SSE
+        - Next.js workbench, history, or DAG
+        - Execution backend or Cromwell
+        - Project-maintained containers or deployment
+        - Documentation or examples
+        - Other or unsure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: entry_point
+    attributes:
+      label: Entry point
+      options:
+        - CLI natural-language mode
+        - CLI structured mode (--input)
+        - API POST /api/runs
+        - API POST /api/compile
+        - API run snapshot, history, or SSE
+        - Web workspace, run history, DAG, or Catalog
+        - Direct Python service or library call
+        - GitHub Actions or container script
+        - Other or not applicable
+    validations:
+      required: true
+
+  - type: dropdown
+    id: input_contract
+    attributes:
+      label: Input contract
+      options:
+        - Natural-language request
+        - Recipe Tool Plan
+        - Workflow IR with canonical workflow.steps
+        - Legacy calls-only workflow JSON
+        - Not applicable or unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe what is broken and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact command, API route, page, and smallest reliable sequence.
+      placeholder: |
+        1. Run ...
+        2. Submit ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: sanitized_input
+    attributes:
+      label: Minimal sanitized input
+      description: Paste the smallest safe input that reproduces the issue. Use synthetic or public data and replace local paths and identifiers. Write "Not applicable" when there is no workflow input.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and diagnostics
+      description: Include the relevant Analyzer, Reviewer, Renderer, Checker, API, or UI diagnostic. For WDL problems, include only the smallest useful excerpt.
+    validations:
+      required: true
+
+  - type: textarea
+    id: catalog_context
+    attributes:
+      label: Recipe, tool, runtime, and validator context
+      description: When relevant, provide recipe ID, tool ID/version, declared runtime.docker, execution_verification state, WDL validator, and execution backend. Do not include registry credentials.
+      placeholder: |
+        Recipe:
+        Tool and version:
+        Runtime image:
+        Execution verification:
+        WDL validator:
+        Execution backend:
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include applicable OS, Python/uv, Node/browser, Java/WOMtool or miniwdl, and Cromwell/backend versions.
+      placeholder: |
+        OS:
+        Python and uv:
+        Node and browser:
+        Java and WDL validator:
+        Execution backend:
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Remove credentials, private URLs, local identity details, and sensitive data.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing open and closed issues for a duplicate.
+          required: true
+        - label: I included an exact revision and enough environment details to reproduce the issue.
+          required: true
+        - label: I removed secrets, credentials, private identifiers, and restricted genomic or clinical data.
+          required: true
+        - label: This report does not publicly disclose a suspected security vulnerability.
+          required: true

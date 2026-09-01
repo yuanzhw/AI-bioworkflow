@@ -1,0 +1,20 @@
+# Default repository owner
+* @yuanzhw
+
+# Governance, release, and CI/CD
+/.github/ @yuanzhw
+/AGENTS.md @yuanzhw
+/MAINTAINERS.md @yuanzhw
+/SECURITY.md @yuanzhw
+/pyproject.toml @yuanzhw
+/uv.lock @yuanzhw
+
+# Compiler, Catalog, execution, and deployment trust boundaries
+/src/ @yuanzhw
+/tests/ @yuanzhw
+/docs/workflow-ir.md @yuanzhw
+/containers/ @yuanzhw
+/deploy/ @yuanzhw
+
+# Product UI
+/web/ @yuanzhw
