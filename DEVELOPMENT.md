@@ -189,6 +189,10 @@ P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流
 | FastAPI 开发服务 | `.\.venv\Scripts\python.exe -m src.api.server` | 默认监听 `127.0.0.1:8010`，避开 Cromwell 的 `8000`。 |
 | 真实 Cromwell tiny e2e | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 -RunE2E -CromwellUrl http://localhost:8000 -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny` | 显式 opt-in；`check_p0.ps1` 委托 `run_cromwell_tiny_e2e.ps1` 准备 fixture、同步 runner 并运行真实 e2e。 |
 
+GitHub pull request 门禁使用 WOMtool 92 作为 canonical WDL validator，与
+Cromwell 92 runner 对齐；生产 API 镜像当前使用的 miniwdl 作为必需的第二实现
+兼容检查。完整 job 拓扑、固定版本和本地等价命令见 `docs/ci.md`。
+
 ## 未来架构原则（规划中）
 
 后续智能化能力遵循以下总原则：

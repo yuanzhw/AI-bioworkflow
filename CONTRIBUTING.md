@@ -30,7 +30,8 @@ Read these sources of truth before changing the corresponding area:
 ## Development setup
 
 The project targets Python 3.13+ and uses `uv` with the repository `.venv`.
-Java 17+ and WOMtool 91 are used for the primary WDL validation path.
+Java 17+ and WOMtool 92 are used for the canonical WDL validation path.
+miniwdl is a secondary compatibility check for the production API image.
 
 ```powershell
 git clone https://github.com/yuanzhw/AI-bioworkflow.git
@@ -91,7 +92,8 @@ Every contribution must preserve these invariants:
 
 - Add focused tests for the new or changed contract.
 - Update `docs/workflow-ir.md` when semantics or backend mapping changes.
-- Generate representative WDL and run WOMtool or `miniwdl check`.
+- Generate representative WDL and validate it with WOMtool 92.
+- Run `miniwdl check` as the secondary production-compatibility check.
 
 ### Recipe or Tool Catalog
 
@@ -146,6 +148,12 @@ suffixes.
 
 All required checks should pass before merge. Squash merges should use a clean
 subject without an automatic `(#PR_NUMBER)` suffix.
+
+The required GitHub check is `CI gate`. It aggregates the complete Python
+suite with WOMtool validation, production miniwdl compatibility, and Web
+lint/tests/build. The workflow and local equivalents are documented in
+[CI and merge gate](./docs/ci.md). Do not bypass or rename this check without
+updating the `Mainline Safeguard` ruleset in the same maintenance change.
 
 ## Security reports
 

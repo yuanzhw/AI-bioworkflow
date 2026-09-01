@@ -786,7 +786,9 @@ task multiqc_report {
 }
 ```
 
-Renderer 只负责确定性渲染。生成后由 `miniwdl check` 做 WDL 语法校验。
+Renderer 只负责确定性渲染。生成后由项目配置的 Checker 做 WDL 语法和
+类型校验；CI 以与 Cromwell runner 对齐的 WOMtool 92 为 canonical gate，
+并使用 `miniwdl check` 覆盖生产 API 的第二实现兼容性。
 
 ## 后端中立约束
 
