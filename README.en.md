@@ -134,8 +134,8 @@ Passing WDL syntax and type validation does not establish that an analysis desig
 
 ## Status and roadmap
 
-- **Released:** [`v0.1.0-alpha.1`](https://github.com/yuanzhw/AI-bioworkflow/releases/tag/v0.1.0-alpha.1) established the public compiler workbench, DAG, Catalog, and deployment baseline.
-- **Current `main`:** required WOMtool 92 CI, OSS governance, bilingual entry points, a traceable case study, a compile-ready ChIP-seq recipe, cross-workflow-family retrieval evaluation, and public evidence pages form the next pre-release candidate.
+- **Released:** [`v0.1.0-alpha.2`](https://github.com/yuanzhw/AI-bioworkflow/releases/tag/v0.1.0-alpha.2) extends the public compiler workbench with required WOMtool 92 CI, OSS governance, bilingual entry points, and a traceable case study.
+- **Current `main`:** the published alpha.2 baseline includes the compile-ready ChIP-seq recipe, cross-workflow-family retrieval evaluation, and public evidence pages, with further changes kept incremental.
 - **Next:** layered Architect and Bioinfo Reviewer roles, more admitted recipes/tools, and reproducible evaluation of retrieval quality and scientific warnings.
 - **Not in the current scope:** direct model generation of final WDL, real execution enabled by default in the public demo, or premature investment in authentication, billing, and complex multi-tenant infrastructure.
 
