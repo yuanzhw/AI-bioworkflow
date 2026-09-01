@@ -309,9 +309,10 @@ OK (skipped=2)
 期望输出：
 
 - 至少包含一个 recipe。
-- 第一个 recipe id 为 `rnaseq_differential_expression`。
+- 可以按 id 找到 `rnaseq_differential_expression`。
 - `sample_ids` required input 类型为 `Array[String]`。
 - 第一个 step 的 allowed tools 为 `["fastp"]`。
+- recipe id 集合包含 `chipseq_peak_calling`。
 
 覆盖点：
 
@@ -418,11 +419,13 @@ OK (skipped=2)
 - HTTP status 为 `200`。
 - `catalog_service.list_recipes()` 被调用一次。
 - 响应中至少有一个 recipe。
-- 第一个 recipe id 为 `rnaseq_differential_expression`。
+- 响应 recipe id 集合同时包含 `rnaseq_differential_expression` 和
+  `chipseq_peak_calling`。
 
 覆盖点：
 
 - Recipe 列表 endpoint 复用 W0 catalog service。
+- API 测试不把按 id 排序的当前首项误当成稳定公开顺序契约。
 
 ### `test_get_recipe_uses_catalog_service`
 
@@ -1461,12 +1464,13 @@ OK (skipped=2)
   工具。
 - Catalog admission 不会被误写成 smoke-tested 或 e2e-validated。
 
-### `test_chipseq_tool_contracts_resolve_to_valid_renderable_ir`
+### `test_chipseq_peak_calling_recipe_resolves_to_valid_renderable_ir`
 
 输入：
 
-- 只存在于测试代码中的 `chipseq_tool_contract` recipe。
-- 串联 `bowtie2 -> samtools -> macs2` 的最小 Recipe Tool Plan。
+- 正式 `chipseq_peak_calling` recipe。
+- `examples/chipseq_peak_calling_recipe_plan.json` 中串联
+  `fastp -> bowtie2 -> samtools -> macs2 -> multiqc` 的单 treatment Recipe Tool Plan。
 - 当前正式 Tool Catalog。
 
 执行：
@@ -1478,27 +1482,30 @@ OK (skipped=2)
 期望输出：
 
 - Analyzer 返回 `is_valid=True`。
-- IR/WDL 包含 `bowtie2_align`、`samtools_prepare_bam` 和 `macs2_peaks`。
+- IR/WDL 包含 `fastp_qc`、`bowtie2_align`、`samtools_prepare_bam`、`macs2_peaks`
+  和 `multiqc_report`。
 - Bowtie 2 index archive 解包后解析 index prefix，并排除 `.rev.1.bt2` /
   `.rev.1.bt2l` reverse-index 文件。
 - `align.aligned_sam` 正确连接到 samtools，`prepare_bam.sorted_bam` 正确连接到
   MACS2。
 - samtools command 同一 task 内依次执行 coordinate sort 和 index。
 - 未提供 control 时 MACS2 command 不渲染 `-c`。
-- workflow 输出暴露 sorted BAM、BAI、narrowPeak 和 peak summits。
+- MultiQC 未显式传入 `report_files` 时，resolver 自动收集 fastp HTML/JSON、Bowtie 2
+  alignment log 和 MACS2 peak table 的 `multiqc_input` tags。
+- workflow 输出暴露 sorted BAM、BAI、narrowPeak、peak summits 和 MultiQC report。
 
 覆盖点：
 
-- 三个新增 ToolSpec 已通过 resolver/analyzer/renderer 阶段的结构和确定性渲染验证。
-- 测试 recipe 不写入正式 Recipe Catalog，因此不会提前宣称 ChIP-seq workflow
-  已受支持。
+- 正式 ChIP-seq recipe 已通过 resolver/analyzer/renderer 阶段的结构和确定性渲染验证。
+- 第一版产品能力明确限定为单个 paired-end treatment sample；不包含 control branch、
+  peak annotation 或 motif analysis。
 - Catalog output description 保留给 metadata/API/RAG；resolver 只将
   `type`、`value` 和 `tags` 投影到 Workflow IR OutputSpec。
 
-### `test_chipseq_tool_contract_wdl_passes_syntax_validation`
+### `test_chipseq_peak_calling_wdl_passes_syntax_validation`
 
-输入：与 `test_chipseq_tool_contracts_resolve_to_valid_renderable_ir` 相同的测试 recipe、
-Recipe Tool Plan 和正式 Tool Catalog。
+输入：与 `test_chipseq_peak_calling_recipe_resolves_to_valid_renderable_ir` 相同的正式
+recipe、example plan 和 Tool Catalog。
 
 执行：
 
@@ -1507,15 +1514,15 @@ Recipe Tool Plan 和正式 Tool Catalog。
 
 期望输出：validator 返回 `is_valid=True`；无可用 validator 时按现有测试约定跳过。
 
-覆盖点：为三个新增 ToolSpec 补齐 compile-ready policy 要求的外部 WDL 语法验证，
-并保持无 validator 环境下的纯 Catalog/Analyzer/Renderer 测试继续运行。
+覆盖点：为正式 ChIP-seq recipe 补齐外部 WDL 语法验证，并保持无 validator 环境下的
+纯 Catalog/Analyzer/Renderer 测试继续运行。
 
 本次 Catalog admission 使用 WOMtool 91 实际执行该测试并通过。
 
 ### `test_macs2_optional_control_is_rendered_when_provided`
 
-输入：在最小 ChIP-seq tool contract plan 中增加 `control_bam` workflow input，
-并传给 MACS2 call。
+输入：复制正式 ChIP-seq example plan，增加 `control_bam` workflow input，并传给
+MACS2 call。
 
 期望输出：
 
@@ -1525,7 +1532,7 @@ Recipe Tool Plan 和正式 Tool Catalog。
 - command 包含 `-c ~{control_bam}`。
 
 覆盖点：MACS2 control 输入的 optional schema 和 conditional command template
-保持一致。
+保持一致；该底层工具契约测试不扩张正式 recipe 的单 treatment 产品范围。
 
 ### `test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl`
 
@@ -1866,11 +1873,26 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 - RAG / retrieval baseline 能覆盖同一 DE role 下的替代工具选择。
 - 新增 catalog 条目具备 aliases、description 和 role 词汇，便于自然语言 Planner 构造候选上下文。
 
-### `test_tokenizer_supports_rnaseq_variants_and_cjk_ngrams`
+### `test_retrieves_chipseq_recipe_and_compile_ready_tools`
+
+输入：显式请求 `fastp`、Bowtie 2、samtools、MACS2 和 MultiQC 的 paired-end
+ChIP-seq narrow peak calling query。
+
+期望输出：
+
+- 不触发 fallback。
+- 首位 recipe 为 `chipseq_peak_calling`。
+- top-8 tools 包含五个 recipe 工具。
+- `bowtie2`、`samtools` 和 `macs2` 的 execution verification 仍为 `unverified`。
+
+覆盖点：Retriever 可以召回新增 workflow family，同时 retrieval artifact 不会把
+compile-ready 工具误标记成已执行验证。
+
+### `test_tokenizer_supports_sequencing_variants_and_cjk_ngrams`
 
 输入：
 
-- 文本：`做差异表达 RNAseq`。
+- 文本：`做差异表达 RNAseq 和 ChIPseq`。
 
 执行：
 
@@ -1879,11 +1901,12 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 期望输出：
 
 - token 包含 `rna`、`seq` 和 `rnaseq`。
+- token 包含 `chip` 和 `chipseq`。
 - CJK token 包含单字 token 和重叠 2-gram，例如 `差`、`差异` 和 `表达`。
 
 覆盖点：
 
-- tokenization 在零新增依赖前提下支持常见 RNA-seq 写法和中文 query。
+- tokenization 在零新增依赖前提下支持常见 RNA-seq / ChIP-seq 写法和中文 query。
 
 ### `test_no_match_fallback_records_reason_and_approved_tools`
 
@@ -1932,8 +1955,8 @@ Recipe / Tool Catalog 中做确定性词法召回，不访问网络、不引入 
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
 fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
-catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统计，
-不污染当前 RNA-seq supported recall。
+与 ChIP-seq 的 cross-family baseline metrics。Fixture 不伪造工具；unsupported
+负例单独统计，不污染 supported recall。
 
 ### `test_loads_current_catalog_query_fixture`
 
@@ -1947,8 +1970,9 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 
 期望输出：
 
-- fixture 共 24 条 query。
-- 20 条 `supported == True`，4 条 `supported == False`。
+- fixture 共 31 条 query。
+- 27 条 `supported == True`，4 条 `supported == False`。
+- 每条 query 都包含必填 `workflow_family`。
 - 第一条 query id 为 `rnaseq_deg_basic_en`。
 - 第一条 query 的 expected tools 包含 `fastp`。
 - fixture 包含 `rnaseq_reference_prep_basic_en`。
@@ -1956,11 +1980,14 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 - 显式指定 DESeq2 的 query 将 `deseq2` 记录为 required expected tool。
 - 未指定 differential expression backend 的 query 允许 `deseq2`、`edger`
   或 `limma_voom` 任一 approved tool 覆盖该 role。
+- fixture 包含 6 条 supported ChIP-seq query；其 expected recipe 为
+  `chipseq_peak_calling`，expected tools 包含 `macs2`。
+- `unsupported_chipseq_peak_annotation_en` 保留为 ChIP-seq family 的负例。
 
 覆盖点：
 
 - R2 query set schema 可被稳定读取。
-- 当前 baseline 明确区分 supported RNA-seq 查询和 unsupported 负例。
+- 当前 baseline 明确区分 supported bulk RNA-seq / ChIP-seq 查询和 unsupported 负例。
 - Fixture 标注明确区分显式 tool intent 和通用 role intent。
 
 ### `test_evaluates_current_catalog_baseline`
@@ -1980,19 +2007,44 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 - `strategy == "lexical_v1"`。
 - `top_k_recipes == 3`。
 - `top_k_tools == 8`。
-- `query_count == 24`。
-- `supported_query_count == 20`。
+- `query_count == 31`。
+- `supported_query_count == 27`。
 - `unsupported_query_count == 4`。
 - 每个 metric 均为 0 到 1 之间的稳定数值。
 - `planner_context_tool_recall == 1.0`。
 - `planner_context_role_coverage == 1.0`。
+- `family_metrics` 包含 `bulk_rnaseq`、`chipseq`、`scrnaseq`、
+  `variant_calling` 和 `metagenomics`。
+- bulk RNA-seq family 共 21 条 query；ChIP-seq family 共 7 条，其中 6 条 supported。
+- bulk RNA-seq Tool Recall@5 为 `0.8190`。
+- macro Recipe Recall@1 为 `0.9048`，macro Tool Recall@5 为 `0.8484`。
+- `macro_family_metrics` 中每个值都在 0 到 1 之间。
 
 覆盖点：
 
 - 当前 Catalog 可以生成可重复 retrieval baseline。
 - Baseline artifact 包含 per-query retrieval、miss、fallback 与 aggregate metrics。
-- 新增 ChIP-seq tools 挤动 raw top-K 时，现有 RNA-seq recipe expansion 仍保持
-  Planner context 完整；这不替代下一 PR 的 family-level baseline。
+- Family-level 和 macro metrics 可以区分 overall 分数、样本量较大的 bulk RNA-seq
+  family 与新增 ChIP-seq family。
+- Recipe expansion 保持 Planner context 完整，但 raw top-K crowding 仍可见。
+
+### `test_macro_family_metrics_use_unrounded_family_values`
+
+输入：
+
+- `family_a` 包含 21 条 supported query，其中 17 条 recipe rank-1 hit、4 条 miss。
+- `family_b` 包含 1 条 recipe rank-1 hit。
+
+执行：调用 `evaluate_retrieval_queries(..., retriever=fake_retriever)`。
+
+期望输出：
+
+- 对外暴露的 `family_a` Recipe Recall@1 舍入为 `0.8095`。
+- macro Recipe Recall@1 使用未舍入的 `17 / 21` 参与计算，最终为 `0.9048`，而非
+  从 `0.8095` 二次求平均得到的 `0.9047`。
+
+覆盖点：per-query、family 和 macro 聚合链路保持原始精度，只在最终 evaluation
+artifact 边界统一舍入四位。
 
 ### `test_computes_supported_metrics_and_tracks_unsupported_matches`
 
@@ -2010,9 +2062,10 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 
 期望输出：
 
-- `recipe_recall_at_k == 0.5`。
+- `recipe_recall_at_1 == 0.5`，`recipe_recall_at_k == 0.5`。
 - `recipe_mrr == 0.5`。
-- `tool_recall_at_k == 0.25`。
+- `tool_recall_at_3 == 0.25`、`tool_recall_at_5 == 0.25`、
+  `tool_recall_at_k == 0.25`。
 - `tool_mrr == 0.5`。
 - `role_coverage == 0.25`。
 - `planner_context_tool_recall == 0.5`。
@@ -2020,7 +2073,10 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 - `fallback_rate == 0.3333`。
 - `supported_fallback_rate == 0.5`。
 - `unsupported_fallback_rate == 0.0`。
+- `unsupported_direct_match_rate == 1.0`。
 - `unsupported_direct_match_query_ids == ["q3"]`。
+- `family_metrics` 分别记录 2 条 `bulk_rnaseq` 和 1 条 `chipseq` query。
+- 只对 supported family 求宏平均，`macro_family_metrics.recipe_recall_at_1 == 0.5`。
 - 第一条 query 的 `planner_context_tools` 包含 `deseq2`。
 - 第二条 query 的 `planner_context_missed_expected_tools == ["deseq2"]`。
 
@@ -2031,6 +2087,7 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
   区分 raw retrieval miss 和 Planner prompt candidate coverage。
 - Unsupported queries 不污染 supported recall，但会暴露 direct-match 风险。
 - Fallback rate 按 all / supported / unsupported 三个视角记录。
+- 固定 top-1/top-3/top-5 与 family macro 计算不依赖当前动态 K 的展示名称。
 
 ### `test_deduplicates_planner_context_tool_ids_from_multiple_versions`
 
@@ -2077,6 +2134,24 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 
 - Unsupported negative cases 不能同时声明正例答案，避免 baseline 指标语义混乱。
 
+### `test_requires_workflow_family_in_query_schema`
+
+输入：一条缺少 `workflow_family` 的 supported query dict。
+
+期望输出：`RetrievalQuery.from_dict(...)` 抛出 `ValueError`，错误消息说明
+`workflow_family` 必须是非空字符串。
+
+覆盖点：每条 query 都可稳定进入 family-level 分组，避免静默归入隐式默认组。
+
+### `test_requires_enough_tool_results_for_fixed_recall_cutoffs`
+
+输入：一条合法 query，但调用 evaluation 时设置 `top_k_tools=4`。
+
+期望输出：抛出 `ValueError`，错误消息包含 `top_k_tools must be >= 5`。
+
+覆盖点：固定 Tool Recall@3/@5 不会在候选深度不足时产生看似有效、实际被截断的
+指标。
+
 ### `test_rejects_non_object_fixture_entries`
 
 输入：
@@ -2115,7 +2190,7 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 期望输出：
 
 - 返回至少一个 recipe。
-- 第一个 recipe 的 `id` 为 `rnaseq_differential_expression`。
+- 从列表中可以按 `id` 找到 `rnaseq_differential_expression`。
 - 记录包含 `required_inputs` 和 `steps`。
 - 第一个 step 的 `id` 为 `qc`。
 - 第一个 step 的 `allowed_tools` 包含 `fastp`。
@@ -2145,6 +2220,20 @@ catalog baseline metrics。Fixture 不伪造工具；unsupported 负例单独统
 
 - Catalog service 能查询单个 recipe。
 - scatter metadata 被保留为 JSON-ready dict，便于后续 DAG/API 展示。
+
+### `test_get_chipseq_recipe_returns_compile_ready_steps`
+
+输入：recipe id `chipseq_peak_calling`。
+
+期望输出：
+
+- recipe name 为 `ChIP-seq peak calling`。
+- `genome_index` required input type 为 `File`。
+- step 顺序为 `qc`、`align_reads`、`sort_and_index`、`call_peaks`、`qc_report`。
+- `call_peaks` 只允许 `macs2`；`qc_report` 为 optional。
+
+覆盖点：正式 ChIP-seq recipe 可通过 Catalog service/API surface 查询，且 step role、
+顺序和 optional 边界保持可审计。
 
 ### `test_list_tools_returns_json_ready_tool_records`
 

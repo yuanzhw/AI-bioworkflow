@@ -1,0 +1,47 @@
+id: chipseq_peak_calling
+name: ChIP-seq peak calling
+description: Align paired-end ChIP-seq reads and call narrow enriched regions for one treatment sample.
+aliases:
+  - ChIP-seq peak workflow
+  - ChIPseq peak calling
+  - chromatin immunoprecipitation sequencing
+  - MACS2 peak workflow
+  - transcription factor binding peak detection
+
+required_inputs:
+  raw_r1:
+    type: File
+    description: First raw paired-end ChIP-seq FASTQ file for the treatment sample.
+  raw_r2:
+    type: File
+    description: Second raw paired-end ChIP-seq FASTQ file for the treatment sample.
+  genome_index:
+    type: File
+    description: Gzip-compressed tar archive containing the Bowtie 2 genome index.
+
+steps:
+  - id: qc
+    role: read_quality_control
+    allowed_tools:
+      - fastp
+
+  - id: align_reads
+    role: genome_alignment
+    allowed_tools:
+      - bowtie2
+
+  - id: sort_and_index
+    role: bam_sort_and_index
+    allowed_tools:
+      - samtools
+
+  - id: call_peaks
+    role: peak_calling
+    allowed_tools:
+      - macs2
+
+  - id: qc_report
+    role: quality_control_summary
+    optional: true
+    allowed_tools:
+      - multiqc

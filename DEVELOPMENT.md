@@ -868,8 +868,18 @@ verification 的边界，允许暂缓真实 e2e，但不允许用不完整占位
 Tool Catalog 契约。
 
 当前 `bowtie2`、`samtools` 和 `macs2` 已作为 `unverified`、compile-ready
-工具进入正式 Catalog。下一步是增加 `chipseq_peak_calling` recipe 和首次跨
-family retrieval baseline；在 recipe 合并前，ChIP-seq 仍不属于已支持 workflow。
+工具进入正式 Catalog；`chipseq_peak_calling` recipe、结构化 example plan 和首次
+跨 family retrieval baseline 也已落地。该 recipe 支持单个 paired-end treatment
+sample 的 QC、genome alignment、BAM sort/index、narrow peak calling 和 MultiQC
+编译路径，代表性 WDL 已通过 WOMtool 91 校验；它不包含 control branch、peak
+annotation 或 motif analysis，也未通过真实 ChIP-seq 数据执行验证。
+
+当前 query set 包含 31 条 family-labeled query，覆盖 21 条 supported bulk RNA-seq、
+6 条 supported ChIP-seq 和 4 条 unsupported 负例。`lexical_v1` 的 Recipe Recall@1
+为 `0.8519`，两个 supported family 的 macro Recipe Recall@1 为 `0.9048`，Planner
+Context Tool Recall / Role Coverage 均为 `1.0000`。下一步按扩展计划实现最小
+`scrnaseq_qc_clustering` family；完成 scRNA-seq 与 variant calling 后再决定是否进入
+R3 vector / hybrid backend。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

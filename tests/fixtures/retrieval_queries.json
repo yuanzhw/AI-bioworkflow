@@ -3,6 +3,7 @@
     "id": "rnaseq_deg_basic_en",
     "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files with QC, transcript quantification, gene-level counts, and a workflow summary report.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
     "expected_roles": {
@@ -18,6 +19,7 @@
     "id": "rnaseq_deg_explicit_tools_en",
     "query": "Build a workflow using fastp, Salmon, tximport, DESeq2, and MultiQC for bulk RNA-seq differential expression.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
     "expected_roles": {
@@ -33,6 +35,7 @@
     "id": "rnaseq_deg_cn_mixed_tools",
     "query": "为 bulk RNAseq 样本做差异表达分析，使用 fastp 清理 FASTQ、Salmon 定量、tximport 汇总到 gene counts、DESeq2 输出 DEG 表，并生成 MultiQC 报告。",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport", "deseq2", "multiqc"],
     "expected_roles": {
@@ -48,6 +51,7 @@
     "id": "rnaseq_deg_abbrev_en",
     "query": "Create a DEG workflow for bulk RNAseq paired-end reads, including adapter trimming, transcript quantification, transcript-to-gene summarization, and a QC report.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
     "expected_roles": {
@@ -63,6 +67,7 @@
     "id": "rnaseq_deg_no_tool_names_en",
     "query": "Identify differentially expressed genes from RNA sequencing FASTQs and create a workflow-level quality-control summary.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
     "expected_roles": {
@@ -78,6 +83,7 @@
     "id": "rnaseq_deg_salmon_deseq2_en",
     "query": "Use Salmon quantification and DESeq2 for differential expression on paired-end bulk RNA-seq data, starting from raw FASTQs.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport", "deseq2"],
     "expected_roles": {
@@ -92,6 +98,7 @@
     "id": "rnaseq_quant_gene_counts_en",
     "query": "Quantify bulk RNA-seq reads and produce a transcript-to-gene count matrix from quant.sf files.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["salmon", "tximport"],
     "expected_roles": {
@@ -104,6 +111,7 @@
     "id": "rnaseq_quality_report_en",
     "query": "Prepare a quality report for paired FASTQ RNA-seq samples with adapter trimming and a workflow summary.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "multiqc"],
     "expected_roles": {
@@ -116,6 +124,7 @@
     "id": "rnaseq_params_threads_contrast_en",
     "query": "Run RNA-seq DEG analysis with 8 threads for quantification and a DESeq2 contrast named condition.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["salmon", "tximport", "deseq2"],
     "expected_roles": {
@@ -129,6 +138,7 @@
     "id": "rnaseq_inputs_metadata_en",
     "query": "Differential expression from sample metadata, a tx2gene mapping table, and a Salmon transcriptome index for paired-end RNA-seq.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "tximport"],
     "expected_roles": {
@@ -143,6 +153,7 @@
     "id": "rnaseq_gene_counts_cn_mixed",
     "query": "从 Salmon quant.sf 生成 gene-level counts，再做 DESeq2 差异分析和 QC 汇总。",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["tximport", "deseq2", "multiqc"],
     "expected_roles": {
@@ -156,6 +167,7 @@
     "id": "rnaseq_multiqc_logs_en",
     "query": "Aggregate fastp JSON and HTML reports plus Salmon logs into MultiQC for an RNA-seq DEG workflow.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["fastp", "salmon", "multiqc"],
     "expected_roles": {
@@ -169,6 +181,7 @@
     "id": "rnaseq_reference_prep_basic_en",
     "query": "Prepare RNA-seq reference artifacts by building a Salmon transcriptome index from FASTA and extracting tx2gene from a GTF annotation.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_reference_preparation",
     "expected_tools": ["salmon_index", "gtf_tx2gene"],
     "expected_roles": {
@@ -181,6 +194,7 @@
     "id": "rnaseq_reference_prep_cn_mixed",
     "query": "准备 RNA-seq reference：从 transcriptome FASTA 构建 Salmon index，并从 GTF 提取 tx2gene 映射表。",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_reference_preparation",
     "expected_tools": ["salmon_index", "gtf_tx2gene"],
     "expected_roles": {
@@ -193,6 +207,7 @@
     "id": "rnaseq_salmon_index_only_en",
     "query": "Build a Salmon index archive from a transcriptome FASTA for RNA-seq quantification.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_reference_preparation",
     "expected_tools": ["salmon_index"],
     "expected_roles": {
@@ -204,6 +219,7 @@
     "id": "rnaseq_gtf_tx2gene_only_en",
     "query": "Extract a transcript-to-gene mapping table from a GTF annotation for tximport.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_reference_preparation",
     "expected_tools": ["gtf_tx2gene"],
     "expected_roles": {
@@ -215,6 +231,7 @@
     "id": "rnaseq_deg_edger_en",
     "query": "Use edgeR quasi-likelihood testing for bulk RNA-seq differential expression from a gene count matrix.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["edger"],
     "expected_roles": {
@@ -226,6 +243,7 @@
     "id": "rnaseq_deg_limma_voom_en",
     "query": "Run limma voom differential expression for bulk RNA-seq gene counts and sample group metadata.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["limma_voom"],
     "expected_roles": {
@@ -237,6 +255,7 @@
     "id": "rnaseq_deg_alternative_backends_en",
     "query": "Evaluate bulk RNA-seq differential expression with edgeR or limma voom instead of DESeq2.",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["edger", "limma_voom"],
     "expected_roles": {
@@ -248,6 +267,7 @@
     "id": "rnaseq_deg_alternative_backends_cn",
     "query": "bulk RNA-seq 差异表达不想用 DESeq2，想试 edgeR 或 limma voom。",
     "supported": true,
+    "workflow_family": "bulk_rnaseq",
     "expected_recipe": "rnaseq_differential_expression",
     "expected_tools": ["edger", "limma_voom"],
     "expected_roles": {
@@ -256,18 +276,20 @@
     "notes": "Chinese request for alternative differential expression backends."
   },
   {
-    "id": "unsupported_chipseq_peak_calling_en",
-    "query": "Run ChIP-seq peak calling with MACS2 and generate peak annotation tracks.",
+    "id": "unsupported_chipseq_peak_annotation_en",
+    "query": "Annotate MACS2 ChIP-seq peaks to nearby genes and generate motif tracks.",
     "supported": false,
+    "workflow_family": "chipseq",
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
-    "notes": "Negative case: ChIP-seq is outside the current approved catalog."
+    "notes": "Negative case: peak annotation and motif analysis are outside the current ChIP-seq recipe."
   },
   {
     "id": "unsupported_scrnaseq_clustering_en",
     "query": "Analyze single-cell RNA-seq UMI counts with normalization, clustering, marker genes, and UMAP plots.",
     "supported": false,
+    "workflow_family": "scrnaseq",
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
@@ -277,6 +299,7 @@
     "id": "unsupported_variant_calling_en",
     "query": "Call germline variants from WES BAM files and produce a filtered VCF.",
     "supported": false,
+    "workflow_family": "variant_calling",
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
@@ -286,9 +309,115 @@
     "id": "unsupported_metagenomics_cn",
     "query": "做宏基因组物种注释和丰度分析，输出 taxonomy profile 和可视化报告。",
     "supported": false,
+    "workflow_family": "metagenomics",
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
     "notes": "Negative case: metagenomics is outside the current approved catalog."
+  },
+  {
+    "id": "chipseq_peak_calling_basic_en",
+    "query": "Build a paired-end ChIP-seq workflow from raw FASTQs through read QC, genome alignment, sorted indexed BAM, narrow peak calling, and a summary report.",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["fastp", "bowtie2", "samtools", "macs2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "genome_alignment": ["bowtie2"],
+      "bam_sort_and_index": ["samtools"],
+      "peak_calling": ["macs2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Complete supported ChIP-seq request without explicit tool names."
+  },
+  {
+    "id": "chipseq_peak_calling_explicit_tools_en",
+    "query": "Use fastp, Bowtie 2, samtools, MACS2, and MultiQC to call narrow ChIP-seq peaks from paired-end treatment reads.",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["fastp", "bowtie2", "samtools", "macs2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "genome_alignment": ["bowtie2"],
+      "bam_sort_and_index": ["samtools"],
+      "peak_calling": ["macs2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported ChIP-seq request naming every approved tool."
+  },
+  {
+    "id": "chipseq_peak_calling_cn_mixed",
+    "query": "对 paired-end ChIPseq FASTQ 做 fastp 质控，用 Bowtie2 比对基因组，samtools 排序建索引，再用 MACS2 call peaks 并汇总 MultiQC。",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["fastp", "bowtie2", "samtools", "macs2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "genome_alignment": ["bowtie2"],
+      "bam_sort_and_index": ["samtools"],
+      "peak_calling": ["macs2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Chinese ChIPseq request with English tool and artifact names."
+  },
+  {
+    "id": "chipseq_peak_calling_goal_only_en",
+    "query": "Find narrow transcription-factor binding regions from paired-end chromatin immunoprecipitation sequencing reads aligned to a reference genome.",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["bowtie2", "samtools", "macs2"],
+    "expected_roles": {
+      "genome_alignment": ["bowtie2"],
+      "bam_sort_and_index": ["samtools"],
+      "peak_calling": ["macs2"]
+    },
+    "notes": "Goal-oriented request using domain language instead of tool names."
+  },
+  {
+    "id": "chipseq_peak_calling_params_en",
+    "query": "Align paired-end ChIP-seq reads with 8 threads, sort and index the BAM, then call MACS2 narrow peaks at q-value 0.01.",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["bowtie2", "samtools", "macs2"],
+    "expected_roles": {
+      "genome_alignment": ["bowtie2"],
+      "bam_sort_and_index": ["samtools"],
+      "peak_calling": ["macs2"]
+    },
+    "notes": "Supported request with alignment-thread and peak-threshold hints."
+  },
+  {
+    "id": "chipseq_qc_summary_en",
+    "query": "Trim paired ChIP-seq FASTQs and combine read QC, genome alignment logs, and peak-calling statistics into a MultiQC report.",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["fastp", "bowtie2", "macs2", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "genome_alignment": ["bowtie2"],
+      "peak_calling": ["macs2"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported request focused on tagged QC artifacts and summary reporting."
+  },
+  {
+    "id": "cross_family_rnaseq_not_chipseq_en",
+    "query": "Use Salmon, tximport, and DESeq2 for RNA-seq expression analysis rather than MACS2 ChIP-seq peak calling.",
+    "supported": true,
+    "workflow_family": "bulk_rnaseq",
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["salmon", "tximport", "deseq2"],
+    "expected_roles": {
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"]
+    },
+    "notes": "Cross-family confusion case that explicitly distinguishes RNA-seq from ChIP-seq."
   }
 ]

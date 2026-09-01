@@ -174,10 +174,13 @@ class CatalogDtoTests(unittest.TestCase):
         response = RecipeListResponse.model_validate({"recipes": list_recipes()})
 
         self.assertGreaterEqual(len(response.recipes), 1)
-        recipe = response.recipes[0]
+        recipe = next(
+            recipe for recipe in response.recipes if recipe.id == "rnaseq_differential_expression"
+        )
         self.assertEqual(recipe.id, "rnaseq_differential_expression")
         self.assertEqual(recipe.required_inputs["sample_ids"].type, "Array[String]")
         self.assertEqual(recipe.steps[0].allowed_tools, ["fastp"])
+        self.assertIn("chipseq_peak_calling", {recipe.id for recipe in response.recipes})
 
     def test_tool_list_response_accepts_catalog_service_records(self):
         response = ToolListResponse.model_validate({"tools": list_tools()})

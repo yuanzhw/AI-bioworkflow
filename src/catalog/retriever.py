@@ -106,7 +106,8 @@ def tokenize_for_retrieval(text: str) -> list[str]:
 
 
 def _normalize_common_variants(text: str) -> str:
-    return re.sub(r"\brnaseq\b", "rna seq rnaseq", text)
+    normalized = re.sub(r"\brnaseq\b", "rna seq rnaseq", text)
+    return re.sub(r"\bchipseq\b", "chip seq chipseq", normalized)
 
 
 def _cjk_sequences(text: str) -> list[str]:

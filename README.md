@@ -77,6 +77,9 @@ powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1
 # 结构化 Recipe Tool Plan 编译
 uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl
 
+# ChIP-seq compile-ready 示例（工具执行状态仍为 unverified）
+uv run main.py --input examples/chipseq_peak_calling_recipe_plan.json --output outputs/chipseq_peaks.wdl
+
 # 自然语言规划并编译
 uv run main.py --prompt-file examples/rnaseq_deg_request.txt --output outputs/rnaseq_deg.wdl
 
@@ -349,6 +352,7 @@ Web 产品化拆解与当前 W6 收口计划详见：
 - [x] 在独立 Cromwell runner 上手动跑通真实 RNA-seq tiny e2e。
 - [x] 增加 P0 快速检查脚本，默认覆盖单测和代表性 WDL 编译/校验。
 - [x] 记录一份可复现的 [Cromwell e2e 验证摘要](./docs/p0-e2e-verification.md)，包括 workflow id、最终状态和 output keys。
+- [x] 增加正式 ChIP-seq peak-calling recipe，并建立带 workflow-family 指标的跨领域 RAG baseline。
 - [x] 实现 W2 run 事件、SQLite 展示级持久化和 SSE 事件流。
 - [x] 完成 W4 工作台：结构化示例 / 自然语言 run 创建、snapshot 轮询、SSE 时间线、Plan / IR / WDL / Diagnostics tabs 和失败态展示。
 - [x] 完成 [W5 DAG 可视化和历史详情页](./docs/w5-dag-history-plan.md)：真实 run 列表、详情回放、Workflow IR DAG、结构状态和失败 run 摘要。
