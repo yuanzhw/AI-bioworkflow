@@ -4,6 +4,8 @@ All notable changes to AI-bioworkflow are recorded here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-09-02
+
 ### Added
 
 - A required `CI gate` that aggregates the complete Python suite, WOMtool validation, miniwdl production compatibility, and Web lint/tests/build.
@@ -32,7 +34,8 @@ First public engineering preview.
 
 ### Validation note
 
-The `v0.1.0-alpha.1` snapshot used WOMtool 91 in its documented local installation path. The WOMtool 92 required gate is part of the unreleased changes after that tag; the historical release record has not been rewritten.
+The `v0.1.0-alpha.1` snapshot used WOMtool 91 in its documented local installation path. The WOMtool 92 required gate was introduced in `v0.1.0-alpha.2`; the historical release record has not been rewritten.
 
-[Unreleased]: https://github.com/yuanzhw/AI-bioworkflow/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/yuanzhw/AI-bioworkflow/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/yuanzhw/AI-bioworkflow/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/yuanzhw/AI-bioworkflow/releases/tag/v0.1.0-alpha.1
