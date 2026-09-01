@@ -53,6 +53,7 @@ retrieval query set
   "id": "rnaseq_deg_basic_en",
   "query": "Run bulk RNA-seq differential expression from paired-end FASTQ files.",
   "supported": true,
+  "workflow_family": "bulk_rnaseq",
   "expected_recipe": "rnaseq_differential_expression",
   "expected_tools": ["fastp", "salmon", "tximport", "multiqc"],
   "expected_roles": {
@@ -69,18 +70,20 @@ retrieval query set
 `supported: false` 用于当前 approved Catalog 暂不支持的负例。负例不定义
 `expected_recipe`、`expected_tools` 或 `expected_roles`，因此不会拉低当前
 RNA-seq baseline recall；它们单独用于观察 fallback、误召回和未来 Catalog
-扩展需求。
+扩展需求。`workflow_family` 是必填 evaluation label，只用于分组统计，不进入
+Planner prompt，也不替代 `expected_recipe`。
 
 当前 query set 覆盖：
 
-- 英文 RNA-seq DEG 请求。
-- 中文 RNA-seq DEG 请求。
+- 英文和中文 bulk RNA-seq DEG / reference preparation 请求。
+- 英文和中文 ChIP-seq peak calling 请求。
 - 缩写表达，例如 DEG、RNAseq、bulk RNA。
 - 明确工具名请求，例如 use Salmon and DESeq2。
 - 只描述分析目标但不说工具名。
 - RNA-seq reference preparation，例如 Salmon index 和 GTF -> tx2gene。
 - edgeR 和 limma-voom 等 differential expression 替代后端。
-- Catalog 暂不支持的负例，例如 ChIP-seq、scRNA-seq、variant calling。
+- Catalog 暂不支持的负例，例如 ChIP-seq peak annotation、scRNA-seq、variant
+  calling 和 metagenomics。
 - 模糊需求，例如 quality report、quantification、gene-level counts。
 - 参数相关请求，例如 paired-end reads、contrast、threads。
 
@@ -137,24 +140,46 @@ tool 数量从 9 增加到 12，但 recipe 仍只有两个 RNA-seq workflow。�
 - 该中间 checkpoint 用于记录 top-K crowding，不用于决定 R3 backend。
 - 下一 checkpoint 应随 ChIP-seq recipe、family label 和跨 family query 一同建立。
 
+### R2d ChIP-seq Recipe And Cross-Family Baseline
+
+正式 Catalog 增加 `chipseq_peak_calling` 后，query set 扩展到 31 条并强制要求
+`workflow_family`：
+
+- 21 条 supported `bulk_rnaseq` query，其中包含一条 RNA-seq / ChIP-seq
+  cross-family confusion case。
+- 6 条 supported `chipseq` query，覆盖显式工具、隐式目标、中英文、参数和 QC
+  summary 表达。
+- 4 条 unsupported query；旧 ChIP-seq peak-calling 负例收窄为仍不支持的 peak
+  annotation / motif analysis。
+- 固定增加 Recipe Recall@1 和 Tool Recall@3/@5；动态 Recall@K 历史字段继续保留。
+- 输出 family-level metrics 和只对含 supported query 的 family 求平均的 macro
+  metrics。
+- `top_k_tools` 必须至少为 5，确保 Tool Recall@3/@5 有完整候选深度。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
 
 | Metric | Definition | Purpose |
 | --- | --- | --- |
+| `Recipe Recall@1` | expected recipe 是否排在首位 | 在 recipe 数量接近动态 K 时衡量首选分类质量 |
 | `Recipe Recall@K` | expected recipe 是否出现在 top-K recipes | 判断分析类型召回是否可靠 |
+| `Tool Recall@3/@5` | expected tools 中有多少出现在固定 top-3 / top-5 | 比动态较大 K 更敏感地观察 catalog crowding |
 | `Tool Recall@K` | expected tools 中有多少出现在 top-K tools | 判断候选工具是否完整 |
 | `MRR` | 第一个正确 recipe 或 tool 的 reciprocal rank | 判断排序质量 |
 | `Role Coverage` | expected_roles 中每个 role 是否至少有一个正确 tool | 判断 workflow step 覆盖 |
 | `Planner Context Tool Recall` | raw retrieved tools 加上 retrieved recipes 的 allowed tools 后覆盖多少 expected tools | 判断 Planner prompt 候选上下文是否完整 |
 | `Planner Context Role Coverage` | Planner candidate context 是否覆盖每个 expected role | 区分 raw retriever miss 和 prompt context 可用性 |
 | `Fallback Rate` | 触发 fallback 的 query 占比 | 判断 catalog 覆盖和检索置信度 |
+| `Unsupported Direct-Match Rate` | unsupported query 未触发 fallback 的比例 | 暴露 Retriever 不具备 intent rejection 的风险 |
+| `Family / Macro Metrics` | 分 family 统计，并仅对 supported families 做宏平均 | 防止样本量较大的 family 掩盖新 family 的排序问题 |
 
 初始目标不是追求高分，而是建立可重复 baseline：
 
 ```text
 lexical_v1 Recipe Recall@3
+lexical_v1 Recipe Recall@1
+lexical_v1 Tool Recall@3/5
 lexical_v1 Tool Recall@8
 lexical_v1 Role Coverage
 lexical_v1 Planner Context Role Coverage
@@ -175,7 +200,9 @@ tests/test_retrieval_evaluation.py
 - 每条 query 的 retrieved recipes/tools。
 - missed expected recipe/tool。
 - aggregate metrics。
+- workflow-family metrics 和 supported-family macro metrics。
 - fallback queries。
+- unsupported direct-match queries。
 
 输出格式建议同时支持人类可读 summary 和 JSON artifact，便于后续前端或文档展示。
 
@@ -221,6 +248,26 @@ R2c ChIP-seq tool catalog 的 12-tool 中间 checkpoint：
 | Supported Fallback Rate | 0.0000 |
 | Unsupported Fallback Rate | 0.2500 |
 
+R2d ChIP-seq recipe 与 31-query cross-family baseline：
+
+| Metric | Overall | bulk_rnaseq | chipseq | Macro supported-family |
+| --- | ---: | ---: | ---: | ---: |
+| Query count | 31 | 21 | 7 | - |
+| Supported queries | 27 | 21 | 6 | 2 families |
+| Unsupported queries | 4 | 0 | 1 | - |
+| Recipe Recall@1 | 0.8519 | 0.8095 | 1.0000 | 0.9047 |
+| Recipe Recall@3 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Recipe MRR | 0.9259 | 0.9048 | 1.0000 | 0.9524 |
+| Tool Recall@3 | 0.7136 | 0.7167 | 0.7028 | 0.7097 |
+| Tool Recall@5 | 0.8321 | 0.8191 | 0.8778 | 0.8485 |
+| Tool Recall@8 | 0.9185 | 0.8952 | 1.0000 | 0.9476 |
+| Tool MRR | 0.9506 | 0.9365 | 1.0000 | 0.9683 |
+| Role Coverage | 0.9210 | 0.8984 | 1.0000 | 0.9492 |
+| Planner Context Tool Recall | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Planner Context Role Coverage | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Fallback Rate | 0.0323 | 0.0000 | 0.0000 | - |
+| Unsupported Direct-Match Rate | 0.7500 | 0.0000 | 1.0000 | - |
+
 已知 baseline 观察：
 
 - 9-tool checkpoint 中，`rnaseq_deg_no_tool_names_en` 和
@@ -233,7 +280,12 @@ R2c ChIP-seq tool catalog 的 12-tool 中间 checkpoint：
 - Planner Context Tool Recall 和 Planner Context Role Coverage 均为 1.0000，
   说明当 top recipe 召回正确时，Planner prompt 中通过 recipe allowed tools
   补齐的候选上下文仍覆盖所需工具和 role。
-- `unsupported_chipseq_peak_calling_en`、`unsupported_scrnaseq_clustering_en`
+- R2d 中 ChIP-seq Recipe Recall@1 为 `1.0000`，说明新增 recipe 的 family intent
+  在当前样本上可以稳定排首位；bulk RNA-seq Recipe Recall@1 为 `0.8095`，说明
+  共享 QC、paired-end 和 reporting 词汇仍会造成首位排序 crowding。
+- R2d 的 macro Recipe Recall@1 为 `0.9047`，但当前只有两个 supported family，
+  尚不足以决定引入 vector / hybrid backend。
+- `unsupported_chipseq_peak_annotation_en`、`unsupported_scrnaseq_clustering_en`
   和 `unsupported_variant_calling_en` 产生 direct lexical match，说明当前
   lexical fallback 不是 unsupported intent detector；负例评估只用于暴露风险，
   不改变 full Catalog validation 边界。

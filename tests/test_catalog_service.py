@@ -8,7 +8,9 @@ class CatalogServiceTests(unittest.TestCase):
         recipes = list_recipes()
 
         self.assertGreaterEqual(len(recipes), 1)
-        recipe = recipes[0]
+        recipe = next(
+            recipe for recipe in recipes if recipe["id"] == "rnaseq_differential_expression"
+        )
         self.assertEqual(recipe["id"], "rnaseq_differential_expression")
         self.assertIn("required_inputs", recipe)
         self.assertIn("steps", recipe)
@@ -21,6 +23,18 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertEqual(recipe["name"], "RNA-seq differential expression")
         self.assertEqual(recipe["required_inputs"]["sample_ids"]["type"], "Array[String]")
         self.assertEqual(recipe["steps"][0]["scatter"]["id"], "per_sample")
+
+    def test_get_chipseq_recipe_returns_compile_ready_steps(self):
+        recipe = get_recipe("chipseq_peak_calling")
+
+        self.assertEqual(recipe["name"], "ChIP-seq peak calling")
+        self.assertEqual(recipe["required_inputs"]["genome_index"]["type"], "File")
+        self.assertEqual(
+            [step["id"] for step in recipe["steps"]],
+            ["qc", "align_reads", "sort_and_index", "call_peaks", "qc_report"],
+        )
+        self.assertEqual(recipe["steps"][3]["allowed_tools"], ["macs2"])
+        self.assertTrue(recipe["steps"][4]["optional"])
 
     def test_list_tools_returns_json_ready_tool_records(self):
         tools = list_tools()

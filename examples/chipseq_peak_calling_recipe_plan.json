@@ -1,0 +1,79 @@
+{
+  "workflow": {
+    "name": "ChIPSeqPeakCalling",
+    "recipe": "chipseq_peak_calling",
+    "inputs": {
+      "raw_r1": "File",
+      "raw_r2": "File",
+      "genome_index": "File"
+    },
+    "tool_calls": [
+      {
+        "id": "qc",
+        "step": "qc",
+        "tool": "fastp",
+        "version": "1.3.3",
+        "inputs": {
+          "r1": "raw_r1",
+          "r2": "raw_r2"
+        },
+        "params": {
+          "thread": 4
+        }
+      },
+      {
+        "id": "align",
+        "step": "align_reads",
+        "tool": "bowtie2",
+        "version": "2.5.5",
+        "inputs": {
+          "r1": "qc.clean_r1",
+          "r2": "qc.clean_r2",
+          "index_archive": "genome_index"
+        },
+        "params": {
+          "threads": 8
+        }
+      },
+      {
+        "id": "prepare_bam",
+        "step": "sort_and_index",
+        "tool": "samtools",
+        "version": "1.24",
+        "inputs": {
+          "alignment": "align.aligned_sam"
+        },
+        "params": {
+          "threads": 4
+        }
+      },
+      {
+        "id": "peaks",
+        "step": "call_peaks",
+        "tool": "macs2",
+        "version": "2.2.9.1",
+        "inputs": {
+          "treatment_bam": "prepare_bam.sorted_bam"
+        },
+        "params": {
+          "genome_size": "hs",
+          "qvalue": 0.01
+        }
+      },
+      {
+        "id": "report",
+        "step": "qc_report",
+        "tool": "multiqc",
+        "version": "1.21",
+        "params": {}
+      }
+    ],
+    "outputs": {
+      "sorted_bam": "prepare_bam.sorted_bam",
+      "bam_index": "prepare_bam.bam_index",
+      "narrow_peaks": "peaks.narrow_peaks",
+      "peak_summits": "peaks.summits",
+      "multiqc_report": "report.multiqc_report"
+    }
+  }
+}

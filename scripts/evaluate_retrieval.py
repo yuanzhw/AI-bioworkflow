@@ -45,7 +45,10 @@ def parse_args() -> argparse.Namespace:
         "--top-k-tools",
         type=int,
         default=DEFAULT_TOP_K_TOOLS,
-        help=f"Tool Recall@K cutoff. Default: {DEFAULT_TOP_K_TOOLS}",
+        help=(
+            "Tool Recall@K cutoff; must be at least 5 so fixed Recall@3/@5 "
+            f"can also be computed. Default: {DEFAULT_TOP_K_TOOLS}"
+        ),
     )
     parser.add_argument(
         "--json-output",
@@ -96,8 +99,11 @@ def _format_summary(evaluation: dict[str, Any]) -> str:
             f"({evaluation['supported_query_count']} supported, "
             f"{evaluation['unsupported_query_count']} unsupported)"
         ),
+        f"Recipe Recall@1: {metrics['recipe_recall_at_1']:.4f}",
         f"Recipe Recall@{evaluation['top_k_recipes']}: {metrics['recipe_recall_at_k']:.4f}",
         f"Recipe MRR: {metrics['recipe_mrr']:.4f}",
+        f"Tool Recall@3: {metrics['tool_recall_at_3']:.4f}",
+        f"Tool Recall@5: {metrics['tool_recall_at_5']:.4f}",
         f"Tool Recall@{evaluation['top_k_tools']}: {metrics['tool_recall_at_k']:.4f}",
         f"Tool MRR: {metrics['tool_mrr']:.4f}",
         f"Role Coverage: {metrics['role_coverage']:.4f}",
@@ -106,7 +112,26 @@ def _format_summary(evaluation: dict[str, Any]) -> str:
         f"Fallback Rate: {metrics['fallback_rate']:.4f}",
         f"Supported Fallback Rate: {metrics['supported_fallback_rate']:.4f}",
         f"Unsupported Fallback Rate: {metrics['unsupported_fallback_rate']:.4f}",
+        f"Unsupported Direct-Match Rate: {metrics['unsupported_direct_match_rate']:.4f}",
     ]
+
+    lines.append("Workflow-family metrics:")
+    for family_id, family in evaluation["family_metrics"].items():
+        family_values = family["metrics"]
+        lines.append(
+            f"  - {family_id}: {family['supported_query_count']} supported, "
+            f"{family['unsupported_query_count']} unsupported; "
+            f"Recipe@1={family_values['recipe_recall_at_1']:.4f}; "
+            f"Tool@3={family_values['tool_recall_at_3']:.4f}; "
+            f"Tool@5={family_values['tool_recall_at_5']:.4f}"
+        )
+    macro = evaluation["macro_family_metrics"]
+    lines.append(
+        "Macro supported-family metrics: "
+        f"Recipe@1={macro['recipe_recall_at_1']:.4f}; "
+        f"Tool@3={macro['tool_recall_at_3']:.4f}; "
+        f"Tool@5={macro['tool_recall_at_5']:.4f}"
+    )
 
     if evaluation["fallback_query_ids"]:
         lines.append("Fallback queries: " + ", ".join(evaluation["fallback_query_ids"]))

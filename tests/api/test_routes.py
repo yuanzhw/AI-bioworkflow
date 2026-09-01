@@ -39,7 +39,9 @@ class ApiRouteTests(unittest.TestCase):
         service.assert_called_once_with()
         body = response.json()
         self.assertGreaterEqual(len(body["recipes"]), 1)
-        self.assertEqual(body["recipes"][0]["id"], "rnaseq_differential_expression")
+        recipe_ids = {recipe["id"] for recipe in body["recipes"]}
+        self.assertIn("rnaseq_differential_expression", recipe_ids)
+        self.assertIn("chipseq_peak_calling", recipe_ids)
 
     def test_get_recipe_not_found(self):
         with patch(

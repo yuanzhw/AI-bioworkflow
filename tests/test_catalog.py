@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 from pathlib import Path
 from typing import Any
@@ -9,14 +10,13 @@ from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ExecutionVerificationSpec, ToolSpec
 from src.recipes import load_recipe_catalog
-from src.recipes.loader import RecipeCatalog
-from src.recipes.schema import RecipeSpec
 from src.renderers import render_wdl
 from src.schema import flatten_workflow_calls
 from src.tools.validator import wdl_validator, wdl_validator_available
 
 
 CATALOG_TOOLS_DIR = Path(__file__).resolve().parents[1] / "src" / "catalog" / "tools"
+EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples"
 
 
 def sample_rnaseq_tool_plan() -> dict[str, Any]:
@@ -149,86 +149,10 @@ def sample_rnaseq_reference_prep_plan() -> dict[str, Any]:
     }
 
 
-def chipseq_tool_contract_recipe_catalog() -> RecipeCatalog:
-    recipe = RecipeSpec.model_validate(
-        {
-            "id": "chipseq_tool_contract",
-            "name": "ChIP-seq tool contract test",
-            "required_inputs": {
-                "r1": {"type": "File"},
-                "r2": {"type": "File"},
-                "genome_index": {"type": "File"},
-            },
-            "steps": [
-                {
-                    "id": "align_reads",
-                    "role": "genome_alignment",
-                    "allowed_tools": ["bowtie2"],
-                },
-                {
-                    "id": "sort_and_index",
-                    "role": "bam_sort_and_index",
-                    "allowed_tools": ["samtools"],
-                },
-                {
-                    "id": "call_peaks",
-                    "role": "peak_calling",
-                    "allowed_tools": ["macs2"],
-                },
-            ],
-        }
+def sample_chipseq_peak_calling_plan() -> dict[str, Any]:
+    return json.loads(
+        (EXAMPLES_DIR / "chipseq_peak_calling_recipe_plan.json").read_text(encoding="utf-8")
     )
-    return RecipeCatalog({recipe.id: recipe})
-
-
-def sample_chipseq_tool_contract_plan() -> dict[str, Any]:
-    return {
-        "workflow": {
-            "name": "ChIPSeqToolContract",
-            "recipe": "chipseq_tool_contract",
-            "inputs": {
-                "r1": "File",
-                "r2": "File",
-                "genome_index": "File",
-            },
-            "tool_calls": [
-                {
-                    "id": "align",
-                    "step": "align_reads",
-                    "tool": "bowtie2",
-                    "version": "2.5.5",
-                    "inputs": {
-                        "r1": "r1",
-                        "r2": "r2",
-                        "index_archive": "genome_index",
-                    },
-                    "params": {"threads": 8},
-                },
-                {
-                    "id": "prepare_bam",
-                    "step": "sort_and_index",
-                    "tool": "samtools",
-                    "version": "1.24",
-                    "inputs": {"alignment": "align.aligned_sam"},
-                    "params": {"threads": 4},
-                },
-                {
-                    "id": "peaks",
-                    "step": "call_peaks",
-                    "tool": "macs2",
-                    "version": "2.2.9.1",
-                    "inputs": {"treatment_bam": "prepare_bam.sorted_bam"},
-                    "params": {"genome_size": "hs", "qvalue": 0.01},
-                },
-            ],
-            "outputs": {
-                "sorted_bam": "prepare_bam.sorted_bam",
-                "bam_index": "prepare_bam.bam_index",
-                "narrow_peaks": "peaks.narrow_peaks",
-                "peak_summits": "peaks.summits",
-            },
-        }
-    }
 
 
 class CatalogDefinitionTests(unittest.TestCase):
@@ -386,22 +310,31 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("File transcriptome_index = index.index_archive", wdl)
         self.assertIn("File tx2gene = mapping.tx2gene", wdl)
 
-    def test_chipseq_tool_contracts_resolve_to_valid_renderable_ir(self):
+    def test_chipseq_peak_calling_recipe_resolves_to_valid_renderable_ir(self):
         workflow_ir = resolve_tool_plan(
-            sample_chipseq_tool_contract_plan(),
-            chipseq_tool_contract_recipe_catalog(),
+            sample_chipseq_peak_calling_plan(),
+            self.recipe_catalog,
             self.tool_catalog,
         )
         report = analyze_workflow_ir(workflow_ir)
         wdl = render_wdl(workflow_ir)
 
         self.assertTrue(report.is_valid, report.errors)
+        self.assertEqual(workflow_ir.workflow.name, "ChIPSeqPeakCalling")
+        self.assertIn("fastp_qc", workflow_ir.tasks)
         self.assertIn("bowtie2_align", workflow_ir.tasks)
         self.assertIn("samtools_prepare_bam", workflow_ir.tasks)
         self.assertIn("macs2_peaks", workflow_ir.tasks)
+        self.assertIn("multiqc_report", workflow_ir.tasks)
+        self.assertIn("call fastp_qc as qc", wdl)
         self.assertIn("call bowtie2_align as align", wdl)
         self.assertIn("call samtools_prepare_bam as prepare_bam", wdl)
         self.assertIn("call macs2_peaks as peaks", wdl)
+        self.assertIn("call multiqc_report as report", wdl)
+        self.assertIn("r1 = raw_r1", wdl)
+        self.assertIn("r2 = raw_r2", wdl)
+        self.assertIn("r1 = qc.clean_r1", wdl)
+        self.assertIn("r2 = qc.clean_r2", wdl)
         self.assertIn("index_archive = genome_index", wdl)
         self.assertIn("alignment = align.aligned_sam", wdl)
         self.assertIn("treatment_bam = prepare_bam.sorted_bam", wdl)
@@ -415,16 +348,21 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertNotIn("-c ~{control_bam}", wdl)
         self.assertIn('genome_size = "hs"', wdl)
         self.assertIn("qvalue = 0.01", wdl)
+        self.assertIn(
+            "report_files = [qc.html_report, qc.json_report, align.alignment_log, peaks.peak_table]",
+            wdl,
+        )
         self.assertIn("File sorted_bam = prepare_bam.sorted_bam", wdl)
         self.assertIn("File bam_index = prepare_bam.bam_index", wdl)
         self.assertIn("File narrow_peaks = peaks.narrow_peaks", wdl)
         self.assertIn("File peak_summits = peaks.summits", wdl)
+        self.assertIn("File multiqc_report = report.multiqc_report", wdl)
 
     @unittest.skipUnless(wdl_validator_available(), "WDL validator is not installed")
-    def test_chipseq_tool_contract_wdl_passes_syntax_validation(self):
+    def test_chipseq_peak_calling_wdl_passes_syntax_validation(self):
         workflow_ir = resolve_tool_plan(
-            sample_chipseq_tool_contract_plan(),
-            chipseq_tool_contract_recipe_catalog(),
+            sample_chipseq_peak_calling_plan(),
+            self.recipe_catalog,
             self.tool_catalog,
         )
         wdl = render_wdl(workflow_ir)
@@ -434,7 +372,7 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertTrue(result["is_valid"], result["message"])
 
     def test_macs2_optional_control_is_rendered_when_provided(self):
-        plan = sample_chipseq_tool_contract_plan()
+        plan = sample_chipseq_peak_calling_plan()
         plan["workflow"]["inputs"]["control_bam"] = "File"
         peaks_call = next(
             tool_call
@@ -445,7 +383,7 @@ class CatalogResolutionTests(unittest.TestCase):
 
         workflow_ir = resolve_tool_plan(
             plan,
-            chipseq_tool_contract_recipe_catalog(),
+            self.recipe_catalog,
             self.tool_catalog,
         )
         report = analyze_workflow_ir(workflow_ir)

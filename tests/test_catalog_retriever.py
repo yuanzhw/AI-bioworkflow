@@ -74,12 +74,36 @@ class CatalogRetrieverTests(unittest.TestCase):
         de_tool_ids = {tool["id"] for tool in de_result["tools"]}
         self.assertTrue({"edger", "limma_voom"}.issubset(de_tool_ids), de_result)
 
-    def test_tokenizer_supports_rnaseq_variants_and_cjk_ngrams(self):
-        tokens = tokenize_for_retrieval("做差异表达 RNAseq")
+    def test_retrieves_chipseq_recipe_and_compile_ready_tools(self):
+        result = retrieve_catalog_context(
+            (
+                "Use fastp, Bowtie 2, samtools, MACS2, and MultiQC to call "
+                "narrow ChIP-seq peaks from paired-end treatment reads."
+            ),
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=3,
+            top_k_tools=8,
+        )
+
+        self.assertFalse(result["fallback_used"])
+        self.assertEqual(result["recipes"][0]["id"], "chipseq_peak_calling")
+        tools = {tool["id"]: tool for tool in result["tools"]}
+        self.assertTrue(
+            {"fastp", "bowtie2", "samtools", "macs2", "multiqc"}.issubset(tools),
+            result["tools"],
+        )
+        for tool_id in ("bowtie2", "samtools", "macs2"):
+            self.assertEqual(tools[tool_id]["execution_verification"]["status"], "unverified")
+
+    def test_tokenizer_supports_sequencing_variants_and_cjk_ngrams(self):
+        tokens = tokenize_for_retrieval("做差异表达 RNAseq 和 ChIPseq")
 
         self.assertIn("rna", tokens)
         self.assertIn("seq", tokens)
         self.assertIn("rnaseq", tokens)
+        self.assertIn("chip", tokens)
+        self.assertIn("chipseq", tokens)
         self.assertIn("差", tokens)
         self.assertIn("差异", tokens)
         self.assertIn("表达", tokens)

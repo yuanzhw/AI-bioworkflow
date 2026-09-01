@@ -78,10 +78,11 @@ class RetrievalEvaluationTests(unittest.TestCase):
     def test_loads_current_catalog_query_fixture(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
 
-        self.assertEqual(len(queries), 24)
-        self.assertEqual(sum(1 for query in queries if query.supported), 20)
+        self.assertEqual(len(queries), 31)
+        self.assertEqual(sum(1 for query in queries if query.supported), 27)
         self.assertEqual(sum(1 for query in queries if not query.supported), 4)
         self.assertEqual(queries[0].id, "rnaseq_deg_basic_en")
+        self.assertEqual(queries[0].workflow_family, "bulk_rnaseq")
         self.assertIn("fastp", queries[0].expected_tools)
         self.assertIn(
             "rnaseq_reference_prep_basic_en",
@@ -110,6 +111,13 @@ class RetrievalEvaluationTests(unittest.TestCase):
             generic_deg.expected_roles["differential_expression"],
             ["deseq2", "edger", "limma_voom"],
         )
+        chipseq = queries_by_id["chipseq_peak_calling_basic_en"]
+        self.assertEqual(chipseq.workflow_family, "chipseq")
+        self.assertEqual(chipseq.expected_recipe, "chipseq_peak_calling")
+        self.assertIn("macs2", chipseq.expected_tools)
+        chipseq_annotation = queries_by_id["unsupported_chipseq_peak_annotation_en"]
+        self.assertFalse(chipseq_annotation.supported)
+        self.assertEqual(chipseq_annotation.workflow_family, "chipseq")
 
     def test_evaluates_current_catalog_baseline(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
@@ -123,15 +131,25 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["strategy"], "lexical_v1")
         self.assertEqual(result["top_k_recipes"], 3)
         self.assertEqual(result["top_k_tools"], 8)
-        self.assertEqual(result["query_count"], 24)
-        self.assertEqual(result["supported_query_count"], 20)
+        self.assertEqual(result["query_count"], 31)
+        self.assertEqual(result["supported_query_count"], 27)
         self.assertEqual(result["unsupported_query_count"], 4)
-        self.assertEqual(len(result["queries"]), 24)
+        self.assertEqual(len(result["queries"]), 31)
         for metric in result["metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
         self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
         self.assertEqual(result["metrics"]["planner_context_role_coverage"], 1.0)
+        self.assertEqual(
+            set(result["family_metrics"]),
+            {"bulk_rnaseq", "chipseq", "metagenomics", "scrnaseq", "variant_calling"},
+        )
+        self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 21)
+        self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 7)
+        self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 6)
+        for metric in result["macro_family_metrics"].values():
+            self.assertGreaterEqual(metric, 0.0)
+            self.assertLessEqual(metric, 1.0)
 
     def test_computes_supported_metrics_and_tracks_unsupported_matches(self):
         queries = [
@@ -139,6 +157,7 @@ class RetrievalEvaluationTests(unittest.TestCase):
                 id="q1",
                 query="supported hit",
                 supported=True,
+                workflow_family="bulk_rnaseq",
                 expected_recipe="rnaseq_differential_expression",
                 expected_tools=["fastp", "deseq2"],
                 expected_roles={
@@ -150,6 +169,7 @@ class RetrievalEvaluationTests(unittest.TestCase):
                 id="q2",
                 query="supported miss",
                 supported=True,
+                workflow_family="bulk_rnaseq",
                 expected_recipe="rnaseq_differential_expression",
                 expected_tools=["deseq2"],
                 expected_roles={"differential_expression": ["deseq2"]},
@@ -158,6 +178,7 @@ class RetrievalEvaluationTests(unittest.TestCase):
                 id="q3",
                 query="unsupported direct match",
                 supported=False,
+                workflow_family="chipseq",
                 expected_recipe=None,
                 expected_tools=[],
                 expected_roles={},
@@ -172,8 +193,11 @@ class RetrievalEvaluationTests(unittest.TestCase):
         )
 
         self.assertEqual(result["strategy"], "fake_v1")
+        self.assertEqual(result["metrics"]["recipe_recall_at_1"], 0.5)
         self.assertEqual(result["metrics"]["recipe_recall_at_k"], 0.5)
         self.assertEqual(result["metrics"]["recipe_mrr"], 0.5)
+        self.assertEqual(result["metrics"]["tool_recall_at_3"], 0.25)
+        self.assertEqual(result["metrics"]["tool_recall_at_5"], 0.25)
         self.assertEqual(result["metrics"]["tool_recall_at_k"], 0.25)
         self.assertEqual(result["metrics"]["tool_mrr"], 0.5)
         self.assertEqual(result["metrics"]["role_coverage"], 0.25)
@@ -182,8 +206,12 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["fallback_rate"], 0.3333)
         self.assertEqual(result["metrics"]["supported_fallback_rate"], 0.5)
         self.assertEqual(result["metrics"]["unsupported_fallback_rate"], 0.0)
+        self.assertEqual(result["metrics"]["unsupported_direct_match_rate"], 1.0)
         self.assertEqual(result["fallback_query_ids"], ["q2"])
         self.assertEqual(result["unsupported_direct_match_query_ids"], ["q3"])
+        self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 2)
+        self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 1)
+        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.5)
         self.assertIn("deseq2", result["queries"][0]["planner_context_tools"])
         self.assertEqual(result["queries"][1]["missed_expected_tools"], ["deseq2"])
         self.assertEqual(result["queries"][1]["missed_roles"], ["differential_expression"])
@@ -198,6 +226,7 @@ class RetrievalEvaluationTests(unittest.TestCase):
                 id="multi-version",
                 query="multi-version tool results",
                 supported=True,
+                workflow_family="bulk_rnaseq",
                 expected_recipe="rnaseq_differential_expression",
                 expected_tools=["salmon", "deseq2"],
                 expected_roles={
@@ -227,10 +256,44 @@ class RetrievalEvaluationTests(unittest.TestCase):
                     "id": "bad",
                     "query": "unsupported",
                     "supported": False,
+                    "workflow_family": "bulk_rnaseq",
                     "expected_recipe": "rnaseq_differential_expression",
                     "expected_tools": [],
                     "expected_roles": {},
                 }
+            )
+
+    def test_requires_workflow_family_in_query_schema(self):
+        with self.assertRaisesRegex(ValueError, "workflow_family must be a non-empty string"):
+            RetrievalQuery.from_dict(
+                {
+                    "id": "missing-family",
+                    "query": "quantify expression",
+                    "supported": True,
+                    "expected_recipe": "rnaseq_differential_expression",
+                    "expected_tools": ["salmon"],
+                    "expected_roles": {"expression_quantification": ["salmon"]},
+                }
+            )
+
+    def test_requires_enough_tool_results_for_fixed_recall_cutoffs(self):
+        query = RetrievalQuery(
+            id="q1",
+            query="supported hit",
+            supported=True,
+            workflow_family="bulk_rnaseq",
+            expected_recipe="rnaseq_differential_expression",
+            expected_tools=["fastp"],
+            expected_roles={"read_quality_control": ["fastp"]},
+        )
+
+        with self.assertRaisesRegex(ValueError, "top_k_tools must be >= 5"):
+            evaluate_retrieval_queries(
+                [query],
+                self.tool_catalog,
+                self.recipe_catalog,
+                top_k_tools=4,
+                retriever=fake_retriever,
             )
 
     def test_rejects_non_object_fixture_entries(self):
