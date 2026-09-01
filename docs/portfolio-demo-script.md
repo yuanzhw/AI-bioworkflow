@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 0-10 秒 | 首页项目名、一句话定位和主入口。 | “AI-bioworkflow 把自然语言或结构化生信需求转换成 Workflow IR，再确定性编译为经过校验的 WDL 1.0。” |
 | 10-25 秒 | 进入 RNA-seq 工作台，展示 fastp、Salmon、tximport、DESeq2、MultiQC，点击“运行”。 | “稳定演示路径使用结构化 Recipe Tool Plan，不依赖模型 API key；recipe 和工具只能来自正式 Catalog。” |
-| 25-42 秒 | 展示 run 状态、SSE timeline、WDL valid、行数和 diagnostics 摘要。 | “同一次 run 会持久化节点事件、Plan、IR、WDL 和诊断；WOMtool 校验通过后才标记成功。” |
+| 25-42 秒 | 展示 run 状态、SSE timeline、WDL valid、行数和 diagnostics 摘要。 | “同一次 run 会持久化节点事件、Plan、IR、WDL 和诊断；配置的 WDL validator 校验通过后才标记成功。” |
 | 42-62 秒 | 打开 Run 详情，聚焦 Workflow DAG，点选 `qc` 节点并展示 inputs、outputs 和 runtime docker。 | “DAG 来自 canonical Workflow IR，用于审阅 scatter、依赖关系和容器声明；它表达编译结构，不冒充真实任务执行状态。” |
 | 62-75 秒 | 切换到 Catalog 页面，扫过 recipe steps、catalog-approved 与 e2e-validated 状态。 | “Catalog 同时约束 schema、命令模板和 runtime image，并把工具准入与执行验证分开记录。” |
 | 75-86 秒 | 打开 Run 历史，展示成功与失败记录可回放。 | “历史页可以回放成功或失败 run；有界 Reviewer 只在确定性修复无安全动作时提出 IR patch，且必须重新通过完整编译链。” |
