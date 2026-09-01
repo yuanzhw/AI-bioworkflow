@@ -53,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 296 tests
+Ran 299 tests
 OK (skipped=2)
 ```
 
@@ -5098,12 +5098,15 @@ miniwdl run <tmp>/rnaseq_deg.wdl -i examples/tiny/rnaseq_deg.inputs.json --dir <
 
 该文件验证 `scripts/check_public_surface.py` 的公共展示面契约。实现只使用
 Python 标准库，并以 Git 已跟踪文件清单为准，因此本地未跟踪产物不能让
-失效链接在开发机上假通过。共 13 个用例覆盖：
+失效链接在开发机上假通过。共 16 个用例覆盖：
 
 - Git inventory 显式排除临时 `docs/portfolio/` 目录及子目录。
 - Markdown 正文链接和图片能够按源文件目录解析；外部 URL 不发起网络请求。
 - fenced code、inline code 与 GFM footnote 文本不会被误当作链接，同时支持
   合法的平衡括号和反斜杠转义目标。
+- inline 与 reference definition 的目标使用相同反斜杠反转义规则；
+  reference-style 图片按大小写不敏感、空白归一化的 label 关联定义，并以
+  usage 行号报告空 alt。
 - 仓库外、未跟踪、临时目录目标和空图片 alt 会产生可定位诊断。
 - 中英文 README 都必须保留彼此入口、在线 Demo、Runs、Catalog、API、CI、
   OSS 治理链接、RNA-seq case study 与三张核心证据图。
@@ -5112,6 +5115,8 @@ Python 标准库，并以 Git 已跟踪文件清单为准，因此本地未跟�
   Run detail 的 metadata 对象。
 - 每个页面必须保留 canonical、`openGraph.type/url/images` 与 Twitter image；
   空数组或只存在于注释中的字段不能让测试通过。
+- 动态 Run detail 的 canonical 与 Open Graph URL 必须通过模板插值引用
+  `runId`（包括 `encodeURIComponent(runId)`）；常量 `/runs/static` 不通过。
 - robots 返回对象和 sitemap 返回数组必须使用对应 `MetadataRoute` 类型，并
   保留 sitemap URL 与三个公开页面路由。
 

@@ -136,8 +136,8 @@ WDL 通过语法/类型校验并不证明某个分析方案适合任意研究设
 
 ## 状态与路线图
 
-- **Released:** [`v0.1.0-alpha.2`](https://github.com/yuanzhw/AI-bioworkflow/releases/tag/v0.1.0-alpha.2) 在公开编译工作台基础上补齐 WOMtool 92 required CI、OSS 治理、双语入口与可追溯案例。
-- **Current `main`:** ChIP-seq compile-ready recipe、跨 workflow-family 检索评测与公共证据页已纳入持续演进基线。
+- **Released:** [`v0.1.0-alpha.1`](https://github.com/yuanzhw/AI-bioworkflow/releases/tag/v0.1.0-alpha.1) 建立了公开编译工作台、DAG、Catalog 与部署基线。
+- **Current `main`:** WOMtool 92 required CI、OSS 治理、双语入口、可追溯案例、ChIP-seq compile-ready recipe、跨 workflow-family 检索评测与公共证据页已进入下一预发布候选。
 - **Next:** 分层 Architect / Bioinfo Reviewer、更多正式 recipe/tool，以及对检索质量和科学性 warning 的可复现评测。
 - **当前不做:** 让模型直接生成最终 WDL、在公开 demo 默认开启真实执行，或为了展示提前建设登录、计费和复杂多租户平台。
 

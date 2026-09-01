@@ -73,6 +73,55 @@ class PublicSurfaceCheckTests(unittest.TestCase):
             ["docs/Function_(mathematics).md", "docs/Function_(escaped).md"],
         )
 
+    def test_reference_definition_unescapes_destination(self):
+        destinations = extract_destinations(
+            "Reference definition follows.\n"
+            "[function]: docs/Function_\\(reference\\).md\n"
+        )
+
+        self.assertEqual(
+            [(destination.target, destination.line) for destination in destinations],
+            [("docs/Function_(reference).md", 2)],
+        )
+
+    def test_reference_image_with_empty_alt_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            write(
+                root,
+                "docs/guide.md",
+                "![][LoGo]\n"
+                "![Project logo][ PROJECT   LOGO ]\n"
+                "[logo]: assets/logo.png\n"
+                "[project logo]: assets/logo.png\n",
+            )
+            write(root, "docs/assets/logo.png", "image")
+            tracked = tracked_set("docs/guide.md", "docs/assets/logo.png")
+
+            issues = validate_markdown_links(root, tracked)
+            reference_images = [
+                destination
+                for destination in extract_destinations(
+                    (root / "docs/guide.md").read_text(encoding="utf-8")
+                )
+                if destination.is_image
+            ]
+
+        self.assertEqual(
+            [issue.format() for issue in issues],
+            ["docs/guide.md:1: Markdown image must have non-empty alt text"],
+        )
+        self.assertEqual(
+            [
+                (destination.target, destination.line, destination.alt)
+                for destination in reference_images
+            ],
+            [
+                ("assets/logo.png", 1, ""),
+                ("assets/logo.png", 2, "Project logo"),
+            ],
+        )
+
     def test_markdown_links_accept_tracked_files_and_external_urls(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -258,6 +307,35 @@ class PublicSurfaceCheckTests(unittest.TestCase):
         self.assertIn(
             "web/app/runs/[runId]/page.tsx: required public metadata field is missing or invalid: twitter.images[/og.png]",
             formatted,
+        )
+
+    def test_web_surface_rejects_static_run_detail_urls(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            tracked = write_valid_web_surface(root)
+            write(
+                root,
+                "web/app/runs/[runId]/page.tsx",
+                dynamic_run_metadata().replace(
+                    "`/runs/${runId}`",
+                    '"/runs/static"',
+                ),
+            )
+
+            issues = validate_web_surface(root, tracked)
+
+        run_detail_messages = [
+            issue.message
+            for issue in issues
+            if issue.path == PurePosixPath("web/app/runs/[runId]/page.tsx")
+        ]
+        self.assertIn(
+            "required public metadata field is missing or invalid: alternates.canonical",
+            run_detail_messages,
+        )
+        self.assertIn(
+            "required public metadata field is missing or invalid: openGraph.url",
+            run_detail_messages,
         )
 
 

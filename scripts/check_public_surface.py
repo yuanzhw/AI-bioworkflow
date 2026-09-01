@@ -62,8 +62,11 @@ REQUIRED_WEB_FILES = (
 )
 
 REFERENCE_DESTINATION_RE = re.compile(
-    r"^\s{0,3}\[(?!\^)[^\]\n]+\]:\s*(?P<target><[^>\n]+>|\S+)",
+    r"^\s{0,3}\[(?!\^)(?P<label>[^\]\n]+)\]:\s*(?P<target><[^>\n]+>|\S+)",
     re.MULTILINE,
+)
+REFERENCE_IMAGE_RE = re.compile(
+    r"!\[(?P<alt>[^\]\n]*)\]\[(?P<label>[^\]\n]*)\]",
 )
 
 
@@ -287,17 +290,46 @@ def _inline_destinations(text: str) -> list[Destination]:
     return destinations
 
 
+def _normalize_reference_label(label: str) -> str:
+    """Normalize a CommonMark reference label for definition lookup."""
+
+    return re.sub(r"\s+", " ", label.strip()).casefold()
+
+
 def extract_destinations(text: str) -> list[Destination]:
     """Extract inline and reference-style Markdown destinations."""
 
     visible_text = _mask_inline_code(_mask_fenced_code(text))
     destinations = _inline_destinations(visible_text)
+    reference_definitions: dict[str, str] = {}
 
     for match in REFERENCE_DESTINATION_RE.finditer(visible_text):
+        target = _unescape_markdown_destination(
+            _clean_destination(match.group("target"))
+        )
+        reference_definitions.setdefault(
+            _normalize_reference_label(match.group("label")),
+            target,
+        )
         destinations.append(
             Destination(
-                target=_clean_destination(match.group("target")),
+                target=target,
                 line=visible_text.count("\n", 0, match.start()) + 1,
+            )
+        )
+
+    for match in REFERENCE_IMAGE_RE.finditer(visible_text):
+        alt = match.group("alt").strip()
+        label = match.group("label") or alt
+        target = reference_definitions.get(_normalize_reference_label(label))
+        if target is None:
+            continue
+        destinations.append(
+            Destination(
+                target=target,
+                line=visible_text.count("\n", 0, match.start()) + 1,
+                is_image=True,
+                alt=alt,
             )
         )
 
@@ -366,6 +398,7 @@ def validate_markdown_links(
             issues.append(Issue(source, f"cannot read tracked Markdown: {exc}"))
             continue
 
+        validated_targets: set[PurePosixPath] = set()
         for destination in extract_destinations(text):
             if destination.is_image and not destination.alt:
                 issues.append(
@@ -375,6 +408,9 @@ def validate_markdown_links(
             target = _relative_repo_target(source, destination.target)
             if target is None:
                 continue
+            if target in validated_targets:
+                continue
+            validated_targets.add(target)
             if target == PurePosixPath("..") or PurePosixPath("..") in target.parents:
                 issues.append(
                     Issue(
@@ -696,6 +732,13 @@ def _metadata_issue(path: PurePosixPath, field: str) -> Issue:
     return Issue(path, f"required public metadata field is missing or invalid: {field}")
 
 
+def _contains_template_identifier(value: str, identifier: str) -> bool:
+    return re.search(
+        rf"\$\{{[^}}]*\b{re.escape(identifier)}\b[^}}]*\}}",
+        value,
+    ) is not None
+
+
 def _validate_metadata_object(
     path: PurePosixPath,
     metadata: str | None,
@@ -704,6 +747,7 @@ def _validate_metadata_object(
     allowed_open_graph_types: tuple[str, ...] = ("website",),
     require_metadata_base: bool = False,
     url_contains: bool = False,
+    required_url_identifier: str | None = None,
 ) -> list[Issue]:
     if metadata is None:
         return [_metadata_issue(path, "metadata object")]
@@ -714,8 +758,13 @@ def _validate_metadata_object(
 
     alternates = _object_field(metadata, "alternates")
     canonical = _literal_field(alternates, "canonical") if alternates else None
-    if canonical is None or (
-        expected_url not in canonical if url_contains else canonical != expected_url
+    if (
+        canonical is None
+        or (expected_url not in canonical if url_contains else canonical != expected_url)
+        or (
+            required_url_identifier is not None
+            and not _contains_template_identifier(canonical, required_url_identifier)
+        )
     ):
         issues.append(_metadata_issue(path, "alternates.canonical"))
 
@@ -727,8 +776,20 @@ def _validate_metadata_object(
         if open_graph_type not in allowed_open_graph_types:
             issues.append(_metadata_issue(path, "openGraph.type"))
         open_graph_url = _literal_field(open_graph, "url")
-        if open_graph_url is None or (
-            expected_url not in open_graph_url if url_contains else open_graph_url != expected_url
+        if (
+            open_graph_url is None
+            or (
+                expected_url not in open_graph_url
+                if url_contains
+                else open_graph_url != expected_url
+            )
+            or (
+                required_url_identifier is not None
+                and not _contains_template_identifier(
+                    open_graph_url,
+                    required_url_identifier,
+                )
+            )
         ):
             issues.append(_metadata_issue(path, "openGraph.url"))
         if not _array_contains_literal(_array_field(open_graph, "images"), "/og.png"):
@@ -802,6 +863,7 @@ def validate_web_surface(
                 expected_url="/runs/",
                 allowed_open_graph_types=("website", "article"),
                 url_contains=True,
+                required_url_identifier="runId",
             )
         )
 
