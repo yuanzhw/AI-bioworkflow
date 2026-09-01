@@ -124,6 +124,14 @@ Every contribution must preserve these invariants:
 - Run the relevant frontend checks listed above.
 - Include screenshots for visible UI changes.
 
+### Public documentation or site metadata
+
+- Keep README public entry points, evidence images, local documentation links,
+  canonical metadata, `robots.ts`, and `sitemap.ts` consistent.
+- Run `.\.venv\Scripts\python.exe scripts\check_public_surface.py` from the
+  repository root.
+- Do not link or commit temporary generated material under `docs/portfolio/`.
+
 ### Dependencies
 
 Explain why the dependency is required and update the appropriate lockfile.

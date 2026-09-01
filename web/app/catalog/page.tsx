@@ -1,10 +1,42 @@
 import { ArrowLeft, CheckCircle2, Container, Database, RotateCcw, ShieldCheck } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiDocsUrl } from "@/lib/api";
 import { rnaseqDemoWorkspaceHref, rnaseqRecipeSteps } from "@/lib/examples";
+
+export const metadata: Metadata = {
+  title: "Recipe and Tool Catalog",
+  description:
+    "Inspect the approved recipe, tool schemas, command contracts, runtime containers, and execution-verification boundaries.",
+  alternates: {
+    canonical: "/catalog",
+  },
+  openGraph: {
+    type: "website",
+    title: "Recipe and Tool Catalog",
+    description:
+      "Inspect the approved recipe, tool schemas, command contracts, runtime containers, and execution-verification boundaries.",
+    url: "/catalog",
+    images: [
+      {
+        url: "/og.png",
+        width: 1280,
+        height: 640,
+        alt: "AI-bioworkflow catalog-bound planning to validated WDL",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Recipe and Tool Catalog",
+    description:
+      "Inspect the approved recipe, tool schemas, command contracts, runtime containers, and execution-verification boundaries.",
+    images: ["/og.png"],
+  },
+};
 
 const tools = [
   ["fastp", "读段质量控制", "quay.io/biocontainers/fastp", "e2e-validated"],
@@ -27,7 +59,7 @@ export default function CatalogPage() {
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
           <div className="flex flex-wrap gap-3">
-            <Badge variant="secondary">W6 Catalog boundary</Badge>
+            <Badge variant="secondary">Catalog trust boundary</Badge>
             <Badge variant="outline">RNA-seq 示例</Badge>
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-normal">Recipe 与 Tool Catalog 预览</h1>

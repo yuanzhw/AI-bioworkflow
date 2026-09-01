@@ -1,4 +1,5 @@
 import { ArrowLeft, BookOpen, History } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +7,37 @@ import { Button } from "@/components/ui/button";
 import { apiDocsUrl } from "@/lib/api";
 import { rnaseqDemoExampleSlug, rnaseqExamplePrompt } from "@/lib/examples";
 import { WorkspaceWorkbench } from "./workspace-workbench";
+
+export const metadata: Metadata = {
+  title: "RNA-seq Workflow Workbench",
+  description:
+    "Compile a key-free structured RNA-seq example and inspect its Plan, Workflow IR, diagnostics, events, and validated WDL.",
+  alternates: {
+    canonical: "/workspace",
+  },
+  openGraph: {
+    type: "website",
+    title: "RNA-seq Workflow Workbench",
+    description:
+      "Compile a key-free structured RNA-seq example and inspect its Plan, Workflow IR, diagnostics, events, and validated WDL.",
+    url: "/workspace",
+    images: [
+      {
+        url: "/og.png",
+        width: 1280,
+        height: 640,
+        alt: "AI-bioworkflow catalog-bound planning to validated WDL",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RNA-seq Workflow Workbench",
+    description:
+      "Compile a key-free structured RNA-seq example and inspect its Plan, Workflow IR, diagnostics, events, and validated WDL.",
+    images: ["/og.png"],
+  },
+};
 
 export default async function WorkspacePage({
   searchParams,
@@ -27,12 +59,12 @@ export default async function WorkspacePage({
           </Button>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-normal">Workflow 工作台</h1>
-            <Badge variant="secondary">W6 demo path</Badge>
-            <Badge variant="outline">真实 run 接入</Badge>
+            <Badge variant="secondary">Structured demo path</Badge>
+            <Badge variant="outline">持久化编译 run</Badge>
           </div>
           <p className="mt-3 max-w-2xl text-muted-foreground">
             提交结构化示例或自然语言请求后，工作台会订阅事件流、轮询 snapshot，并展示同一次 run
-            的 Plan、Workflow IR、WDL 和 diagnostics。
+            的 Plan、Workflow IR、WDL 和 diagnostics。成功状态表示编译与 WDL 校验通过，不表示默认执行工具容器。
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

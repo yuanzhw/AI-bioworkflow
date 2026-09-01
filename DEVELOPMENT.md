@@ -1,6 +1,6 @@
 # AI-bioworkflow 开发与架构指南
 
-本文档用于记录基于 LangGraph 的 WDL 工作流生成系统目录结构与核心设计理念，以供后续开发参考。
+本文档用于记录基于 LangGraph 的 WDL 工作流生成系统目录结构与核心设计理念，以供后续开发参考。面向项目评审和使用者的精简入口见 [README](./README.md)、[English overview](./README.en.md) 与 [RNA-seq 案例证据链](./docs/rnaseq-case-study.md)。
 
 当前工程方向是“Workflow IR 编译器 + LLM 辅助规划/修复”，而不是让大模型直接手写最终 WDL。标准 IR 到 WDL 的过程必须保持确定性、可测试。
 
@@ -11,8 +11,12 @@ AI-bioworkflow/
 ├── .env                  # 环境变量配置（DEEPSEEK_API_KEY等，勿提交至Git）
 ├── pyproject.toml        # uv 依赖配置文件
 ├── README.md             # 项目基础说明
+├── README.en.md          # 英文公共入口
+├── CHANGELOG.md          # 版本变化记录
+├── SUPPORT.md            # 支持范围与问题分流
 ├── DEVELOPMENT.md        # 本开发指南
 ├── docs/
+│   ├── rnaseq-case-study.md # 可追溯的 RNA-seq 公共案例
 │   └── workflow-ir.md    # Workflow IR 结构、表达式规则与后端映射规范
 │
 ├── src/                  # 核心源代码目录
@@ -91,7 +95,7 @@ Web 产品化遵循以下目标：
 2. **突出领域建模能力**：通过 recipe、tool catalog、工作流 DAG、运行输出和科学性告警展示生物信息学问题如何被结构化。
 3. **突出可解释与可审计性**：关键状态变化、修复动作、错误诊断、候选工具来源和镜像可信等级应能够被记录并在详情页回看。
 4. **保留核心编译器独立性**：Web API、CLI 与测试复用相同的 Python 服务层；UI 不侵入 Workflow IR 到 WDL 的确定性编译路径。
-5. **控制非核心投入**：W0-W5 已优先完成可演示的 Agent 工作台、run history、DAG 审阅和失败回放，不提前引入用户权限、计费、复杂微服务或大规模任务调度基础设施。
+5. **控制非核心投入**：W0-W6 已完成可演示的 Agent 工作台、run history、DAG 审阅、失败回放和公开部署收口，不提前引入用户权限、计费、复杂微服务或大规模任务调度基础设施。
 
 ## 当前端到端调用链路与编译子图
 

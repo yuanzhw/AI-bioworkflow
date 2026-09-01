@@ -9,6 +9,7 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,45 @@ import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 import type { JsonObject, RunStatus, WorkflowRunSnapshotResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ runId: string }>;
+}): Promise<Metadata> {
+  const { runId } = await params;
+  const title = `Run ${runId}`;
+  const description =
+    "Inspect one replayable AI-bioworkflow compiler run, including its events, artifacts, diagnostics, and Workflow IR DAG.";
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `/runs/${encodeURIComponent(runId)}`,
+    },
+    openGraph: {
+      type: "article",
+      title,
+      description,
+      url: `/runs/${encodeURIComponent(runId)}`,
+      images: [
+        {
+          url: "/og.png",
+          width: 1280,
+          height: 640,
+          alt: "AI-bioworkflow catalog-bound planning to validated WDL",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+      images: ["/og.png"],
+    },
+  };
+}
 
 const statusLabels: Record<RunStatus, string> = {
   created: "已创建",

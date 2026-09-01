@@ -104,7 +104,7 @@ deploy/cromwell/
 当前验证记录：
 
 - 真实 e2e 的 Cromwell workflow id、最终 status、output keys 和输出文件大小已记录在
-  `docs/p0-e2e-verification.md`。
+  `docs/cromwell-tiny-e2e-verification.md`。
 - Runner 快速检查步骤已收敛到 `scripts/check_p0.ps1`，真实 e2e 逻辑由
   `scripts/run_cromwell_tiny_e2e.ps1` 统一负责。
 

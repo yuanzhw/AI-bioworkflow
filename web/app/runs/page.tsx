@@ -10,6 +10,7 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,37 @@ import { rnaseqDemoWorkspaceHref } from "@/lib/examples";
 import type { RunListResponse, RunStatus, RunSummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Run History",
+  description:
+    "Review replayable compiler runs, validation outcomes, artifacts, diagnostics, and Workflow IR DAGs.",
+  alternates: {
+    canonical: "/runs",
+  },
+  openGraph: {
+    type: "website",
+    title: "Run History",
+    description:
+      "Review replayable compiler runs, validation outcomes, artifacts, diagnostics, and Workflow IR DAGs.",
+    url: "/runs",
+    images: [
+      {
+        url: "/og.png",
+        width: 1280,
+        height: 640,
+        alt: "AI-bioworkflow catalog-bound planning to validated WDL",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Run History",
+    description:
+      "Review replayable compiler runs, validation outcomes, artifacts, diagnostics, and Workflow IR DAGs.",
+    images: ["/og.png"],
+  },
+};
 
 const PAGE_SIZE = 20;
 const statusFilters: Array<{ label: string; value: RunStatus | "all" }> = [
@@ -265,12 +297,12 @@ export default async function RunsPage({
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
           <div className="flex flex-wrap gap-3">
-            <Badge variant="secondary">W6 demo readiness</Badge>
-            <Badge variant="outline">真实 run 数据</Badge>
+            <Badge variant="secondary">Replayable run history</Badge>
+            <Badge variant="outline">持久化编译记录</Badge>
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-normal">Run 回放与审计</h1>
           <p className="mt-3 leading-7 text-muted-foreground">
-            历史列表读取持久化 run 摘要，保留状态、请求摘要、诊断计数和时间戳。
+            历史列表读取持久化 run 摘要，保留状态、请求摘要、诊断计数和时间戳。记录成功表示编译与 WDL 校验通过，不表示默认执行工具容器。
           </p>
         </div>
         <Button asChild variant="outline">

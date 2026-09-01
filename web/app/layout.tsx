@@ -5,10 +5,48 @@ import { SiteHeader } from "@/components/site-header";
 import "@xyflow/react/dist/style.css";
 import "./globals.css";
 
+const siteUrl = new URL("https://yuanzhw.com");
+const siteTitle = "AI-bioworkflow | Auditable Bioinformatics Workflow Compiler";
+const siteDescription =
+  "Catalog-bound bioinformatics planning, canonical Workflow IR, and deterministic compilation to validated WDL 1.0.";
+
 export const metadata: Metadata = {
-  title: "AI-bioworkflow | Bioinformatics Workflow Compiler",
-  description:
-    "面向作品集展示的生信 workflow compiler demo，从 Recipe Tool Plan、Workflow IR 到可验证 WDL，并提供 run timeline、DAG 和失败回放。",
+  metadataBase: siteUrl,
+  title: {
+    default: siteTitle,
+    template: "%s | AI-bioworkflow",
+  },
+  description: siteDescription,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "zh_CN",
+    alternateLocale: ["en_US"],
+    url: "/",
+    siteName: "AI-bioworkflow",
+    title: siteTitle,
+    description: siteDescription,
+    images: [
+      {
+        url: "/og.png",
+        width: 1280,
+        height: 640,
+        alt: "AI-bioworkflow catalog-bound planning to validated WDL",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteTitle,
+    description: siteDescription,
+    images: ["/og.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
