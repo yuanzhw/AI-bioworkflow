@@ -821,9 +821,13 @@ P1 的目标是明确 Compiler Graph，并建立第一版 Orchestration Graph �
 
 👉 **[P1 Orchestration Graph 实施计划](./docs/p1-orchestration-graph-plan.md)**
 
-### P2 实施计划
+### P2 实施计划（已完成）
 
 P2 的目标是将 Reviewer LLM 作为受控 IR 修复分支接入 Compiler Graph。Reviewer 只能在确定性 repairer 没有安全修复动作时提出结构化 Workflow IR patch；patch 必须经过 schema、policy、Analyzer、Renderer 和 Checker 验证，不能直接生成 WDL 或绕过 Catalog 与容器准入边界。
+
+P2 已于 2026-08-24 完成。最终实现覆盖 Reviewer contract、patch policy 与 application、
+Analyzer / Checker failure routing、独立 attempt budget，以及 run events、named artifacts
+和 diagnostics。完整单元测试在 Java 17 与 WOMtool 环境通过；下一工程阶段为 P3。
 
 详细工作拆解、关键契约、验收清单和建议 PR 切分维护在：
 
@@ -832,6 +836,9 @@ P2 的目标是将 Reviewer LLM 作为受控 IR 修复分支接入 Compiler Grap
 ### P3 Architect 与 Bioinfo Reviewer
 
 P3 的目标是把分析方案职责和方法学审查职责分开。Architect Agent 负责形成候选分析方案、步骤和预期输出；Bioinfo Reviewer 负责只读审查并输出 warnings，例如缺少 QC、缺少样本分组或 contrast、未说明 transcriptome index / reference resource、MultiQC 汇总输入不足等。
+
+P3 开始实现前，应先形成独立实施计划，明确 Architect 输出契约、Bioinfo Reviewer
+只读 warnings schema、Orchestration Graph 路由、run observability 和建议 PR 拆分。
 
 Bioinfo Reviewer 的边界：
 

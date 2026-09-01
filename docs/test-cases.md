@@ -48,16 +48,16 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 P1.7 事件与 artifacts 收口后的最近一次完整验证结果：
+当前 P2.6 Reviewer IR 修复闭环收口后的最近一次完整验证结果：
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 186 tests
+Ran 274 tests
 OK (skipped=2)
 ```
 
-跳过项为显式 opt-in 的真实 Cromwell tiny e2e，以及本地未安装 miniwdl
-时跳过的可选 miniwdl tiny run。
+跳过项为需要设置 `AI_BIOWORKFLOW_RUN_E2E=1` 的真实 Cromwell tiny e2e，
+以及当前环境未安装 miniwdl 时按设计跳过的本地 miniwdl tiny run。
 
 真实 Cromwell tiny e2e 已在独立 runner 环境中手动运行过；默认单测仍保留
 显式 opt-in 机制，避免普通 Windows/Codex 开发环境误触发真实 workflow 执行。
