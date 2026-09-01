@@ -162,7 +162,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--no-check",
         action="store_true",
-        help="Skip miniwdl syntax validation after rendering.",
+        help="Skip configured WDL syntax validation after rendering.",
     )
     parser.add_argument(
         "--planner-model",

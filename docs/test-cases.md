@@ -48,16 +48,16 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 - `tests/test_tiny_run.py`：没有 miniwdl、Docker/Podman、本地镜像或 tiny 输入文件时跳过真实 tiny run。
 - `tests/test_container_build.py`：纯单元测试，不调用 Docker；只验证容器构建脚本的 tag contract。
 
-当前 P2.6 Reviewer IR 修复闭环收口后的最近一次完整验证结果：
+当前 WOMtool 92 CI 门禁实现后的完整验证结果：
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 274 tests
+Ran 283 tests
 OK (skipped=2)
 ```
 
 跳过项为需要设置 `AI_BIOWORKFLOW_RUN_E2E=1` 的真实 Cromwell tiny e2e，
-以及当前环境未安装 miniwdl 时按设计跳过的本地 miniwdl tiny run。
+以及当前环境缺少完整 miniwdl 容器运行条件时按设计跳过的本地 tiny run。
 
 真实 Cromwell tiny e2e 已在独立 runner 环境中手动运行过；默认单测仍保留
 显式 opt-in 机制，避免普通 Windows/Codex 开发环境误触发真实 workflow 执行。
@@ -5021,6 +5021,30 @@ workflow Bad {
 覆盖点：
 
 - Validator wrapper 能把 WDL 语法错误转成结构化失败结果。
+
+### `ValidatorSelectionTests`
+
+这些用例固定 CI 所依赖的校验器选择与 Java 版本边界，不调用真实下载。
+
+#### `test_auto_prefers_womtool_without_probing_miniwdl`
+
+- 模拟 WOMtool 和 miniwdl 均可用。
+- `WDL_VALIDATOR=auto` 必须选择 WOMtool，且不探测 miniwdl。
+
+#### `test_auto_falls_back_to_miniwdl_when_womtool_is_unavailable`
+
+- 模拟 WOMtool 不可用、miniwdl 可用。
+- `auto` 模式选择 miniwdl，保持本地和生产兼容回退能力。
+
+#### `test_explicit_womtool_does_not_fall_back_to_miniwdl`
+
+- 设置 `WDL_VALIDATOR=womtool` 并模拟 WOMtool 缺失。
+- 结果必须为无可用 validator，不能静默使用 miniwdl 形成 CI 假绿。
+
+#### `test_womtool_rejects_java_older_than_17`
+
+- 模拟找到 WOMtool JAR，但 Java major version 为 16。
+- WOMtool command 必须不可用，固定 Cromwell/WOMtool 92 的 Java 17 下限。
 
 ## `tests/test_tiny_run.py`
 

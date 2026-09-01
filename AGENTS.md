@@ -88,7 +88,10 @@ review, or bounded IR repair only through explicit structured interfaces.
   `.\.venv\Scripts\python.exe -m unittest discover -v`
 - When a change affects generated WDL, recipes, renderers, or validation paths,
   generate representative WDL and run:
-  `miniwdl check path/to/generated.wdl`
+  `java -jar path/to/womtool-92.jar validate path/to/generated.wdl`
+- WOMtool 92 is the canonical CI validator aligned with Cromwell 92. Run
+  `miniwdl check path/to/generated.wdl` as a secondary production-compatibility
+  check when miniwdl is available.
 - When a change affects execution backend selection or behavior, include the
   execution backend tests in verification.
 - Do not invent required lint/typecheck commands that are not configured in the

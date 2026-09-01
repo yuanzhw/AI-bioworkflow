@@ -7,6 +7,7 @@
 [![Python Version](https://img.shields.io/badge/Python-3.13+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![WDL](https://img.shields.io/badge/WDL-1.0-167D73.svg?style=flat-square)](https://github.com/openwdl/wdl)
 [![Package Manager: uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![CI](https://github.com/yuanzhw/AI-bioworkflow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yuanzhw/AI-bioworkflow/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-4B5563.svg?style=flat-square)](./LICENSE)
 
 LLM 只在显式结构化边界内承担自然语言规划和可选的 Reviewer IR 修复；Catalog 约束 recipe、tool、command 与 runtime container。Workflow IR（包括应用 Reviewer patch 后的候选）必须通过 Analyzer，再由确定性 Renderer 生成 WDL；Checker 只校验生成结果。Next.js 工作台记录同一次 run 的 timeline、artifacts、diagnostics 与 Workflow IR DAG，便于审阅和失败回放。
@@ -74,7 +75,7 @@ Reviewer 不能生成 WDL、修改 Catalog、command template 或 runtime image�
 确保你的本地开发环境已安装以下基础工具：
 - Python 3.13+
 - [uv](https://github.com/astral-sh/uv) (极速的 Python 包管理器)
-- Java 17+（WOMtool 91 需要 Java 17 或更新版本）
+- Java 17+（WOMtool 92 需要 Java 17 或更新版本）
 
 ### 2. 克隆与安装
 
@@ -359,6 +360,10 @@ Web 产品化拆解与当前 W6 收口计划详见：
 部署拓扑、环境变量、CORS、SQLite 数据边界和回滚流程详见：
 
 👉 **[部署与运维手册](./docs/deployment.md)**
+
+PR 必需检查、WOMtool / miniwdl 分工和本地等价命令详见：
+
+👉 **[CI 与合并门禁](./docs/ci.md)**
 
 ## 🤝 参与贡献与治理
 

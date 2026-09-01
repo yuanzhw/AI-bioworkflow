@@ -54,7 +54,9 @@
 - Local Windows-oriented P0 wrapper:
   - `powershell -ExecutionPolicy Bypass -File scripts/check_p0.ps1`
 - Real Cromwell tiny e2e is opt-in. Prefer the local wrapper `scripts/check_p0.ps1 -RunE2E`; a direct env-var unittest entry also exists for runner/debug workflows.
-- If a change affects generated WDL, recipes, renderers, or validation paths, also run `miniwdl check` on a representative generated WDL when `miniwdl` is available.
+- If a change affects generated WDL, recipes, renderers, or validation paths,
+  run WOMtool 92 as the canonical validator first, then run `miniwdl check` as
+  the production-compatibility check when miniwdl is available.
 
 ## Environment/setup notes for cloud agents
 

@@ -29,7 +29,8 @@
 
 - [ ] Python unit tests
 - [ ] `scripts/check_p0.ps1`
-- [ ] Representative WDL compile and syntax validation
+- [ ] Representative WDL compile and WOMtool 92 validation
+- [ ] miniwdl production-compatibility validation
 - [ ] Frontend lint
 - [ ] Frontend Catalog retrieval tests
 - [ ] Frontend workflow graph tests

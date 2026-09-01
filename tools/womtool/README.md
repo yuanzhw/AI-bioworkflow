@@ -8,9 +8,11 @@
 scripts/install_womtool.ps1
 ```
 
-默认情况下，脚本会从 Broad Institute Cromwell GitHub Releases 下载 `womtool-91.jar`，并保存到：
+默认情况下，脚本会从 Broad Institute Cromwell GitHub Releases 下载
+`womtool-92.jar`，校验仓库记录的 SHA-256 后保存到：
 
 ```text
+.cache/womtool/womtool-92.jar
 .cache/womtool/womtool.jar
 ```
 
@@ -20,7 +22,8 @@ scripts/install_womtool.ps1
 WOMTOOL_JAR="D:/path/to/womtool.jar"
 ```
 
-默认 WOMtool 91 release 需要 Java 17 或更新版本。如需安装项目本地的 Temurin JDK：
+默认 WOMtool 92 release 与项目 Cromwell 92 runner 保持一致，需要 Java 17
+或更新版本。如需安装项目本地的 Temurin JDK：
 
 ```powershell
 scripts/install_java.ps1
