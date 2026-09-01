@@ -9,7 +9,7 @@
 [![Package Manager: uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![License](https://img.shields.io/badge/License-Apache%202.0-4B5563.svg?style=flat-square)](./LICENSE)
 
-LLM 只在显式结构化边界内承担自然语言规划和可选的 Reviewer IR 修复；Catalog 约束 recipe、tool、command 与 runtime container，最终 WDL 始终由普通代码生成并重新经过 Analyzer、Renderer 和 Checker。Next.js 工作台记录同一次 run 的 timeline、artifacts、diagnostics 与 Workflow IR DAG，便于审阅和失败回放。
+LLM 只在显式结构化边界内承担自然语言规划和可选的 Reviewer IR 修复；Catalog 约束 recipe、tool、command 与 runtime container。Workflow IR（包括应用 Reviewer patch 后的候选）必须通过 Analyzer，再由确定性 Renderer 生成 WDL；Checker 只校验生成结果。Next.js 工作台记录同一次 run 的 timeline、artifacts、diagnostics 与 Workflow IR DAG，便于审阅和失败回放。
 
 ![RNA-seq 结构化示例成功编译并通过 WOMtool 校验](./docs/assets/workspace-rnaseq-run.png)
 
