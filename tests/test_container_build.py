@@ -68,6 +68,22 @@ class ContainerBuildScriptTests(unittest.TestCase):
         self.assertTrue((spec.context_dir / "run_scanpy_qc_clustering.py").is_file())
         self.assertTrue(spec.smoke_test.is_file())
 
+    def test_scanpy_wrapper_cell_qc_export_includes_sample_id(self):
+        wrapper_path = (
+            REPO_ROOT
+            / "containers"
+            / "scanpy_qc_clustering"
+            / "1.12.3"
+            / "run_scanpy_qc_clustering.py"
+        )
+        source = wrapper_path.read_text(encoding="utf-8")
+        sample_assignment = source.index('adata.obs["sample_id"] = args.sample_id')
+        qc_table = source.index("cell_qc = adata.obs[")
+        qc_export = source.index("cell_qc.reset_index().to_csv")
+
+        self.assertLess(sample_assignment, qc_table)
+        self.assertIn('"sample_id"', source[qc_table:qc_export])
+
 
 def make_container_dir(
     containers_root: Path,

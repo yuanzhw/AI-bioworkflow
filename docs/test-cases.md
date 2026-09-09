@@ -5307,6 +5307,20 @@ Python 标准库，并以 Git 已跟踪文件清单为准，因此本地未跟�
 覆盖点：项目维护 Scanpy wrapper 满足容器发现和 revisioned tag contract；该静态测试
 不调用 Docker，也不构成 smoke-tested execution evidence。
 
+### `test_scanpy_wrapper_cell_qc_export_includes_sample_id`
+
+输入：仓库中的 `run_scanpy_qc_clustering.py` helper source。
+
+执行：定位 `sample_id` 写入、cell QC table 构造和 TSV 序列化代码。
+
+期望输出：
+
+- `sample_id` 在 cell QC table 构造前写入 `adata.obs`。
+- cell QC table 的投影列包含 `sample_id`。
+
+覆盖点：`cell_qc.tsv` 保留所有输入 barcode 的样本来源，满足 Tool Catalog 对
+cell-level outputs 的 provenance 契约；该静态测试不构成容器执行验证证据。
+
 ## `web/tests/workflow-graph.test.mjs`
 
 该文件验证 W5 DAG 可视化前置的数据模型转换层。测试通过 `tsx --test`

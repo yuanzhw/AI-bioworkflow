@@ -116,8 +116,9 @@ def run_analysis(args: argparse.Namespace) -> None:
     passed_qc = (adata.obs["n_genes_by_counts"] >= args.min_genes) & (
         adata.obs["pct_counts_mt"] <= args.max_mito_pct
     )
+    adata.obs["sample_id"] = args.sample_id
     cell_qc = adata.obs[
-        ["total_counts", "n_genes_by_counts", "pct_counts_mt"]
+        ["sample_id", "total_counts", "n_genes_by_counts", "pct_counts_mt"]
     ].copy()
     cell_qc["passed_qc"] = passed_qc
     cell_qc.index.name = "barcode"
@@ -130,7 +131,6 @@ def run_analysis(args: argparse.Namespace) -> None:
             "QC retained fewer than 3 cells or 3 genes; relax thresholds or inspect the input matrix"
         )
 
-    adata.obs["sample_id"] = args.sample_id
     if args.cell_metadata is not None:
         metadata = load_cell_metadata(args.cell_metadata, pd)
         overlapping_columns = sorted(set(metadata.columns).intersection(adata.obs.columns))
