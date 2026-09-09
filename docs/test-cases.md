@@ -1465,6 +1465,27 @@ OK (skipped=2)
   工具。
 - Catalog admission 不会被误写成 smoke-tested 或 e2e-validated。
 
+### `test_scrnaseq_tool_is_compile_ready_but_unverified`
+
+输入：当前正式 Tool Catalog 中的 `scanpy_qc_clustering@1.12.3`。
+
+期望输出：
+
+- 工具通过完整 ToolSpec schema 和 Catalog loader。
+- runtime 固定为项目维护镜像
+  `ghcr.io/yuanzhw/ai-bioworkflow/scanpy_qc_clustering:1.12.3-r1`。
+- required `matrix_h5` 和 optional `cell_metadata` 输入契约明确。
+- 输出覆盖 processed H5AD、cell QC、UMAP coordinates、cluster assignments、
+  marker genes、UMAP plot、analysis summary 和 log。
+- command 调用打包的 `run_scanpy_qc_clustering.py` helper。
+- execution verification 为 `unverified` 且 evidence 为空。
+
+覆盖点：PR 4A 只准入完整、可编译的工具契约，不把 helper/container 文件存在误写为
+成功 smoke test，也不提前声明 scRNA-seq recipe 已受支持。
+
+本次 PR 只执行 container build dry-run；runtime tag 是该构建上下文的发布目标，尚未
+记录实际 build、smoke test 或数据执行成功，因此保持 `unverified`。
+
 ### `test_chipseq_peak_calling_recipe_resolves_to_valid_renderable_ir`
 
 输入：
@@ -1534,6 +1555,43 @@ MACS2 call。
 
 覆盖点：MACS2 control 输入的 optional schema 和 conditional command template
 保持一致；该底层工具契约测试不扩张正式 recipe 的单 treatment 产品范围。
+
+### `test_scrnaseq_tool_contract_resolves_to_valid_renderable_ir`
+
+输入：
+
+- 测试内构造的 `scrnaseq_tool_contract_probe` recipe；它不进入正式 Recipe Catalog。
+- 调用 `scanpy_qc_clustering@1.12.3` 的 synthetic Recipe Tool Plan。
+- required 10x HDF5 和 optional cell metadata 输入及一组非默认 QC/clustering 参数。
+
+执行：通过正式 resolver、Analyzer 和 WDL renderer 生成 synthetic contract-probe WDL。
+
+期望输出：
+
+- Analyzer 返回 `is_valid=True`。
+- task runtime 使用 revisioned Scanpy helper image。
+- optional metadata 保持 `File?` 并正确连接到 call 和 helper argument。
+- 参数、helper command 以及 processed H5AD、marker table 和 UMAP plot 输出均进入 WDL。
+
+覆盖点：在 PR 4B 正式 recipe 落地前，独立验证新增工具能够通过确定性编译路径，且不
+需要把测试 probe 冒充产品能力。
+
+### `test_scrnaseq_tool_contract_omits_optional_metadata_argument`
+
+输入：不提供 optional cell metadata 的 synthetic Scanpy contract probe。
+
+期望输出：Analyzer 通过，call wiring 和 helper command 都不包含 metadata 参数。
+
+覆盖点：ToolSpec optional input、Jinja command condition 和 resolver 提供状态保持一致。
+
+### `test_scrnaseq_tool_contract_wdl_passes_syntax_validation`
+
+输入：不提供 optional metadata 的 synthetic Scanpy contract-probe WDL。
+
+期望输出：统一 WDL validator 返回 `is_valid=True`；本地无 validator 时按现有约定跳过。
+
+覆盖点：新增 tool contract 的 runtime、inputs、command 和 outputs 能组成合法 WDL 1.0
+task，同时不提前加入正式 scRNA-seq recipe。
 
 ### `test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl`
 
@@ -1889,6 +1947,17 @@ ChIP-seq narrow peak calling query。
 覆盖点：Retriever 可以召回新增 workflow family，同时 retrieval artifact 不会把
 compile-ready 工具误标记成已执行验证。
 
+### `test_retrieves_scrnaseq_tool_without_claiming_recipe_support`
+
+输入：描述 filtered 10x matrix、Scanpy、cell QC、normalization、Leiden、UMAP 和
+marker genes 的 scRNA-seq query。
+
+期望输出：top-8 tools 包含 `scanpy_qc_clustering`，execution verification 为
+`unverified`；recipe 结果中不存在尚未准入的 `scrnaseq_qc_clustering`。
+
+覆盖点：PR 4A 允许 approved tool metadata 参与检索，但单个 tool direct match 不会被
+解释成完整 workflow family support。
+
 ### `test_tokenizer_supports_sequencing_variants_and_cjk_ngrams`
 
 输入：
@@ -2017,8 +2086,8 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - `family_metrics` 包含 `bulk_rnaseq`、`chipseq`、`scrnaseq`、
   `variant_calling` 和 `metagenomics`。
 - bulk RNA-seq family 共 21 条 query；ChIP-seq family 共 7 条，其中 6 条 supported。
-- bulk RNA-seq Tool Recall@5 为 `0.8190`。
-- macro Recipe Recall@1 为 `0.9048`，macro Tool Recall@5 为 `0.8484`。
+- bulk RNA-seq Tool Recall@5 为 `0.7913`。
+- macro Recipe Recall@1 为 `0.9048`，macro Tool Recall@5 为 `0.7804`。
 - `macro_family_metrics` 中每个值都在 0 到 1 之间。
 
 覆盖点：
@@ -2027,7 +2096,8 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - Baseline artifact 包含 per-query retrieval、miss、fallback 与 aggregate metrics。
 - Family-level 和 macro metrics 可以区分 overall 分数、样本量较大的 bulk RNA-seq
   family 与新增 ChIP-seq family。
-- Recipe expansion 保持 Planner context 完整，但 raw top-K crowding 仍可见。
+- 13-tool PR 4A checkpoint 保持 Planner context 完整，同时明确暴露 Scanpy
+  single-cell/bulk 近邻词汇带来的 raw top-K crowding。
 
 ### `test_macro_family_metrics_use_unrounded_family_values`
 
@@ -2323,6 +2393,21 @@ artifact 边界统一舍入四位。
 - Catalog admission 与 execution verification 在 API 输出中继续独立表达。
 - Catalog 专属 output description 不需要进入 Workflow IR，也不会在 resolver
   投影时丢失源 metadata。
+
+### `test_get_scrnaseq_tool_exposes_compile_ready_wrapper_contract`
+
+输入：不指定版本调用 `get_tool("scanpy_qc_clustering")`。
+
+期望输出：
+
+- 返回 `scanpy_qc_clustering@1.12.3`。
+- `trust_status == "catalog-approved"`。
+- runtime 使用项目维护的 revisioned helper image。
+- `cell_metadata` 保持 optional，marker output metadata 对 API 可见。
+- execution verification 为 `unverified` 且 evidence 为空。
+
+覆盖点：Catalog service 可以公开 PR 4A 的完整工具契约，同时继续区分 Catalog
+admission、compile readiness 和 execution evidence。
 
 ### `test_unknown_recipe_and_tool_raise_key_error`
 
@@ -5206,6 +5291,35 @@ Python 标准库，并以 Git 已跟踪文件清单为准，因此本地未跟�
 覆盖点：
 
 - `--all` 只发现实际容器目录，非容器草稿目录不会被强制要求声明镜像修订号。
+
+### `test_scanpy_wrapper_container_contract_is_discoverable`
+
+输入：仓库中的 `containers/scanpy_qc_clustering/1.12.3/` 构建上下文。
+
+执行：调用 `discover_specs(...)`，并定位 `scanpy_qc_clustering` spec。
+
+期望输出：
+
+- software version 为 `1.12.3`，image revision 为 `r1`。
+- 构建 tag 为 `1.12.3-r1`。
+- helper script 和 `smoke_test.sh` 均存在。
+
+覆盖点：项目维护 Scanpy wrapper 满足容器发现和 revisioned tag contract；该静态测试
+不调用 Docker，也不构成 smoke-tested execution evidence。
+
+### `test_scanpy_wrapper_cell_qc_export_includes_sample_id`
+
+输入：仓库中的 `run_scanpy_qc_clustering.py` helper source。
+
+执行：定位 `sample_id` 写入、cell QC table 构造和 TSV 序列化代码。
+
+期望输出：
+
+- `sample_id` 在 cell QC table 构造前写入 `adata.obs`。
+- cell QC table 的投影列包含 `sample_id`。
+
+覆盖点：`cell_qc.tsv` 保留所有输入 barcode 的样本来源，满足 Tool Catalog 对
+cell-level outputs 的 provenance 契约；该静态测试不构成容器执行验证证据。
 
 ## `web/tests/workflow-graph.test.mjs`
 

@@ -96,6 +96,29 @@ class CatalogRetrieverTests(unittest.TestCase):
         for tool_id in ("bowtie2", "samtools", "macs2"):
             self.assertEqual(tools[tool_id]["execution_verification"]["status"], "unverified")
 
+    def test_retrieves_scrnaseq_tool_without_claiming_recipe_support(self):
+        result = retrieve_catalog_context(
+            (
+                "Analyze a filtered 10x single-cell matrix with Scanpy cell QC, "
+                "normalization, Leiden clustering, UMAP, and marker genes."
+            ),
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=3,
+            top_k_tools=8,
+        )
+
+        tools = {tool["id"]: tool for tool in result["tools"]}
+        self.assertIn("scanpy_qc_clustering", tools)
+        self.assertEqual(
+            tools["scanpy_qc_clustering"]["execution_verification"],
+            {"status": "unverified", "evidence": []},
+        )
+        self.assertNotIn(
+            "scrnaseq_qc_clustering",
+            {recipe["id"] for recipe in result["recipes"]},
+        )
+
     def test_tokenizer_supports_sequencing_variants_and_cjk_ngrams(self):
         tokens = tokenize_for_retrieval("做差异表达 RNAseq 和 ChIPseq")
 

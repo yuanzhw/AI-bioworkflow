@@ -882,12 +882,22 @@ sample 的 QC、genome alignment、BAM sort/index、narrow peak calling 和 Mult
 编译路径，代表性 WDL 已通过 WOMtool 91 校验；它不包含 control branch、peak
 annotation 或 motif analysis，也未通过真实 ChIP-seq 数据执行验证。
 
+`scanpy_qc_clustering@1.12.3` 也已作为 `unverified`、compile-ready 工具进入正式
+Catalog，并带有项目维护的 Python helper、Dockerfile、镜像 revision 和 smoke test
+契约。该工具接收单个 filtered 10x feature-barcode HDF5 matrix，覆盖 cell/gene QC、
+normalization、highly variable genes、PCA、neighbors、Leiden、UMAP 和 marker ranking。
+runtime tag 是仓库构建脚本根据该上下文生成的发布目标；PR 4A 不声明镜像已经发布或
+smoke test 已成功执行。
+正式 `scrnaseq_qc_clustering` recipe 尚未加入，因此当前状态只表示工具可被检索和
+确定性编译，不表示 scRNA-seq workflow family 已受支持或该容器已真实执行验证。
+
 当前 query set 包含 31 条 family-labeled query，覆盖 21 条 supported bulk RNA-seq、
 6 条 supported ChIP-seq 和 4 条 unsupported 负例。`lexical_v1` 的 Recipe Recall@1
-为 `0.8519`，两个 supported family 的 macro Recipe Recall@1 为 `0.9048`，Planner
-Context Tool Recall / Role Coverage 均为 `1.0000`。下一步按扩展计划实现最小
-`scrnaseq_qc_clustering` family；完成 scRNA-seq 与 variant calling 后再决定是否进入
-R3 vector / hybrid backend。
+为 `0.8519`，13-tool 中间 checkpoint 的 Tool Recall@5 为 `0.7864`，两个 supported
+family 的 macro Recipe Recall@1 / Tool Recall@5 分别为 `0.9048` / `0.7804`，Planner
+Context Tool Recall / Role Coverage 仍均为 `1.0000`。下一步在 PR 4B 加入正式
+`scrnaseq_qc_clustering` recipe、example plan 和 bulk/scRNA confusion queries；完成
+scRNA-seq 与 variant calling 后再决定是否进入 R3 vector / hybrid backend。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

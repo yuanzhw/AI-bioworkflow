@@ -9,6 +9,9 @@ from scripts.build_container import (
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 class ContainerBuildScriptTests(unittest.TestCase):
     def test_select_spec_uses_image_revision_in_tag(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -54,6 +57,32 @@ class ContainerBuildScriptTests(unittest.TestCase):
             ignored_dir.mkdir(parents=True)
 
             self.assertEqual(discover_specs(containers_root), [])
+
+    def test_scanpy_wrapper_container_contract_is_discoverable(self):
+        specs = discover_specs(REPO_ROOT / "containers")
+        spec = next(spec for spec in specs if spec.tool == "scanpy_qc_clustering")
+
+        self.assertEqual(spec.version, "1.12.3")
+        self.assertEqual(spec.image_revision, "r1")
+        self.assertEqual(spec.image_tag, "1.12.3-r1")
+        self.assertTrue((spec.context_dir / "run_scanpy_qc_clustering.py").is_file())
+        self.assertTrue(spec.smoke_test.is_file())
+
+    def test_scanpy_wrapper_cell_qc_export_includes_sample_id(self):
+        wrapper_path = (
+            REPO_ROOT
+            / "containers"
+            / "scanpy_qc_clustering"
+            / "1.12.3"
+            / "run_scanpy_qc_clustering.py"
+        )
+        source = wrapper_path.read_text(encoding="utf-8")
+        sample_assignment = source.index('adata.obs["sample_id"] = args.sample_id')
+        qc_table = source.index("cell_qc = adata.obs[")
+        qc_export = source.index("cell_qc.reset_index().to_csv")
+
+        self.assertLess(sample_assignment, qc_table)
+        self.assertIn('"sample_id"', source[qc_table:qc_export])
 
 
 def make_container_dir(
