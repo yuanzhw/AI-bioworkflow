@@ -1,0 +1,44 @@
+{
+  "workflow": {
+    "name": "ScRNASeqQCClustering",
+    "recipe": "scrnaseq_qc_clustering",
+    "inputs": {
+      "matrix_h5": "File",
+      "cell_metadata": "File"
+    },
+    "tool_calls": [
+      {
+        "id": "analyze",
+        "step": "analyze_cells",
+        "tool": "scanpy_qc_clustering",
+        "version": "1.12.3",
+        "inputs": {
+          "matrix_h5": "matrix_h5",
+          "cell_metadata": "cell_metadata"
+        },
+        "params": {
+          "sample_id": "pbmc_10x",
+          "min_genes": 200,
+          "min_cells": 3,
+          "max_mito_pct": 15.0,
+          "target_sum": 10000.0,
+          "n_top_genes": 2000,
+          "n_pcs": 30,
+          "n_neighbors": 15,
+          "leiden_resolution": 0.8,
+          "random_seed": 7
+        }
+      }
+    ],
+    "outputs": {
+      "processed_h5ad": "analyze.processed_h5ad",
+      "cell_qc_table": "analyze.cell_qc_table",
+      "umap_coordinates": "analyze.umap_coordinates",
+      "cluster_assignments": "analyze.cluster_assignments",
+      "marker_genes": "analyze.marker_genes",
+      "umap_plot": "analyze.umap_plot",
+      "analysis_summary": "analyze.analysis_summary",
+      "analysis_log": "analyze.analysis_log"
+    }
+  }
+}

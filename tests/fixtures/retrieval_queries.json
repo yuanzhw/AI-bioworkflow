@@ -286,14 +286,192 @@
     "notes": "Negative case: peak annotation and motif analysis are outside the current ChIP-seq recipe."
   },
   {
-    "id": "unsupported_scrnaseq_clustering_en",
+    "id": "scrnaseq_qc_clustering_basic_en",
     "query": "Analyze single-cell RNA-seq UMI counts with normalization, clustering, marker genes, and UMAP plots.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Basic supported scRNA-seq request converted from the former family-level negative case."
+  },
+  {
+    "id": "scrnaseq_qc_clustering_explicit_scanpy_en",
+    "query": "Use Scanpy on a filtered 10x feature-barcode HDF5 matrix for cell QC, highly variable genes, Leiden clustering, UMAP, and marker ranking.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Supported request naming the approved Scanpy wrapper and its required 10x input."
+  },
+  {
+    "id": "scrnaseq_qc_clustering_cn_mixed",
+    "query": "用 Scanpy 分析 filtered 10x 单细胞 RNA-seq 矩阵，完成细胞质控、标准化、Leiden 聚类、UMAP 和 marker genes 排名。",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Chinese scRNA-seq request with common English artifacts and method names."
+  },
+  {
+    "id": "scrnaseq_qc_clustering_goal_only_en",
+    "query": "Discover cell populations from single-cell RNA sequencing counts using cell-level quality control, feature selection, neighborhood clustering, a two-dimensional embedding, and cluster marker ranking.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Goal-oriented request that avoids naming Scanpy, Leiden, or UMAP."
+  },
+  {
+    "id": "scrnaseq_qc_clustering_params_en",
+    "query": "Filter a 10x scRNA-seq matrix at 200 detected genes and 15 percent mitochondrial counts, then run 30 PCs, 15 neighbors, Leiden resolution 0.8, and UMAP.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Supported request emphasizing QC and clustering parameter hints."
+  },
+  {
+    "id": "scrnaseq_qc_clustering_abbrev_en",
+    "query": "Create an scRNAseq QC and clustering workflow from UMI counts with HVGs, PCA, Leiden communities, UMAP, and cluster markers.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Supported request using scRNAseq and HVG shorthand."
+  },
+  {
+    "id": "scrnaseq_cell_qc_only_en",
+    "query": "Calculate per-barcode detected genes, total UMI counts, mitochondrial percentage, and QC pass status for a filtered 10x single-cell matrix.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Partial supported request focused on the recipe's cell-level QC output."
+  },
+  {
+    "id": "scrnaseq_marker_detection_en",
+    "query": "Rank marker genes for each Leiden cluster in single-cell RNA-seq data and export the cluster assignments.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Partial supported request focused on marker ranking and cluster assignments."
+  },
+  {
+    "id": "scrnaseq_10x_metadata_en",
+    "query": "Analyze a filtered 10x HDF5 count matrix and join a barcode-keyed sample metadata table to the single-cell annotations.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Supported request emphasizing the required matrix and optional metadata inputs."
+  },
+  {
+    "id": "scrnaseq_normalization_hvg_en",
+    "query": "Normalize single-cell UMI libraries, select highly variable genes, scale the matrix, and build PCA and nearest-neighbor embeddings.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Partial supported request focused on preprocessing and dimensionality reduction."
+  },
+  {
+    "id": "scrnaseq_outputs_en",
+    "query": "Produce a filtered H5AD, per-cell UMAP coordinates, Leiden cluster labels, marker tables, and a clustering plot from 10x RNA counts.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Supported request expressed through the recipe's output artifacts."
+  },
+  {
+    "id": "scrnaseq_qc_clustering_goal_only_cn",
+    "query": "对单细胞 RNA-seq UMI 矩阵做细胞质控和特征筛选，识别细胞群，并输出 UMAP、cluster labels 和 marker genes。",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Chinese goal-oriented request without naming Scanpy or Leiden."
+  },
+  {
+    "id": "scrnaseq_reproducible_clustering_en",
+    "query": "Run reproducible Scanpy clustering with a fixed random seed and Leiden resolution, then save the UMAP coordinates and analysis summary.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Supported request emphasizing reproducibility parameters and machine-readable outputs."
+  },
+  {
+    "id": "cross_family_scrnaseq_not_bulk_en",
+    "query": "Cluster individual cells from a 10x scRNA-seq matrix and rank Leiden cluster markers with Scanpy and UMAP rather than running bulk RNA-seq differential expression with DESeq2.",
+    "supported": true,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": "scrnaseq_qc_clustering",
+    "expected_tools": ["scanpy_qc_clustering"],
+    "expected_roles": {
+      "single_cell_qc_clustering": ["scanpy_qc_clustering"]
+    },
+    "notes": "Cross-family confusion case that distinguishes single-cell marker ranking from bulk DEG."
+  },
+  {
+    "id": "unsupported_scrnaseq_batch_integration_en",
+    "query": "Integrate several scRNA-seq batches, detect doublets, correct donor effects, and automatically annotate cell types.",
     "supported": false,
     "workflow_family": "scrnaseq",
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
-    "notes": "Negative case: scRNA-seq is not represented by the current bulk RNA-seq recipe."
+    "notes": "Negative case: batch integration, doublet detection, and automatic annotation are outside the bounded scRNA-seq recipe."
+  },
+  {
+    "id": "unsupported_scrnaseq_trajectory_velocity_en",
+    "query": "Infer pseudotime trajectories and RNA velocity from spliced and unspliced single-cell RNA-seq counts.",
+    "supported": false,
+    "workflow_family": "scrnaseq",
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: trajectory inference and RNA velocity are outside the bounded scRNA-seq recipe."
   },
   {
     "id": "unsupported_variant_calling_en",
@@ -419,5 +597,19 @@
       "differential_expression": ["deseq2"]
     },
     "notes": "Cross-family confusion case that explicitly distinguishes RNA-seq from ChIP-seq."
+  },
+  {
+    "id": "cross_family_bulk_not_scrnaseq_en",
+    "query": "Compare bulk RNA-seq conditions with Salmon, tximport, and DESeq2 instead of clustering individual cells with Scanpy, Leiden, and UMAP.",
+    "supported": true,
+    "workflow_family": "bulk_rnaseq",
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["salmon", "tximport", "deseq2"],
+    "expected_roles": {
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"]
+    },
+    "notes": "Cross-family confusion case that distinguishes bulk differential expression from single-cell clustering."
   }
 ]

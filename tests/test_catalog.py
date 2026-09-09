@@ -9,7 +9,7 @@ import yaml
 from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ExecutionVerificationSpec, ToolSpec
-from src.recipes import RecipeCatalog, RecipeSpec, load_recipe_catalog
+from src.recipes import load_recipe_catalog
 from src.renderers import render_wdl
 from src.schema import flatten_workflow_calls
 from src.tools.validator import wdl_validator, wdl_validator_available
@@ -155,69 +155,16 @@ def sample_chipseq_peak_calling_plan() -> dict[str, Any]:
     )
 
 
-def scrnaseq_tool_contract_recipe_catalog() -> RecipeCatalog:
-    recipe = RecipeSpec.model_validate(
-        {
-            "id": "scrnaseq_tool_contract_probe",
-            "name": "scRNA-seq tool contract probe",
-            "description": "Test-only recipe used before the formal scRNA-seq recipe is admitted.",
-            "required_inputs": {
-                "matrix_h5": {
-                    "type": "File",
-                    "description": "Filtered 10x feature-barcode HDF5 matrix.",
-                }
-            },
-            "steps": [
-                {
-                    "id": "analyze_cells",
-                    "role": "single_cell_qc_clustering",
-                    "allowed_tools": ["scanpy_qc_clustering"],
-                }
-            ],
-        }
+def sample_scrnaseq_qc_clustering_plan(*, include_metadata: bool = True) -> dict[str, Any]:
+    plan = json.loads(
+        (EXAMPLES_DIR / "scrnaseq_qc_clustering_recipe_plan.json").read_text(
+            encoding="utf-8"
+        )
     )
-    return RecipeCatalog({recipe.id: recipe})
-
-
-def sample_scrnaseq_tool_contract_plan(*, include_metadata: bool = False) -> dict[str, Any]:
-    inputs = {"matrix_h5": "File"}
-    tool_inputs = {"matrix_h5": "matrix_h5"}
-    if include_metadata:
-        inputs["cell_metadata"] = "File"
-        tool_inputs["cell_metadata"] = "cell_metadata"
-
-    return {
-        "workflow": {
-            "name": "ScanpyToolContractProbe",
-            "recipe": "scrnaseq_tool_contract_probe",
-            "inputs": inputs,
-            "tool_calls": [
-                {
-                    "id": "analyze",
-                    "step": "analyze_cells",
-                    "tool": "scanpy_qc_clustering",
-                    "version": "1.12.3",
-                    "inputs": tool_inputs,
-                    "params": {
-                        "sample_id": "pbmc_10x",
-                        "min_genes": 100,
-                        "min_cells": 2,
-                        "max_mito_pct": 15.0,
-                        "n_top_genes": 1000,
-                        "n_pcs": 25,
-                        "n_neighbors": 10,
-                        "leiden_resolution": 0.8,
-                        "random_seed": 7,
-                    },
-                }
-            ],
-            "outputs": {
-                "processed_h5ad": "analyze.processed_h5ad",
-                "marker_genes": "analyze.marker_genes",
-                "umap_plot": "analyze.umap_plot",
-            },
-        }
-    }
+    if not include_metadata:
+        del plan["workflow"]["inputs"]["cell_metadata"]
+        del plan["workflow"]["tool_calls"][0]["inputs"]["cell_metadata"]
+    return plan
 
 
 class CatalogDefinitionTests(unittest.TestCase):
@@ -463,10 +410,10 @@ class CatalogResolutionTests(unittest.TestCase):
 
         self.assertTrue(result["is_valid"], result["message"])
 
-    def test_scrnaseq_tool_contract_resolves_to_valid_renderable_ir(self):
+    def test_scrnaseq_qc_clustering_recipe_resolves_to_valid_renderable_ir(self):
         workflow_ir = resolve_tool_plan(
-            sample_scrnaseq_tool_contract_plan(include_metadata=True),
-            scrnaseq_tool_contract_recipe_catalog(),
+            sample_scrnaseq_qc_clustering_plan(),
+            self.recipe_catalog,
             self.tool_catalog,
         )
         report = analyze_workflow_ir(workflow_ir)
@@ -486,16 +433,19 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn('--matrix-h5 "~{matrix_h5}"', wdl)
         self.assertIn('--cell-metadata "~{cell_metadata}"', wdl)
         self.assertIn('--sample-id "~{sample_id}"', wdl)
-        self.assertIn("min_genes = 100", wdl)
+        self.assertIn("min_genes = 200", wdl)
         self.assertIn("leiden_resolution = 0.8", wdl)
         self.assertIn("File processed_h5ad = analyze.processed_h5ad", wdl)
+        self.assertIn("File cell_qc_table = analyze.cell_qc_table", wdl)
+        self.assertIn("File cluster_assignments = analyze.cluster_assignments", wdl)
         self.assertIn("File marker_genes = analyze.marker_genes", wdl)
         self.assertIn("File umap_plot = analyze.umap_plot", wdl)
+        self.assertIn("File analysis_summary = analyze.analysis_summary", wdl)
 
-    def test_scrnaseq_tool_contract_omits_optional_metadata_argument(self):
+    def test_scrnaseq_qc_clustering_recipe_omits_optional_metadata_argument(self):
         workflow_ir = resolve_tool_plan(
-            sample_scrnaseq_tool_contract_plan(),
-            scrnaseq_tool_contract_recipe_catalog(),
+            sample_scrnaseq_qc_clustering_plan(include_metadata=False),
+            self.recipe_catalog,
             self.tool_catalog,
         )
         report = analyze_workflow_ir(workflow_ir)
@@ -506,10 +456,10 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertNotIn("--cell-metadata", wdl)
 
     @unittest.skipUnless(wdl_validator_available(), "WDL validator is not installed")
-    def test_scrnaseq_tool_contract_wdl_passes_syntax_validation(self):
+    def test_scrnaseq_qc_clustering_wdl_passes_syntax_validation(self):
         workflow_ir = resolve_tool_plan(
-            sample_scrnaseq_tool_contract_plan(),
-            scrnaseq_tool_contract_recipe_catalog(),
+            sample_scrnaseq_qc_clustering_plan(include_metadata=False),
+            self.recipe_catalog,
             self.tool_catalog,
         )
         wdl = render_wdl(workflow_ir)

@@ -1,0 +1,21 @@
+id: scrnaseq_qc_clustering
+name: scRNA-seq QC and clustering
+description: Run bounded single-cell RNA-seq quality control, normalization, dimensionality reduction, clustering, and marker ranking from one filtered 10x matrix.
+aliases:
+  - single-cell RNA-seq analysis
+  - scRNAseq QC and clustering
+  - Scanpy clustering workflow
+  - 10x single-cell matrix analysis
+  - Leiden clustering and UMAP
+  - single-cell marker gene detection
+
+required_inputs:
+  matrix_h5:
+    type: File
+    description: Filtered 10x Genomics feature-barcode HDF5 count matrix for one sample.
+
+steps:
+  - id: analyze_cells
+    role: single_cell_qc_clustering
+    allowed_tools:
+      - scanpy_qc_clustering

@@ -53,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 299 tests
+Ran 308 tests
 OK (skipped=2)
 ```
 
@@ -313,7 +313,7 @@ OK (skipped=2)
 - 可以按 id 找到 `rnaseq_differential_expression`。
 - `sample_ids` required input 类型为 `Array[String]`。
 - 第一个 step 的 allowed tools 为 `["fastp"]`。
-- recipe id 集合包含 `chipseq_peak_calling`。
+- recipe id 集合包含 `chipseq_peak_calling` 和 `scrnaseq_qc_clustering`。
 
 覆盖点：
 
@@ -420,8 +420,8 @@ OK (skipped=2)
 - HTTP status 为 `200`。
 - `catalog_service.list_recipes()` 被调用一次。
 - 响应中至少有一个 recipe。
-- 响应 recipe id 集合同时包含 `rnaseq_differential_expression` 和
-  `chipseq_peak_calling`。
+- 响应 recipe id 集合包含 `rnaseq_differential_expression`、
+  `chipseq_peak_calling` 和 `scrnaseq_qc_clustering`。
 
 覆盖点：
 
@@ -1480,11 +1480,11 @@ OK (skipped=2)
 - command 调用打包的 `run_scanpy_qc_clustering.py` helper。
 - execution verification 为 `unverified` 且 evidence 为空。
 
-覆盖点：PR 4A 只准入完整、可编译的工具契约，不把 helper/container 文件存在误写为
-成功 smoke test，也不提前声明 scRNA-seq recipe 已受支持。
+覆盖点：正式 recipe 加入后，工具的 Catalog admission、compile readiness 和 execution
+verification 仍保持独立；helper/container 文件存在不会被误写为成功 smoke test。
 
-本次 PR 只执行 container build dry-run；runtime tag 是该构建上下文的发布目标，尚未
-记录实际 build、smoke test 或数据执行成功，因此保持 `unverified`。
+runtime tag 是该构建上下文的发布目标，尚未记录实际 build、smoke test 或数据执行
+成功，因此保持 `unverified`。
 
 ### `test_chipseq_peak_calling_recipe_resolves_to_valid_renderable_ir`
 
@@ -1539,7 +1539,7 @@ recipe、example plan 和 Tool Catalog。
 覆盖点：为正式 ChIP-seq recipe 补齐外部 WDL 语法验证，并保持无 validator 环境下的
 纯 Catalog/Analyzer/Renderer 测试继续运行。
 
-本次 Catalog admission 使用 WOMtool 91 实际执行该测试并通过。
+本次 Catalog admission 使用 WOMtool 92 实际执行该测试并通过。
 
 ### `test_macs2_optional_control_is_rendered_when_provided`
 
@@ -1556,42 +1556,44 @@ MACS2 call。
 覆盖点：MACS2 control 输入的 optional schema 和 conditional command template
 保持一致；该底层工具契约测试不扩张正式 recipe 的单 treatment 产品范围。
 
-### `test_scrnaseq_tool_contract_resolves_to_valid_renderable_ir`
+### `test_scrnaseq_qc_clustering_recipe_resolves_to_valid_renderable_ir`
 
 输入：
 
-- 测试内构造的 `scrnaseq_tool_contract_probe` recipe；它不进入正式 Recipe Catalog。
-- 调用 `scanpy_qc_clustering@1.12.3` 的 synthetic Recipe Tool Plan。
+- 正式 `scrnaseq_qc_clustering` recipe。
+- `examples/scrnaseq_qc_clustering_recipe_plan.json` 中调用
+  `scanpy_qc_clustering@1.12.3` 的 Recipe Tool Plan。
 - required 10x HDF5 和 optional cell metadata 输入及一组非默认 QC/clustering 参数。
 
-执行：通过正式 resolver、Analyzer 和 WDL renderer 生成 synthetic contract-probe WDL。
+执行：通过正式 resolver、Analyzer 和 WDL renderer 生成代表性 scRNA-seq WDL。
 
 期望输出：
 
 - Analyzer 返回 `is_valid=True`。
 - task runtime 使用 revisioned Scanpy helper image。
 - optional metadata 保持 `File?` 并正确连接到 call 和 helper argument。
-- 参数、helper command 以及 processed H5AD、marker table 和 UMAP plot 输出均进入 WDL。
+- 参数、helper command 以及 H5AD、cell QC、UMAP coordinates、cluster assignments、
+  marker table、plot、summary 和 log 输出均进入 WDL。
 
-覆盖点：在 PR 4B 正式 recipe 落地前，独立验证新增工具能够通过确定性编译路径，且不
-需要把测试 probe 冒充产品能力。
+覆盖点：正式 scRNA-seq recipe 能通过 Catalog resolver、Analyzer 和确定性 renderer，
+且 optional metadata、参数和完整 workflow outputs 均保持显式可审计。
 
-### `test_scrnaseq_tool_contract_omits_optional_metadata_argument`
+### `test_scrnaseq_qc_clustering_recipe_omits_optional_metadata_argument`
 
-输入：不提供 optional cell metadata 的 synthetic Scanpy contract probe。
+输入：从正式 scRNA-seq example plan 中移除 optional cell metadata。
 
 期望输出：Analyzer 通过，call wiring 和 helper command 都不包含 metadata 参数。
 
 覆盖点：ToolSpec optional input、Jinja command condition 和 resolver 提供状态保持一致。
 
-### `test_scrnaseq_tool_contract_wdl_passes_syntax_validation`
+### `test_scrnaseq_qc_clustering_wdl_passes_syntax_validation`
 
-输入：不提供 optional metadata 的 synthetic Scanpy contract-probe WDL。
+输入：不提供 optional metadata 的正式 scRNA-seq recipe/example plan。
 
 期望输出：统一 WDL validator 返回 `is_valid=True`；本地无 validator 时按现有约定跳过。
 
-覆盖点：新增 tool contract 的 runtime、inputs、command 和 outputs 能组成合法 WDL 1.0
-task，同时不提前加入正式 scRNA-seq recipe。
+覆盖点：正式 scRNA-seq compile path 的 runtime、inputs、command 和 outputs 能组成
+合法 WDL 1.0 task；该语法验证不构成容器执行证据。
 
 ### `test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl`
 
@@ -1947,16 +1949,16 @@ ChIP-seq narrow peak calling query。
 覆盖点：Retriever 可以召回新增 workflow family，同时 retrieval artifact 不会把
 compile-ready 工具误标记成已执行验证。
 
-### `test_retrieves_scrnaseq_tool_without_claiming_recipe_support`
+### `test_retrieves_scrnaseq_recipe_and_compile_ready_tool`
 
 输入：描述 filtered 10x matrix、Scanpy、cell QC、normalization、Leiden、UMAP 和
 marker genes 的 scRNA-seq query。
 
-期望输出：top-8 tools 包含 `scanpy_qc_clustering`，execution verification 为
-`unverified`；recipe 结果中不存在尚未准入的 `scrnaseq_qc_clustering`。
+期望输出：不触发 fallback，首位 recipe 为 `scrnaseq_qc_clustering`；top-8 tools
+包含 `scanpy_qc_clustering`，且 execution verification 仍为 `unverified`。
 
-覆盖点：PR 4A 允许 approved tool metadata 参与检索，但单个 tool direct match 不会被
-解释成完整 workflow family support。
+覆盖点：正式 recipe 加入后，Retriever 能召回 scRNA-seq workflow family，同时不会把
+compile-ready tool 的可检索性误写成执行验证。
 
 ### `test_tokenizer_supports_sequencing_variants_and_cjk_ngrams`
 
@@ -2024,8 +2026,8 @@ marker genes 的 scRNA-seq query。
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
-fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
-与 ChIP-seq 的 cross-family baseline metrics。Fixture 不伪造工具；unsupported
+fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq、ChIP-seq
+与 scRNA-seq 的 cross-family baseline metrics。Fixture 不伪造工具；unsupported
 负例单独统计，不污染 supported recall。
 
 ### `test_loads_current_catalog_query_fixture`
@@ -2040,8 +2042,8 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 
 期望输出：
 
-- fixture 共 31 条 query。
-- 27 条 `supported == True`，4 条 `supported == False`。
+- fixture 共 47 条 query。
+- 42 条 `supported == True`，5 条 `supported == False`。
 - 每条 query 都包含必填 `workflow_family`。
 - 第一条 query id 为 `rnaseq_deg_basic_en`。
 - 第一条 query 的 expected tools 包含 `fastp`。
@@ -2053,11 +2055,17 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - fixture 包含 6 条 supported ChIP-seq query；其 expected recipe 为
   `chipseq_peak_calling`，expected tools 包含 `macs2`。
 - `unsupported_chipseq_peak_annotation_en` 保留为 ChIP-seq family 的负例。
+- fixture 包含 14 条 supported scRNA-seq query；其 expected recipe 为
+  `scrnaseq_qc_clustering`，expected tools 包含 `scanpy_qc_clustering`。
+- `unsupported_scrnaseq_batch_integration_en` 和
+  `unsupported_scrnaseq_trajectory_velocity_en` 保留 scRNA-seq deferred scope 边界。
+- fixture 包含双向 bulk/scRNA confusion queries。
 
 覆盖点：
 
 - R2 query set schema 可被稳定读取。
-- 当前 baseline 明确区分 supported bulk RNA-seq / ChIP-seq 查询和 unsupported 负例。
+- 当前 baseline 明确区分 supported bulk RNA-seq / ChIP-seq / scRNA-seq 查询和
+  unsupported 负例。
 - Fixture 标注明确区分显式 tool intent 和通用 role intent。
 
 ### `test_evaluates_current_catalog_baseline`
@@ -2077,17 +2085,21 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - `strategy == "lexical_v1"`。
 - `top_k_recipes == 3`。
 - `top_k_tools == 8`。
-- `query_count == 31`。
-- `supported_query_count == 27`。
-- `unsupported_query_count == 4`。
+- `query_count == 47`。
+- `supported_query_count == 42`。
+- `unsupported_query_count == 5`。
 - 每个 metric 均为 0 到 1 之间的稳定数值。
+- overall Recipe Recall@1 为 `0.8333`，Tool Recall@5 为 `0.8548`。
 - `planner_context_tool_recall == 1.0`。
 - `planner_context_role_coverage == 1.0`。
+- Unsupported Direct-Match Rate 为 `0.8000`。
 - `family_metrics` 包含 `bulk_rnaseq`、`chipseq`、`scrnaseq`、
   `variant_calling` 和 `metagenomics`。
-- bulk RNA-seq family 共 21 条 query；ChIP-seq family 共 7 条，其中 6 条 supported。
-- bulk RNA-seq Tool Recall@5 为 `0.7913`。
-- macro Recipe Recall@1 为 `0.9048`，macro Tool Recall@5 为 `0.7804`。
+- bulk RNA-seq family 共 22 条 query；ChIP-seq family 共 7 条，其中 6 条 supported。
+- scRNA-seq family 共 16 条 query，其中 14 条 supported；Recipe Recall@1 为
+  `0.9286`，Tool Recall@5 为 `1.0000`。
+- bulk RNA-seq Tool Recall@5 为 `0.7856`。
+- macro Recipe Recall@1 为 `0.8853`，macro Tool Recall@5 为 `0.8517`。
 - `macro_family_metrics` 中每个值都在 0 到 1 之间。
 
 覆盖点：
@@ -2095,9 +2107,9 @@ fixture，调用当前 Approved Catalog Retriever，并计算 expanded RNA-seq
 - 当前 Catalog 可以生成可重复 retrieval baseline。
 - Baseline artifact 包含 per-query retrieval、miss、fallback 与 aggregate metrics。
 - Family-level 和 macro metrics 可以区分 overall 分数、样本量较大的 bulk RNA-seq
-  family 与新增 ChIP-seq family。
-- 13-tool PR 4A checkpoint 保持 Planner context 完整，同时明确暴露 Scanpy
-  single-cell/bulk 近邻词汇带来的 raw top-K crowding。
+  family 与 ChIP-seq、scRNA-seq family。
+- 13-tool PR 4B baseline 保持 Planner context 完整，同时明确暴露双向
+  single-cell/bulk confusion queries 的首位排序问题。
 
 ### `test_macro_family_metrics_use_unrounded_family_values`
 
@@ -2408,6 +2420,20 @@ artifact 边界统一舍入四位。
 
 覆盖点：Catalog service 可以公开 PR 4A 的完整工具契约，同时继续区分 Catalog
 admission、compile readiness 和 execution evidence。
+
+### `test_get_scrnaseq_recipe_returns_bounded_single_step`
+
+输入：recipe id `scrnaseq_qc_clustering`。
+
+期望输出：
+
+- recipe name 为 `scRNA-seq QC and clustering`。
+- `matrix_h5` required input type 为 `File`。
+- 唯一步骤为 `analyze_cells`，role 为 `single_cell_qc_clustering`。
+- 该步骤只允许 `scanpy_qc_clustering`。
+
+覆盖点：正式 scRNA-seq recipe 可通过 Catalog service/API surface 查询，同时保持
+单个 bounded wrapper 与完整 workflow family contract 的边界。
 
 ### `test_unknown_recipe_and_tool_raise_key_error`
 
