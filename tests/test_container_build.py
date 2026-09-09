@@ -9,6 +9,9 @@ from scripts.build_container import (
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 class ContainerBuildScriptTests(unittest.TestCase):
     def test_select_spec_uses_image_revision_in_tag(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -54,6 +57,16 @@ class ContainerBuildScriptTests(unittest.TestCase):
             ignored_dir.mkdir(parents=True)
 
             self.assertEqual(discover_specs(containers_root), [])
+
+    def test_scanpy_wrapper_container_contract_is_discoverable(self):
+        specs = discover_specs(REPO_ROOT / "containers")
+        spec = next(spec for spec in specs if spec.tool == "scanpy_qc_clustering")
+
+        self.assertEqual(spec.version, "1.12.3")
+        self.assertEqual(spec.image_revision, "r1")
+        self.assertEqual(spec.image_tag, "1.12.3-r1")
+        self.assertTrue((spec.context_dir / "run_scanpy_qc_clustering.py").is_file())
+        self.assertTrue(spec.smoke_test.is_file())
 
 
 def make_container_dir(

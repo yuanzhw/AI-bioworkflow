@@ -43,7 +43,7 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
   - `rnaseq_differential_expression`
   - `rnaseq_reference_preparation`
   - `chipseq_peak_calling`
-- 12 个 tool：
+- 13 个 tool：
   - `fastp`
   - `salmon`
   - `salmon_index`
@@ -56,6 +56,7 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
   - `bowtie2`
   - `samtools`
   - `macs2`
+  - `scanpy_qc_clustering`
 - 31 条带 `workflow_family` 标签的 retrieval query：
   - 21 条 supported bulk RNA-seq query。
   - 6 条 supported ChIP-seq query。
@@ -69,19 +70,23 @@ multiqc` 生成 sorted/indexed BAM、narrowPeak、summits 和 QC report。该 re
 control branch、peak annotation 或 motif analysis。`bowtie2`、`samtools` 和 `macs2`
 仍为 `unverified`，因此 compile-ready 不代表 workflow 已通过真实数据执行验证。
 
+PR 4A 已加入 `scanpy_qc_clustering@1.12.3` 的完整 ToolSpec、项目维护 helper 和
+container build contract。它保持 `unverified`，且在正式
+`scrnaseq_qc_clustering` recipe 加入前不把 scRNA-seq family 标记为 supported。
+
 当前 31-query `lexical_v1` baseline 为：Recipe Recall@1 `0.8519`、Recipe
-Recall@3 `1.0000`、Recipe MRR `0.9259`；Tool Recall@3 `0.7136`、Tool Recall@5
-`0.8321`、Tool Recall@8 `0.9185`、Tool MRR `0.9506`、Raw Role Coverage
-`0.9210`。Planner Context Tool Recall 和 Planner Context Role Coverage 均为
+Recall@3 `1.0000`、Recipe MRR `0.9259`；Tool Recall@3 `0.6636`、Tool Recall@5
+`0.7864`、Tool Recall@8 `0.8864`、Tool MRR `0.7954`、Raw Role Coverage
+`0.8889`。Planner Context Tool Recall 和 Planner Context Role Coverage 均为
 `1.0000`。Supported Fallback Rate 为 `0.0000`，Unsupported Direct-Match Rate 为
 `0.7500`。
 
 Family-level 结果显示：ChIP-seq Recipe Recall@1 为 `1.0000`，bulk RNA-seq 为
 `0.8095`；两个 supported family 的 macro Recipe Recall@1 为 `0.9048`，macro Tool
-Recall@3/5 分别为 `0.7097` / `0.8484`。这说明正式 recipe expansion 已能补齐 Planner
-context，但 lexical top-K 仍存在 crowding；同时 direct-match 风险进一步确认 Retriever
-不是 unsupported intent detector。当前只有两个 supported family，仍不足以据此启动
-R3 vector / hybrid backend。
+Recall@3/5 分别为 `0.6538` / `0.7804`。Scanpy 工具进入 Catalog 后，bulk RNA-seq
+Tool Recall@5 从 `0.8190` 降至 `0.7913`，显示相邻 single-cell/bulk 词汇造成了新的
+top-K crowding；Planner context 仍能通过已召回 recipe 的 allowed tools 补齐所需
+角色。当前只有两个 supported family，仍不足以据此启动 R3 vector / hybrid backend。
 
 ## Goals
 
@@ -280,7 +285,7 @@ case/control ChIP-seq 设计。
 
 ### MVP Scope
 
-建议新增 recipe：
+PR 4B 建议新增 recipe：
 
 ```text
 scrnaseq_qc_clustering
@@ -299,8 +304,8 @@ scrnaseq_qc_clustering
   -> marker table
 ```
 
-为控制 Tool Catalog 数量，第一版可以使用一个边界明确的
-`scanpy_qc_clustering` compile-ready tool，而不是立即拆成多个只调用一次的
+为控制 Tool Catalog 数量，PR 4A 已加入一个边界明确的
+`scanpy_qc_clustering@1.12.3` compile-ready tool，而没有拆成多个只调用一次的
 Scanpy wrapper。后续如果需要展示 step-level alternatives，再拆分为独立工具。
 
 ### Inputs And Outputs
@@ -332,8 +337,12 @@ Scanpy wrapper。后续如果需要展示 step-level alternatives，再拆分为
 - automatic cell type annotation。
 - trajectory、RNA velocity、多组学和空间转录组。
 
-如果 `scanpy_qc_clustering` 使用项目维护脚本，则必须满足 wrapper/container
-规则；否则第一步只建立 retrieval-only metadata 和 query fixture。
+`scanpy_qc_clustering` 使用项目维护脚本，PR 4A 已同步加入 Dockerfile、打包 helper、
+镜像 revision 和 `smoke_test.sh`。smoke test 尚无成功执行记录，因此
+`execution_verification` 保持 `unverified`；脚本存在本身不构成执行证据。
+Catalog runtime tag 是该版本构建上下文的确定性发布目标，PR 4A 不声明它已经发布；
+在任何 opt-in execution 前必须先构建、运行 smoke test、发布，并将成功记录作为后续
+verification evidence。
 
 ### Retrieval Coverage
 
@@ -547,11 +556,20 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - 当前 baseline 覆盖 31 条 query、两个 supported workflow family；Planner Context
   Tool Recall 和 Role Coverage 均为 `1.0000`。
 
-### PR 4: scRNA-seq Catalog And Recipe
+### PR 4A: scRNA-seq Tool Contract（已实现）
+
+- 加入 `scanpy_qc_clustering@1.12.3` 的完整 ToolSpec。
+- 加入项目维护 helper、Dockerfile、image revision 和 smoke test contract。
+- 增加 Catalog、synthetic resolver/renderer、service、retriever 和 container discovery
+  测试。
+- 保持 execution verification 为 `unverified`，不提前加入正式 recipe 或转正 query。
+
+### PR 4B: scRNA-seq Recipe And Retrieval Baseline
 
 - 加入 `scrnaseq_qc_clustering`。
-- 根据 wrapper readiness 选择 retrieval-only 或 compile-ready 路径。
+- 加入结构化 example plan，并验证代表性 WDL。
 - 增加 bulk/scRNA confusion cases。
+- 将现有 scRNA-seq negative query 转为 supported，并记录新的 family baseline。
 
 ### PR 5: Variant Calling Catalog And Recipe
 
@@ -622,13 +640,12 @@ recipe resolution、Workflow IR 或 WDL 输出时，还应：
 
 ## Immediate Next Step
 
-Tool Capability And Verification Contract、简化版 ChIP-seq Tool Catalog、正式
-`chipseq_peak_calling` recipe 和首次跨 family lexical baseline 已落地。下一项工作
-是 PR 4：设计并实现 `scrnaseq_qc_clustering` 的最小科学范围、工具契约与
-bulk/scRNA confusion query。
+Tool Capability And Verification Contract、简化版 ChIP-seq Catalog/recipe、首次
+跨 family lexical baseline，以及 PR 4A 的 `scanpy_qc_clustering` tool/container
+contract 已落地。下一项工作是 PR 4B：加入正式 `scrnaseq_qc_clustering` recipe、
+结构化 example plan、代表性 WDL validation 与 bulk/scRNA confusion queries。
 
-scRNA-seq 应沿用 compile-ready / execution-verification 分离策略。若项目维护 wrapper
-尚不具备完整 command、runtime、Dockerfile 和 smoke test 契约，应先明确选择
-retrieval-only fixture 或补齐 wrapper admission，不得把不可编译的占位工具写入正式
-Catalog。scRNA-seq family baseline 合并后，再推进 germline variant calling；完成四个
-family 后再作 R3 lexical / vector / hybrid 决策。
+PR 4B 应沿用 compile-ready / execution-verification 分离策略，不改变
+`scanpy_qc_clustering` 的 `unverified` 状态，也不得把工具可检索或 WDL 可编译表述为
+真实执行。scRNA-seq family baseline 合并后，再推进 germline variant calling；完成
+四个 family 后再作 R3 lexical / vector / hybrid 决策。

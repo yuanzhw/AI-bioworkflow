@@ -18,6 +18,7 @@ on:
           - deseq2
           - tximport
           - multiqc
+          - scanpy_qc_clustering
       version:
         description: "Tool software version. The image revision is read from containers/<tool>/<version>/image_revision.txt."
         required: false

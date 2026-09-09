@@ -149,10 +149,10 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 6)
         self.assertEqual(
             result["family_metrics"]["bulk_rnaseq"]["metrics"]["tool_recall_at_5"],
-            0.819,
+            0.7913,
         )
         self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.9048)
-        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.8484)
+        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.7804)
         for metric in result["macro_family_metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)

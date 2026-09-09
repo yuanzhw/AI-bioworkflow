@@ -82,6 +82,22 @@ class CatalogServiceTests(unittest.TestCase):
             {"status": "unverified", "evidence": []},
         )
 
+    def test_get_scrnaseq_tool_exposes_compile_ready_wrapper_contract(self):
+        tool = get_tool("scanpy_qc_clustering")
+
+        self.assertEqual(tool["version"], "1.12.3")
+        self.assertEqual(tool["trust_status"], "catalog-approved")
+        self.assertEqual(
+            tool["runtime"]["docker"],
+            "ghcr.io/yuanzhw/ai-bioworkflow/scanpy_qc_clustering:1.12.3-r1",
+        )
+        self.assertFalse(tool["inputs"]["cell_metadata"]["required"])
+        self.assertIn("marker_genes", tool["outputs"])
+        self.assertEqual(
+            tool["execution_verification"],
+            {"status": "unverified", "evidence": []},
+        )
+
     def test_unknown_recipe_and_tool_raise_key_error(self):
         with self.assertRaisesRegex(KeyError, "unknown recipe"):
             get_recipe("missing_recipe")

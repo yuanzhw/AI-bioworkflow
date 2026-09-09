@@ -1,0 +1,138 @@
+id: scanpy_qc_clustering
+version: "1.12.3"
+aliases:
+  - Scanpy single-cell workflow
+  - scRNA-seq QC and clustering
+  - single-cell RNA sequencing clustering
+  - 10x feature-barcode matrix analysis
+  - UMI normalization and highly variable genes
+  - Leiden clustering and UMAP
+  - single-cell marker genes
+description: Run a bounded Scanpy workflow for cell and gene QC, normalization, feature selection, PCA, neighbor graph construction, Leiden clustering, UMAP, and marker ranking from a filtered 10x feature-barcode HDF5 matrix.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  matrix_h5:
+    type: File
+    required: true
+    description: Filtered 10x Genomics feature-barcode HDF5 count matrix for one sample.
+  cell_metadata:
+    type: File
+    required: false
+    description: Optional CSV or TSV table keyed by a unique barcode column; matching rows are joined to cell annotations.
+
+params:
+  sample_id:
+    type: String
+    default: sample
+    description: Sample label recorded in cell-level outputs and the processed AnnData object.
+  min_genes:
+    type: Int
+    default: 200
+    min: 0
+    description: Minimum number of detected genes required to retain a cell.
+  min_cells:
+    type: Int
+    default: 3
+    min: 1
+    description: Minimum number of retained cells in which a gene must be detected.
+  max_mito_pct:
+    type: Float
+    default: 20.0
+    min: 0.0
+    max: 100.0
+    description: Maximum mitochondrial-count percentage allowed for a retained cell.
+  target_sum:
+    type: Float
+    default: 10000.0
+    min: 1.0
+    description: Library-size target used by total-count normalization before log transformation.
+  n_top_genes:
+    type: Int
+    default: 2000
+    min: 2
+    description: Requested number of highly variable genes used for PCA.
+  n_pcs:
+    type: Int
+    default: 40
+    min: 2
+    description: Requested number of principal components, bounded at runtime by the filtered matrix dimensions.
+  n_neighbors:
+    type: Int
+    default: 15
+    min: 2
+    description: Requested neighbor count, bounded at runtime by the number of retained cells.
+  leiden_resolution:
+    type: Float
+    default: 1.0
+    min: 0.0
+    description: Resolution parameter for Leiden community detection.
+  random_seed:
+    type: Int
+    default: 0
+    min: 0
+    description: Random seed used by PCA, Leiden clustering, and UMAP.
+
+outputs:
+  processed_h5ad:
+    type: File
+    value: '"scrnaseq_processed.h5ad"'
+    description: QC-filtered, highly-variable-gene AnnData object containing scaled data, normalized raw data, count provenance, embeddings, and clusters.
+  cell_qc_table:
+    type: File
+    value: '"cell_qc.tsv"'
+    description: Per-barcode count, detected-gene, mitochondrial-percentage, and QC-pass table.
+  umap_coordinates:
+    type: File
+    value: '"umap_coordinates.tsv"'
+    description: Per-cell two-dimensional UMAP coordinates with sample and cluster labels.
+  cluster_assignments:
+    type: File
+    value: '"cluster_assignments.tsv"'
+    description: Per-cell Leiden cluster assignments.
+  marker_genes:
+    type: File
+    value: '"marker_genes.tsv"'
+    description: Wilcoxon-ranked marker genes for each Leiden cluster; empty when only one cluster is found.
+  umap_plot:
+    type: File
+    value: '"umap_clusters.png"'
+    description: PNG visualization of the UMAP embedding colored by Leiden cluster.
+  analysis_summary:
+    type: File
+    value: '"analysis_summary.json"'
+    description: Machine-readable input, filtering, parameter, and cluster-count summary.
+  analysis_log:
+    type: File
+    value: '"scanpy_qc_clustering.log"'
+    description: Scanpy wrapper diagnostics captured from standard output and standard error.
+
+command_template: |
+  run_scanpy_qc_clustering.py
+  --matrix-h5 "~{matrix_h5}"
+  {% if cell_metadata %}--cell-metadata "~{cell_metadata}"{% endif %}
+  --sample-id "~{sample_id}"
+  --min-genes ~{min_genes}
+  --min-cells ~{min_cells}
+  --max-mito-pct ~{max_mito_pct}
+  --target-sum ~{target_sum}
+  --n-top-genes ~{n_top_genes}
+  --n-pcs ~{n_pcs}
+  --n-neighbors ~{n_neighbors}
+  --leiden-resolution ~{leiden_resolution}
+  --random-seed ~{random_seed}
+  --processed-h5ad scrnaseq_processed.h5ad
+  --cell-qc-table cell_qc.tsv
+  --umap-coordinates umap_coordinates.tsv
+  --cluster-assignments cluster_assignments.tsv
+  --marker-genes marker_genes.tsv
+  --umap-plot umap_clusters.png
+  --analysis-summary analysis_summary.json
+  > scanpy_qc_clustering.log 2>&1
+
+runtime:
+  docker: ghcr.io/yuanzhw/ai-bioworkflow/scanpy_qc_clustering:1.12.3-r1
+  cpu: 4
+  memory: 16G

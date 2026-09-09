@@ -156,6 +156,20 @@ tool 数量从 9 增加到 12，但 recipe 仍只有两个 RNA-seq workflow。�
   metrics。
 - `top_k_tools` 必须至少为 5，确保 Tool Recall@3/@5 有完整候选深度。
 
+### R2e scRNA-seq Tool Contract Intermediate Checkpoint
+
+PR 4A 在正式 Catalog 中加入 `scanpy_qc_clustering@1.12.3` 后，tool 数量从 12
+增加到 13，但 supported recipe 仍只覆盖 bulk RNA-seq 和 ChIP-seq：
+
+- `unsupported_scrnaseq_clustering_en` 继续保持 unsupported；单个 approved tool
+  命中不等于完整 workflow capability 已受支持。
+- query fixture 暂不扩张，以单独观察近邻 single-cell/bulk metadata 对现有 top-K
+  排序的影响。
+- 新工具的完整 ToolSpec、项目维护 wrapper 和 container build contract 已就绪，
+  execution verification 仍为 `unverified`。
+- PR 4B 再加入正式 recipe、转正 scRNA-seq query、增加 confusion cases，并建立
+  family-complete baseline。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -271,6 +285,26 @@ R2d ChIP-seq recipe 与 31-query cross-family baseline：
 | Fallback Rate | 0.0323 | 0.0000 | 0.0000 | - |
 | Unsupported Direct-Match Rate | 0.7500 | 0.0000 | 1.0000 | - |
 
+R2e scRNA-seq tool contract 的 13-tool 中间 checkpoint：
+
+| Metric | Overall | bulk_rnaseq | chipseq | Macro supported-family |
+| --- | ---: | ---: | ---: | ---: |
+| Query count | 31 | 21 | 7 | - |
+| Supported queries | 27 | 21 | 6 | 2 families |
+| Unsupported queries | 4 | 0 | 1 | - |
+| Recipe Recall@1 | 0.8519 | 0.8095 | 1.0000 | 0.9048 |
+| Recipe Recall@3 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Recipe MRR | 0.9259 | 0.9048 | 1.0000 | 0.9524 |
+| Tool Recall@3 | 0.6636 | 0.6714 | 0.6361 | 0.6538 |
+| Tool Recall@5 | 0.7864 | 0.7913 | 0.7694 | 0.7804 |
+| Tool Recall@8 | 0.8864 | 0.8540 | 1.0000 | 0.9270 |
+| Tool MRR | 0.7954 | 0.7370 | 1.0000 | 0.8685 |
+| Role Coverage | 0.8889 | 0.8571 | 1.0000 | 0.9286 |
+| Planner Context Tool Recall | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Planner Context Role Coverage | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Fallback Rate | 0.0323 | 0.0000 | 0.0000 | - |
+| Unsupported Direct-Match Rate | 0.7500 | 0.0000 | 1.0000 | - |
+
 已知 baseline 观察：
 
 - 9-tool checkpoint 中，`rnaseq_deg_no_tool_names_en` 和
@@ -288,6 +322,12 @@ R2d ChIP-seq recipe 与 31-query cross-family baseline：
   共享 QC、paired-end 和 reporting 词汇仍会造成首位排序 crowding。
 - R2d 的 macro Recipe Recall@1 为 `0.9048`，但当前只有两个 supported family，
   尚不足以决定引入 vector / hybrid backend。
+- R2e 加入 Scanpy tool 后，overall Tool Recall@5 从 `0.8321` 降至 `0.7864`，
+  macro Tool Recall@5 从 `0.8484` 降至 `0.7804`；这是真实的近邻词汇 crowding
+  信号，不应通过删除有意义的 single-cell metadata 来掩盖。
+- R2e 的 Planner Context Tool Recall 和 Role Coverage 仍为 `1.0000`，说明正式
+  recipe 的 allowed tools 继续为已支持 family 提供完整候选上下文。PR 4B 需要验证
+  scRNA-seq recipe 加入后能否对 single-cell query 产生同样的补齐效果。
 - `unsupported_chipseq_peak_annotation_en`、`unsupported_scrnaseq_clustering_en`
   和 `unsupported_variant_calling_en` 产生 direct lexical match，说明当前
   lexical fallback 不是 unsupported intent detector；负例评估只用于暴露风险，
