@@ -39,10 +39,11 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
 
 当前 approved Catalog 包含：
 
-- 3 个 recipe，覆盖 bulk RNA-seq 和 ChIP-seq 两个 family：
+- 4 个 recipe，覆盖 bulk RNA-seq、ChIP-seq 和 scRNA-seq 三个 family：
   - `rnaseq_differential_expression`
   - `rnaseq_reference_preparation`
   - `chipseq_peak_calling`
+  - `scrnaseq_qc_clustering`
 - 13 个 tool：
   - `fastp`
   - `salmon`
@@ -57,36 +58,39 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
   - `samtools`
   - `macs2`
   - `scanpy_qc_clustering`
-- 31 条带 `workflow_family` 标签的 retrieval query：
-  - 21 条 supported bulk RNA-seq query。
+- 47 条带 `workflow_family` 标签的 retrieval query：
+  - 22 条 supported bulk RNA-seq query。
   - 6 条 supported ChIP-seq query。
-  - 4 条 unsupported negative query，覆盖 ChIP-seq peak annotation、scRNA-seq、
-    variant calling 和 metagenomics。
+  - 14 条 supported scRNA-seq query。
+  - 5 条 unsupported negative query，覆盖 ChIP-seq peak annotation、scRNA-seq
+    deferred scope、variant calling 和 metagenomics。
 
 `chipseq_peak_calling` 已达到 compile-ready：正式 example plan 可以经 Resolver、
-Analyzer 和 Renderer 生成 WDL，并已通过 WOMtool 91 syntax validation。其第一版范围
+Analyzer 和 Renderer 生成 WDL，并已通过 WOMtool 92 syntax validation。其第一版范围
 是单个 paired-end treatment sample，经 `fastp -> bowtie2 -> samtools -> macs2 ->
 multiqc` 生成 sorted/indexed BAM、narrowPeak、summits 和 QC report。该 recipe 不包含
 control branch、peak annotation 或 motif analysis。`bowtie2`、`samtools` 和 `macs2`
 仍为 `unverified`，因此 compile-ready 不代表 workflow 已通过真实数据执行验证。
 
 PR 4A 已加入 `scanpy_qc_clustering@1.12.3` 的完整 ToolSpec、项目维护 helper 和
-container build contract。它保持 `unverified`，且在正式
-`scrnaseq_qc_clustering` recipe 加入前不把 scRNA-seq family 标记为 supported。
+container build contract；PR 4B 已加入正式 `scrnaseq_qc_clustering` recipe、结构化
+example plan 和 family-labeled retrieval cases。代表性 WDL 已通过 WOMtool 92 syntax
+validation。工具仍保持 `unverified`，compile-ready 不表示镜像已发布或完成真实执行。
 
-当前 31-query `lexical_v1` baseline 为：Recipe Recall@1 `0.8519`、Recipe
-Recall@3 `1.0000`、Recipe MRR `0.9259`；Tool Recall@3 `0.6636`、Tool Recall@5
-`0.7864`、Tool Recall@8 `0.8864`、Tool MRR `0.7954`、Raw Role Coverage
-`0.8889`。Planner Context Tool Recall 和 Planner Context Role Coverage 均为
+当前 47-query `lexical_v1` baseline 为：Recipe Recall@1 `0.8333`、Recipe
+Recall@3 `1.0000`、Recipe MRR `0.9048`；Tool Recall@3 `0.7679`、Tool Recall@5
+`0.8548`、Tool Recall@8 `0.9270`、Tool MRR `0.8526`、Raw Role Coverage
+`0.9286`。Planner Context Tool Recall 和 Planner Context Role Coverage 均为
 `1.0000`。Supported Fallback Rate 为 `0.0000`，Unsupported Direct-Match Rate 为
-`0.7500`。
+`0.8000`。
 
-Family-level 结果显示：ChIP-seq Recipe Recall@1 为 `1.0000`，bulk RNA-seq 为
-`0.8095`；两个 supported family 的 macro Recipe Recall@1 为 `0.9048`，macro Tool
-Recall@3/5 分别为 `0.6538` / `0.7804`。Scanpy 工具进入 Catalog 后，bulk RNA-seq
-Tool Recall@5 从 `0.8190` 降至 `0.7913`，显示相邻 single-cell/bulk 词汇造成了新的
-top-K crowding；Planner context 仍能通过已召回 recipe 的 allowed tools 补齐所需
-角色。当前只有两个 supported family，仍不足以据此启动 R3 vector / hybrid backend。
+Family-level 结果显示：ChIP-seq、scRNA-seq 和 bulk RNA-seq Recipe Recall@1 分别为
+`1.0000`、`0.9286` 和 `0.7273`；三个 supported family 的 macro Recipe Recall@1 为
+`0.8853`，macro Tool Recall@3/5 分别为 `0.7641` / `0.8517`。两条双向 bulk/scRNA
+confusion query 都将否定侧 workflow 排在目标 recipe 前，形成了明确的 lexical
+ranking miss；目标 recipe 仍在 top-3，且 Planner context 能通过 recipe allowed tools
+补齐所需角色。当前仍缺少 variant calling family，因此暂不启动 R3 vector / hybrid
+backend。
 
 ## Goals
 
@@ -285,7 +289,7 @@ case/control ChIP-seq 设计。
 
 ### MVP Scope
 
-PR 4B 建议新增 recipe：
+PR 4B 已新增 recipe：
 
 ```text
 scrnaseq_qc_clustering
@@ -355,7 +359,10 @@ scRNA-seq query 应重点测试与 bulk RNA-seq 的近邻消歧：
 - 10x matrix。
 - bulk DEG 与 single-cell marker detection 的模糊表达。
 
-当前 scRNA-seq unsupported negative query 在该 family 落地后转为 supported。
+原 `unsupported_scrnaseq_clustering_en` 已转为
+`scrnaseq_qc_clustering_basic_en` supported query。Batch integration、doublet
+detection、automatic annotation、trajectory 和 RNA velocity 继续作为明确的
+unsupported 边界。
 
 ## Family 3: Germline Short Variant Calling
 
@@ -442,8 +449,8 @@ Query fixture 从最初的 24 条单 family baseline 分阶段扩展：
 | Milestone | Supported queries | Unsupported queries | Focus |
 | --- | ---: | ---: | --- |
 | Current R2 | 20 | 4 | RNA-seq baseline |
-| After ChIP-seq (current) | 27 | 4 | First cross-family ranking |
-| After scRNA-seq | 42-52 | 5-7 | Bulk/single-cell disambiguation |
+| After ChIP-seq | 27 | 4 | First cross-family ranking |
+| After scRNA-seq (current) | 42 | 5 | Bulk/single-cell disambiguation |
 | After variant calling | 55-70 | 6-10 | Multi-family retrieval |
 
 新增 query 应包含：
@@ -541,13 +548,13 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - 已加入 `bowtie2`、`samtools` 和 `macs2`。
 - 复用 `fastp`、`multiqc`。
 - 已添加 schema/load/rendering tests。
-- 测试 recipe 生成的代表性 WDL 已通过 WOMtool 91 syntax validation。
+- 测试 recipe 生成的代表性 WDL 已通过 WOMtool 92 syntax validation。
 - 三个工具均按真实 evidence 标记为 `unverified`。
 
 ### PR 3: ChIP-seq Recipe And Retrieval Baseline（已实现）
 
 - 已加入正式 `chipseq_peak_calling` 和结构化 example plan。
-- 代表性 WDL 已通过 WOMtool 91 syntax validation。
+- 代表性 WDL 已通过 WOMtool 92 syntax validation。
 - 已加入 6 条 supported ChIP-seq query，并将旧负例收窄为仍不支持的 peak
   annotation / motif analysis。
 - Query schema 已增加 `workflow_family`；evaluation 已增加 Recipe Recall@1、Tool
@@ -564,12 +571,15 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
   测试。
 - 保持 execution verification 为 `unverified`，不提前加入正式 recipe 或转正 query。
 
-### PR 4B: scRNA-seq Recipe And Retrieval Baseline
+### PR 4B: scRNA-seq Recipe And Retrieval Baseline（已实现）
 
-- 加入 `scrnaseq_qc_clustering`。
-- 加入结构化 example plan，并验证代表性 WDL。
-- 增加 bulk/scRNA confusion cases。
-- 将现有 scRNA-seq negative query 转为 supported，并记录新的 family baseline。
+- 已加入 `scrnaseq_qc_clustering`。
+- 已加入结构化 example plan，并通过 WOMtool 92 验证代表性 WDL。
+- 已增加双向 bulk/scRNA confusion cases。
+- 已将原 scRNA-seq clustering negative query 转为 supported；batch integration、
+  automatic annotation、trajectory 和 RNA velocity 保留为 unsupported 边界。
+- 当前 baseline 覆盖 47 条 query、三个 supported workflow family；Planner Context
+  Tool Recall 和 Role Coverage 均为 `1.0000`。
 
 ### PR 5: Variant Calling Catalog And Recipe
 
@@ -641,11 +651,10 @@ recipe resolution、Workflow IR 或 WDL 输出时，还应：
 ## Immediate Next Step
 
 Tool Capability And Verification Contract、简化版 ChIP-seq Catalog/recipe、首次
-跨 family lexical baseline，以及 PR 4A 的 `scanpy_qc_clustering` tool/container
-contract 已落地。下一项工作是 PR 4B：加入正式 `scrnaseq_qc_clustering` recipe、
-结构化 example plan、代表性 WDL validation 与 bulk/scRNA confusion queries。
+跨 family lexical baseline，以及 scRNA-seq tool contract、正式 recipe 和 47-query
+baseline 已落地。下一项工作是 PR 5：加入 `bwa_mem2`、`bcftools` 和
+`germline_short_variant_calling`，并增加 FASTQ/BAM/VCF retrieval cases。
 
-PR 4B 应沿用 compile-ready / execution-verification 分离策略，不改变
-`scanpy_qc_clustering` 的 `unverified` 状态，也不得把工具可检索或 WDL 可编译表述为
-真实执行。scRNA-seq family baseline 合并后，再推进 germline variant calling；完成
-四个 family 后再作 R3 lexical / vector / hybrid 决策。
+PR 5 应沿用 compile-ready / execution-verification 分离策略。Variant calling family
+baseline 合并后，再推进 PR 6 的 four-family 汇总、confusion analysis 与 R3 lexical /
+vector / hybrid 决策。

@@ -77,13 +77,14 @@ Planner prompt，也不替代 `expected_recipe`。
 
 - 英文和中文 bulk RNA-seq DEG / reference preparation 请求。
 - 英文和中文 ChIP-seq peak calling 请求。
-- 缩写表达，例如 DEG、RNAseq、bulk RNA。
+- 英文和中文 scRNA-seq QC / clustering / marker ranking 请求。
+- 缩写表达，例如 DEG、RNAseq、bulk RNA、scRNAseq、UMI 和 HVG。
 - 明确工具名请求，例如 use Salmon and DESeq2。
 - 只描述分析目标但不说工具名。
 - RNA-seq reference preparation，例如 Salmon index 和 GTF -> tx2gene。
 - edgeR 和 limma-voom 等 differential expression 替代后端。
-- Catalog 暂不支持的负例，例如 ChIP-seq peak annotation、scRNA-seq、variant
-  calling 和 metagenomics。
+- Catalog 暂不支持的负例，例如 ChIP-seq peak annotation、scRNA-seq batch
+  integration / trajectory、variant calling 和 metagenomics。
 - 模糊需求，例如 quality report、quantification、gene-level counts。
 - 参数相关请求，例如 paired-end reads、contrast、threads。
 
@@ -169,6 +170,20 @@ PR 4A 在正式 Catalog 中加入 `scanpy_qc_clustering@1.12.3` 后，tool 数�
   execution verification 仍为 `unverified`。
 - PR 4B 再加入正式 recipe、转正 scRNA-seq query、增加 confusion cases，并建立
   family-complete baseline。
+
+### R2f scRNA-seq Recipe And Cross-Family Baseline
+
+正式 Catalog 增加 `scrnaseq_qc_clustering` 后，query set 扩展到 47 条：
+
+- 22 条 supported `bulk_rnaseq` query，其中新增一条 bulk / scRNA-seq
+  cross-family confusion case。
+- 14 条 supported `scrnaseq` query，覆盖显式 Scanpy、隐式目标、中英文、缩写、
+  inputs、outputs、QC、normalization、clustering、marker ranking 和参数表达。
+- 原 scRNA-seq family negative query 转为 supported；batch integration / automatic
+  annotation 与 trajectory / RNA velocity 保留为两条 unsupported 边界。
+- Tool Catalog 仍为 13 个 tool；新增的是正式 recipe 和 evaluation coverage。
+- `scanpy_qc_clustering` 仍为 `unverified`，compile-ready 和 retrieval support 不构成
+  镜像 build、smoke test 或真实数据执行证据。
 
 ## Metrics
 
@@ -305,6 +320,26 @@ R2e scRNA-seq tool contract 的 13-tool 中间 checkpoint：
 | Fallback Rate | 0.0323 | 0.0000 | 0.0000 | - |
 | Unsupported Direct-Match Rate | 0.7500 | 0.0000 | 1.0000 | - |
 
+R2f scRNA-seq recipe 与 47-query cross-family baseline：
+
+| Metric | Overall | bulk_rnaseq | chipseq | scrnaseq | Macro supported-family |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Query count | 47 | 22 | 7 | 16 | - |
+| Supported queries | 42 | 22 | 6 | 14 | 3 families |
+| Unsupported queries | 5 | 0 | 1 | 2 | - |
+| Recipe Recall@1 | 0.8333 | 0.7273 | 1.0000 | 0.9286 | 0.8853 |
+| Recipe Recall@3 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Recipe MRR | 0.9048 | 0.8409 | 1.0000 | 0.9643 | 0.9351 |
+| Tool Recall@3 | 0.7679 | 0.6561 | 0.6361 | 1.0000 | 0.7641 |
+| Tool Recall@5 | 0.8548 | 0.7856 | 0.7694 | 1.0000 | 0.8517 |
+| Tool Recall@8 | 0.9270 | 0.8606 | 1.0000 | 1.0000 | 0.9535 |
+| Tool MRR | 0.8526 | 0.7186 | 1.0000 | 1.0000 | 0.9062 |
+| Role Coverage | 0.9286 | 0.8636 | 1.0000 | 1.0000 | 0.9545 |
+| Planner Context Tool Recall | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Planner Context Role Coverage | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Fallback Rate | 0.0213 | 0.0000 | 0.0000 | 0.0000 | - |
+| Unsupported Direct-Match Rate | 0.8000 | 0.0000 | 1.0000 | 1.0000 | - |
+
 已知 baseline 观察：
 
 - 9-tool checkpoint 中，`rnaseq_deg_no_tool_names_en` 和
@@ -325,13 +360,16 @@ R2e scRNA-seq tool contract 的 13-tool 中间 checkpoint：
 - R2e 加入 Scanpy tool 后，overall Tool Recall@5 从 `0.8321` 降至 `0.7864`，
   macro Tool Recall@5 从 `0.8484` 降至 `0.7804`；这是真实的近邻词汇 crowding
   信号，不应通过删除有意义的 single-cell metadata 来掩盖。
-- R2e 的 Planner Context Tool Recall 和 Role Coverage 仍为 `1.0000`，说明正式
-  recipe 的 allowed tools 继续为已支持 family 提供完整候选上下文。PR 4B 需要验证
-  scRNA-seq recipe 加入后能否对 single-cell query 产生同样的补齐效果。
-- `unsupported_chipseq_peak_annotation_en`、`unsupported_scrnaseq_clustering_en`
-  和 `unsupported_variant_calling_en` 产生 direct lexical match，说明当前
-  lexical fallback 不是 unsupported intent detector；负例评估只用于暴露风险，
-  不改变 full Catalog validation 边界。
+- R2f 的 Planner Context Tool Recall 和 Role Coverage 仍为 `1.0000`，确认正式
+  scRNA-seq recipe 的 allowed tools 能为 single-cell query 补齐候选上下文。
+- R2f 的 scRNA-seq Recipe Recall@1 为 `0.9286`，Tool Recall@5 为 `1.0000`。
+  单一 bounded tool 易于完整召回，但不能据此推断多工具 family 的排序表现。
+- 两条双向 bulk/scRNA confusion query 的目标 recipe 分别排第 2 和第 3；
+  对比句中的否定侧词汇仍会干扰 lexical 首位排序，但目标 recipe 都保留在 top-3。
+- 5 条 unsupported query 中，除 metagenomics 外的 4 条都产生 direct lexical
+  match，Unsupported Direct-Match Rate 为 `0.8000`。当前 lexical fallback 不是
+  unsupported intent detector；负例评估只用于暴露风险，不改变 full Catalog
+  validation 边界。
 
 ## Vector / Hybrid Retriever
 

@@ -78,9 +78,9 @@ class RetrievalEvaluationTests(unittest.TestCase):
     def test_loads_current_catalog_query_fixture(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
 
-        self.assertEqual(len(queries), 31)
-        self.assertEqual(sum(1 for query in queries if query.supported), 27)
-        self.assertEqual(sum(1 for query in queries if not query.supported), 4)
+        self.assertEqual(len(queries), 47)
+        self.assertEqual(sum(1 for query in queries if query.supported), 42)
+        self.assertEqual(sum(1 for query in queries if not query.supported), 5)
         self.assertEqual(queries[0].id, "rnaseq_deg_basic_en")
         self.assertEqual(queries[0].workflow_family, "bulk_rnaseq")
         self.assertIn("fastp", queries[0].expected_tools)
@@ -118,6 +118,16 @@ class RetrievalEvaluationTests(unittest.TestCase):
         chipseq_annotation = queries_by_id["unsupported_chipseq_peak_annotation_en"]
         self.assertFalse(chipseq_annotation.supported)
         self.assertEqual(chipseq_annotation.workflow_family, "chipseq")
+        scrnaseq = queries_by_id["scrnaseq_qc_clustering_basic_en"]
+        self.assertTrue(scrnaseq.supported)
+        self.assertEqual(scrnaseq.workflow_family, "scrnaseq")
+        self.assertEqual(scrnaseq.expected_recipe, "scrnaseq_qc_clustering")
+        self.assertIn("scanpy_qc_clustering", scrnaseq.expected_tools)
+        scrnaseq_boundary = queries_by_id["unsupported_scrnaseq_batch_integration_en"]
+        self.assertFalse(scrnaseq_boundary.supported)
+        self.assertEqual(scrnaseq_boundary.workflow_family, "scrnaseq")
+        self.assertIn("cross_family_scrnaseq_not_bulk_en", queries_by_id)
+        self.assertIn("cross_family_bulk_not_scrnaseq_en", queries_by_id)
 
     def test_evaluates_current_catalog_baseline(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
@@ -131,28 +141,41 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["strategy"], "lexical_v1")
         self.assertEqual(result["top_k_recipes"], 3)
         self.assertEqual(result["top_k_tools"], 8)
-        self.assertEqual(result["query_count"], 31)
-        self.assertEqual(result["supported_query_count"], 27)
-        self.assertEqual(result["unsupported_query_count"], 4)
-        self.assertEqual(len(result["queries"]), 31)
+        self.assertEqual(result["query_count"], 47)
+        self.assertEqual(result["supported_query_count"], 42)
+        self.assertEqual(result["unsupported_query_count"], 5)
+        self.assertEqual(len(result["queries"]), 47)
         for metric in result["metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
+        self.assertEqual(result["metrics"]["recipe_recall_at_1"], 0.8333)
+        self.assertEqual(result["metrics"]["tool_recall_at_5"], 0.8548)
         self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
         self.assertEqual(result["metrics"]["planner_context_role_coverage"], 1.0)
+        self.assertEqual(result["metrics"]["unsupported_direct_match_rate"], 0.8)
         self.assertEqual(
             set(result["family_metrics"]),
             {"bulk_rnaseq", "chipseq", "metagenomics", "scrnaseq", "variant_calling"},
         )
-        self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 21)
+        self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 22)
         self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 7)
         self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 6)
+        self.assertEqual(result["family_metrics"]["scrnaseq"]["query_count"], 16)
+        self.assertEqual(result["family_metrics"]["scrnaseq"]["supported_query_count"], 14)
+        self.assertEqual(
+            result["family_metrics"]["scrnaseq"]["metrics"]["recipe_recall_at_1"],
+            0.9286,
+        )
+        self.assertEqual(
+            result["family_metrics"]["scrnaseq"]["metrics"]["tool_recall_at_5"],
+            1.0,
+        )
         self.assertEqual(
             result["family_metrics"]["bulk_rnaseq"]["metrics"]["tool_recall_at_5"],
-            0.7913,
+            0.7856,
         )
-        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.9048)
-        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.7804)
+        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.8853)
+        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.8517)
         for metric in result["macro_family_metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)

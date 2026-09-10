@@ -181,6 +181,7 @@ class CatalogDtoTests(unittest.TestCase):
         self.assertEqual(recipe.required_inputs["sample_ids"].type, "Array[String]")
         self.assertEqual(recipe.steps[0].allowed_tools, ["fastp"])
         self.assertIn("chipseq_peak_calling", {recipe.id for recipe in response.recipes})
+        self.assertIn("scrnaseq_qc_clustering", {recipe.id for recipe in response.recipes})
 
     def test_tool_list_response_accepts_catalog_service_records(self):
         response = ToolListResponse.model_validate({"tools": list_tools()})

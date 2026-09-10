@@ -98,6 +98,15 @@ class CatalogServiceTests(unittest.TestCase):
             {"status": "unverified", "evidence": []},
         )
 
+    def test_get_scrnaseq_recipe_returns_bounded_single_step(self):
+        recipe = get_recipe("scrnaseq_qc_clustering")
+
+        self.assertEqual(recipe["name"], "scRNA-seq QC and clustering")
+        self.assertEqual(recipe["required_inputs"]["matrix_h5"]["type"], "File")
+        self.assertEqual(recipe["steps"][0]["id"], "analyze_cells")
+        self.assertEqual(recipe["steps"][0]["role"], "single_cell_qc_clustering")
+        self.assertEqual(recipe["steps"][0]["allowed_tools"], ["scanpy_qc_clustering"])
+
     def test_unknown_recipe_and_tool_raise_key_error(self):
         with self.assertRaisesRegex(KeyError, "unknown recipe"):
             get_recipe("missing_recipe")
