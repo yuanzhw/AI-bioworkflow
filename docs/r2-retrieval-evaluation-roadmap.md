@@ -185,6 +185,21 @@ PR 4A 在正式 Catalog 中加入 `scanpy_qc_clustering@1.12.3` 后，tool 数�
 - `scanpy_qc_clustering` 仍为 `unverified`，compile-ready 和 retrieval support 不构成
   镜像 build、smoke test 或真实数据执行证据。
 
+### R2g Variant Calling Tool Contract Intermediate Checkpoint
+
+PR 5A 在正式 Catalog 中加入 `bwa_mem2@2.3`、`bcftools_call@1.24` 和
+`bcftools_filter@1.24` 后，tool 数量从 13 增加到 16，但 recipe 和 query fixture
+保持不变：
+
+- `bcftools_call` 与 `bcftools_filter` 分别表达 calling 和 filtering capability，
+  避免用一个多模式 ToolSpec 隐藏不同输入输出契约。
+- `unsupported_variant_calling_en` 继续保持 unsupported；直接命中新工具不等于正式
+  `germline_short_variant_calling` workflow 已受支持。
+- 三个 ToolSpec 使用已核实存在的固定 BioContainers tag，并通过 synthetic
+  resolver/renderer 与 WOMtool 92 验证；execution verification 均保持 `unverified`。
+- PR 5B 再加入正式 recipe、转正 generic variant query、增加 FASTQ/BAM/VCF
+  confusion cases，并建立第四个 supported family baseline。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -340,6 +355,26 @@ R2f scRNA-seq recipe 与 47-query cross-family baseline：
 | Fallback Rate | 0.0213 | 0.0000 | 0.0000 | 0.0000 | - |
 | Unsupported Direct-Match Rate | 0.8000 | 0.0000 | 1.0000 | 1.0000 | - |
 
+R2g variant calling tool contracts 的 16-tool 中间 checkpoint：
+
+| Metric | Overall | bulk_rnaseq | chipseq | scrnaseq | Macro supported-family |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Query count | 47 | 22 | 7 | 16 | - |
+| Supported queries | 42 | 22 | 6 | 14 | 3 families |
+| Unsupported queries | 5 | 0 | 1 | 2 | - |
+| Recipe Recall@1 | 0.8333 | 0.7273 | 1.0000 | 0.9286 | 0.8853 |
+| Recipe Recall@3 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Recipe MRR | 0.9048 | 0.8409 | 1.0000 | 0.9643 | 0.9351 |
+| Tool Recall@3 | 0.7492 | 0.6561 | 0.5056 | 1.0000 | 0.7205 |
+| Tool Recall@5 | 0.8226 | 0.7515 | 0.6694 | 1.0000 | 0.8070 |
+| Tool Recall@8 | 0.9016 | 0.8455 | 0.8778 | 1.0000 | 0.9077 |
+| Tool MRR | 0.8363 | 0.7102 | 0.9167 | 1.0000 | 0.8756 |
+| Role Coverage | 0.8984 | 0.8394 | 0.8778 | 1.0000 | 0.9057 |
+| Planner Context Tool Recall | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Planner Context Role Coverage | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Fallback Rate | 0.0213 | 0.0000 | 0.0000 | 0.0000 | - |
+| Unsupported Direct-Match Rate | 0.8000 | 0.0000 | 1.0000 | 1.0000 | - |
+
 已知 baseline 观察：
 
 - 9-tool checkpoint 中，`rnaseq_deg_no_tool_names_en` 和
@@ -370,6 +405,14 @@ R2f scRNA-seq recipe 与 47-query cross-family baseline：
   match，Unsupported Direct-Match Rate 为 `0.8000`。当前 lexical fallback 不是
   unsupported intent detector；负例评估只用于暴露风险，不改变 full Catalog
   validation 边界。
+- R2g 加入三个 variant calling tool 后，overall Tool Recall@5 从 `0.8548` 降至
+  `0.8226`，macro Tool Recall@5 从 `0.8517` 降至 `0.8070`；ChIP-seq Tool
+  Recall@5 从 `0.7694` 降至 `0.6694`，是 alignment、BAM、calling 和 MultiQC
+  metadata 共享造成的明确 cross-family crowding 信号。
+- R2g 的 recipe metrics、Planner Context Tool Recall 和 Planner Context Role
+  Coverage 均未退化。现有 recipe allowed tools 仍可补齐 supported family，但
+  generic variant query 即使直接召回新工具，也必须在 PR 5B 正式 recipe 加入前保持
+  unsupported。
 
 ## Vector / Hybrid Retriever
 

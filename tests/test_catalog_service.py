@@ -98,6 +98,29 @@ class CatalogServiceTests(unittest.TestCase):
             {"status": "unverified", "evidence": []},
         )
 
+    def test_get_variant_calling_tools_exposes_compile_ready_contracts(self):
+        bwa_mem2 = get_tool("bwa_mem2")
+        bcftools_call = get_tool("bcftools_call")
+        bcftools_filter = get_tool("bcftools_filter")
+
+        self.assertEqual(bwa_mem2["version"], "2.3")
+        self.assertEqual(
+            bwa_mem2["runtime"]["docker"],
+            "quay.io/biocontainers/bwa-mem2:2.3--he70b90d_0",
+        )
+        self.assertIn("aligned_sam", bwa_mem2["outputs"])
+        self.assertEqual(bcftools_call["version"], "1.24")
+        self.assertIn("reference_fai", bcftools_call["inputs"])
+        self.assertIn("unfiltered_vcf_index", bcftools_call["outputs"])
+        self.assertEqual(bcftools_filter["params"]["min_qual"]["default"], 20.0)
+        self.assertIn("filtered_vcf_index", bcftools_filter["outputs"])
+        for tool in (bwa_mem2, bcftools_call, bcftools_filter):
+            self.assertEqual(tool["trust_status"], "catalog-approved")
+            self.assertEqual(
+                tool["execution_verification"],
+                {"status": "unverified", "evidence": []},
+            )
+
     def test_get_scrnaseq_recipe_returns_bounded_single_step(self):
         recipe = get_recipe("scrnaseq_qc_clustering")
 

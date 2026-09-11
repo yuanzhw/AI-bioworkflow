@@ -1,0 +1,72 @@
+id: bwa_mem2
+version: "2.3"
+aliases:
+  - BWA-MEM2
+  - BWA MEM 2
+  - paired-end genome alignment
+  - germline short-read alignment
+  - whole-genome sequencing alignment
+  - FASTQ to SAM
+description: Align paired-end short reads to a prebuilt BWA-MEM2 reference index for germline variant calling.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  r1:
+    type: File
+    required: true
+    description: First cleaned paired-end FASTQ file.
+  r2:
+    type: File
+    required: true
+    description: Second cleaned paired-end FASTQ file.
+  index_archive:
+    type: File
+    required: true
+    description: Gzip-compressed tar archive containing a BWA-MEM2 index with a shared file prefix.
+
+params:
+  sample_id:
+    type: String
+    default: sample
+    description: Sample identifier written into the SAM read group.
+  threads:
+    type: Int
+    default: 8
+    min: 1
+    description: Number of BWA-MEM2 alignment threads.
+
+outputs:
+  aligned_sam:
+    type: File
+    value: '"aligned.sam"'
+    description: Paired-end genome alignments in SAM format.
+  alignment_log:
+    type: File
+    value: '"bwa_mem2.log"'
+    description: BWA-MEM2 alignment diagnostics written to standard error.
+    tags:
+      - multiqc_input
+
+command_template: |
+  set -euo pipefail;
+  mkdir -p bwa_mem2_index_input;
+  tar -xzf "~{index_archive}" -C bwa_mem2_index_input;
+  index_file="$(find bwa_mem2_index_input -type f -name '*.0123' -print -quit)";
+  [ -n "$index_file" ] || { echo "BWA-MEM2 index archive does not contain a .0123 file" >&2; exit 1; };
+  index_prefix="${index_file%.0123}";
+  bwa-mem2 mem
+  -t ~{threads}
+  -M
+  -R "@RG\\tID:~{sample_id}\\tSM:~{sample_id}\\tPL:ILLUMINA"
+  "$index_prefix"
+  "~{r1}"
+  "~{r2}"
+  > aligned.sam
+  2> bwa_mem2.log
+
+runtime:
+  docker: quay.io/biocontainers/bwa-mem2:2.3--he70b90d_0
+  cpu: 8
+  memory: 32G

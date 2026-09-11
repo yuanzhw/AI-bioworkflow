@@ -81,6 +81,10 @@ class ApiRouteTests(unittest.TestCase):
         self.assertEqual(fastp["version"], "1.3.3")
         self.assertEqual(fastp["trust_status"], "catalog-approved")
         self.assertEqual(fastp["execution_verification"]["status"], "e2e-validated")
+        tool_ids = {tool["id"] for tool in tools}
+        self.assertTrue(
+            {"bwa_mem2", "bcftools_call", "bcftools_filter"}.issubset(tool_ids)
+        )
 
     def test_get_tool_with_version(self):
         tool_record = get_tool("salmon", "1.9.0")

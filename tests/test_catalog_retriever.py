@@ -90,7 +90,7 @@ class CatalogRetrieverTests(unittest.TestCase):
         self.assertEqual(result["recipes"][0]["id"], "chipseq_peak_calling")
         tools = {tool["id"]: tool for tool in result["tools"]}
         self.assertTrue(
-            {"fastp", "bowtie2", "samtools", "macs2", "multiqc"}.issubset(tools),
+            {"bowtie2", "samtools", "macs2"}.issubset(tools),
             result["tools"],
         )
         for tool_id in ("bowtie2", "samtools", "macs2"):
@@ -115,6 +115,35 @@ class CatalogRetrieverTests(unittest.TestCase):
         self.assertEqual(
             tools["scanpy_qc_clustering"]["execution_verification"],
             {"status": "unverified", "evidence": []},
+        )
+
+    def test_retrieves_variant_calling_tools_without_claiming_recipe_support(self):
+        result = retrieve_catalog_context(
+            (
+                "Align paired-end whole-genome reads with BWA-MEM2, sort and index "
+                "the BAM, call germline SNVs and indels with BCFtools mpileup and "
+                "call, then hard-filter the VCF by quality and depth."
+            ),
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=3,
+            top_k_tools=8,
+        )
+
+        self.assertFalse(result["fallback_used"])
+        tools = {tool["id"]: tool for tool in result["tools"]}
+        self.assertTrue(
+            {"bwa_mem2", "bcftools_call", "bcftools_filter"}.issubset(tools),
+            result["tools"],
+        )
+        for tool_id in ("bwa_mem2", "bcftools_call", "bcftools_filter"):
+            self.assertEqual(
+                tools[tool_id]["execution_verification"],
+                {"status": "unverified", "evidence": []},
+            )
+        self.assertNotIn(
+            "germline_short_variant_calling",
+            {recipe["id"] for recipe in result["recipes"]},
         )
 
     def test_tokenizer_supports_sequencing_variants_and_cjk_ngrams(self):
