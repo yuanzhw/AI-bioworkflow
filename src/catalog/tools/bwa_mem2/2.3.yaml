@@ -51,6 +51,8 @@ outputs:
 
 command_template: |
   set -euo pipefail;
+  sample_id_file="~{write_lines([sample_id])}";
+  IFS= read -r sample_id < "$sample_id_file";
   mkdir -p bwa_mem2_index_input;
   tar -xzf "~{index_archive}" -C bwa_mem2_index_input;
   index_file="$(find bwa_mem2_index_input -type f -name '*.0123' -print -quit)";
@@ -59,7 +61,7 @@ command_template: |
   bwa-mem2 mem
   -t ~{threads}
   -M
-  -R "@RG\\tID:~{sample_id}\\tSM:~{sample_id}\\tPL:ILLUMINA"
+  -R "@RG\\tID:${sample_id}\\tSM:${sample_id}\\tPL:ILLUMINA"
   "$index_prefix"
   "~{r1}"
   "~{r2}"

@@ -277,6 +277,7 @@ def sample_variant_calling_tool_contract_plan() -> dict[str, Any]:
                 },
             ],
             "outputs": {
+                "alignment_log": "align.alignment_log",
                 "sorted_bam": "prepare_bam.sorted_bam",
                 "bam_index": "prepare_bam.bam_index",
                 "unfiltered_vcf": "call_variants.unfiltered_vcf",
@@ -676,6 +677,13 @@ class CatalogResolutionTests(unittest.TestCase):
         )
         self.assertIn("find bwa_mem2_index_input -type f -name '*.0123'", wdl)
         self.assertIn('index_prefix="${index_file%.0123}"', wdl)
+        self.assertIn('sample_id_file="~{write_lines([sample_id])}"', wdl)
+        self.assertIn('IFS= read -r sample_id < "$sample_id_file"', wdl)
+        self.assertIn(
+            '-R "@RG\\\\tID:${sample_id}\\\\tSM:${sample_id}\\\\tPL:ILLUMINA"',
+            wdl,
+        )
+        self.assertNotIn("ID:~{sample_id}", wdl)
         self.assertIn("bwa-mem2 mem", wdl)
         self.assertIn("bcftools mpileup", wdl)
         self.assertIn("| bcftools call", wdl)
@@ -684,6 +692,7 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("ploidy = 2", wdl)
         self.assertIn("min_qual = 30.0", wdl)
         self.assertIn("min_depth = 12", wdl)
+        self.assertIn("File alignment_log = align.alignment_log", wdl)
         self.assertIn("File unfiltered_vcf = call_variants.unfiltered_vcf", wdl)
         self.assertIn("File filtered_vcf = filter_variants.filtered_vcf", wdl)
         self.assertIn("File call_stats = call_variants.call_stats", wdl)

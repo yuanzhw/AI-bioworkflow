@@ -1636,6 +1636,8 @@ MACS2 call。
 - 四个 task 和 call 均进入 IR/WDL，SAM、sorted BAM/BAI、unfiltered VCF/CSI 的依赖
   连线保持显式。
 - BWA-MEM2 task 解包 index archive，并从 `.0123` 文件确定 index prefix。
+- `sample_id` 通过 WDL `write_lines` materialization 跨过 WDL-to-shell 边界，shell
+  仅在双引号参数中展开读取到的变量，不直接执行 WDL string interpolation。
 - BCFtools calling task 使用 `mpileup | call`，filtering task 使用 bounded
   `QUAL`/`INFO/DP` expression。
 - sample id、threads、max depth、ploidy、minimum QUAL 和 minimum depth 参数进入 WDL。
