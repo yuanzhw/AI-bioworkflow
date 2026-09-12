@@ -9,7 +9,7 @@ import yaml
 from src.analyzer import analyze_workflow_ir
 from src.catalog import load_tool_catalog, resolve_tool_plan
 from src.catalog.schema import ExecutionVerificationSpec, ToolSpec
-from src.recipes import load_recipe_catalog
+from src.recipes import RecipeCatalog, RecipeSpec, load_recipe_catalog
 from src.renderers import render_wdl
 from src.schema import flatten_workflow_calls
 from src.tools.validator import wdl_validator, wdl_validator_available
@@ -167,6 +167,130 @@ def sample_scrnaseq_qc_clustering_plan(*, include_metadata: bool = True) -> dict
     return plan
 
 
+def variant_calling_tool_contract_recipe_catalog() -> RecipeCatalog:
+    recipe = RecipeSpec.model_validate(
+        {
+            "id": "variant_calling_tool_contract_probe",
+            "name": "Variant calling tool contract probe",
+            "description": "Test-only recipe for variant calling tool contracts.",
+            "required_inputs": {
+                "r1": {"type": "File"},
+                "r2": {"type": "File"},
+                "bwa_index": {"type": "File"},
+                "reference_fasta": {"type": "File"},
+                "reference_fai": {"type": "File"},
+            },
+            "steps": [
+                {
+                    "id": "align_reads",
+                    "role": "germline_short_read_alignment",
+                    "allowed_tools": ["bwa_mem2"],
+                },
+                {
+                    "id": "sort_and_index",
+                    "role": "bam_sort_and_index",
+                    "allowed_tools": ["samtools"],
+                },
+                {
+                    "id": "call_variants",
+                    "role": "germline_small_variant_calling",
+                    "allowed_tools": ["bcftools_call"],
+                },
+                {
+                    "id": "filter_variants",
+                    "role": "germline_variant_filtering",
+                    "allowed_tools": ["bcftools_filter"],
+                },
+            ],
+        }
+    )
+    return RecipeCatalog({recipe.id: recipe})
+
+
+def sample_variant_calling_tool_contract_plan() -> dict[str, Any]:
+    return {
+        "workflow": {
+            "name": "VariantCallingToolContractProbe",
+            "recipe": "variant_calling_tool_contract_probe",
+            "inputs": {
+                "r1": "File",
+                "r2": "File",
+                "bwa_index": "File",
+                "reference_fasta": "File",
+                "reference_fai": "File",
+            },
+            "tool_calls": [
+                {
+                    "id": "align",
+                    "step": "align_reads",
+                    "tool": "bwa_mem2",
+                    "version": "2.3",
+                    "inputs": {
+                        "r1": "r1",
+                        "r2": "r2",
+                        "index_archive": "bwa_index",
+                    },
+                    "params": {
+                        "sample_id": "patient_01",
+                        "threads": 8,
+                    },
+                },
+                {
+                    "id": "prepare_bam",
+                    "step": "sort_and_index",
+                    "tool": "samtools",
+                    "version": "1.24",
+                    "inputs": {"alignment": "align.aligned_sam"},
+                    "params": {"threads": 4},
+                },
+                {
+                    "id": "call_variants",
+                    "step": "call_variants",
+                    "tool": "bcftools_call",
+                    "version": "1.24",
+                    "inputs": {
+                        "sorted_bam": "prepare_bam.sorted_bam",
+                        "bam_index": "prepare_bam.bam_index",
+                        "reference_fasta": "reference_fasta",
+                        "reference_fai": "reference_fai",
+                    },
+                    "params": {
+                        "threads": 4,
+                        "max_depth": 5000,
+                        "ploidy": 2,
+                    },
+                },
+                {
+                    "id": "filter_variants",
+                    "step": "filter_variants",
+                    "tool": "bcftools_filter",
+                    "version": "1.24",
+                    "inputs": {
+                        "unfiltered_vcf": "call_variants.unfiltered_vcf",
+                        "unfiltered_vcf_index": "call_variants.unfiltered_vcf_index",
+                    },
+                    "params": {
+                        "threads": 4,
+                        "min_qual": 30.0,
+                        "min_depth": 12,
+                    },
+                },
+            ],
+            "outputs": {
+                "alignment_log": "align.alignment_log",
+                "sorted_bam": "prepare_bam.sorted_bam",
+                "bam_index": "prepare_bam.bam_index",
+                "unfiltered_vcf": "call_variants.unfiltered_vcf",
+                "unfiltered_vcf_index": "call_variants.unfiltered_vcf_index",
+                "filtered_vcf": "filter_variants.filtered_vcf",
+                "filtered_vcf_index": "filter_variants.filtered_vcf_index",
+                "call_stats": "call_variants.call_stats",
+                "filter_stats": "filter_variants.filter_stats",
+            },
+        }
+    }
+
+
 class CatalogDefinitionTests(unittest.TestCase):
     def test_catalog_file_path_matches_tool_id_and_version(self):
         for yaml_path in sorted(CATALOG_TOOLS_DIR.rglob("*.yaml")):
@@ -253,6 +377,62 @@ class CatalogDefinitionTests(unittest.TestCase):
         self.assertIn("run_scanpy_qc_clustering.py", tool.command_template)
         self.assertEqual(tool.execution_verification.status, "unverified")
         self.assertEqual(tool.execution_verification.evidence, [])
+
+    def test_variant_calling_tools_are_compile_ready_but_unverified(self):
+        tool_catalog = load_tool_catalog()
+        expected_tools = {
+            "bwa_mem2": {
+                "version": "2.3",
+                "docker": "quay.io/biocontainers/bwa-mem2:2.3--he70b90d_0",
+                "inputs": {"r1", "r2", "index_archive"},
+                "outputs": {"aligned_sam", "alignment_log"},
+            },
+            "bcftools_call": {
+                "version": "1.24",
+                "docker": "quay.io/biocontainers/bcftools:1.24--h118bc1c_2",
+                "inputs": {
+                    "sorted_bam",
+                    "bam_index",
+                    "reference_fasta",
+                    "reference_fai",
+                },
+                "outputs": {
+                    "unfiltered_vcf",
+                    "unfiltered_vcf_index",
+                    "call_stats",
+                    "calling_log",
+                },
+            },
+            "bcftools_filter": {
+                "version": "1.24",
+                "docker": "quay.io/biocontainers/bcftools:1.24--h118bc1c_2",
+                "inputs": {"unfiltered_vcf", "unfiltered_vcf_index"},
+                "outputs": {
+                    "filtered_vcf",
+                    "filtered_vcf_index",
+                    "filter_stats",
+                    "filter_log",
+                },
+            },
+        }
+
+        for tool_id, expected in expected_tools.items():
+            with self.subTest(tool=tool_id):
+                tool = tool_catalog.get(tool_id, expected["version"])
+                self.assertEqual(tool.runtime.docker, expected["docker"])
+                self.assertEqual(set(tool.inputs), expected["inputs"])
+                self.assertEqual(set(tool.outputs), expected["outputs"])
+                self.assertTrue(tool.command_template.strip())
+                self.assertEqual(tool.execution_verification.status, "unverified")
+                self.assertEqual(tool.execution_verification.evidence, [])
+
+        bwa_mem2 = tool_catalog.get("bwa_mem2", "2.3")
+        self.assertEqual(bwa_mem2.outputs["alignment_log"].tags, ["multiqc_input"])
+        bcftools_call = tool_catalog.get("bcftools_call", "1.24")
+        self.assertEqual(bcftools_call.params["ploidy"].choices, [1, 2])
+        self.assertEqual(bcftools_call.outputs["call_stats"].tags, ["multiqc_input"])
+        bcftools_filter = tool_catalog.get("bcftools_filter", "1.24")
+        self.assertEqual(bcftools_filter.outputs["filter_stats"].tags, ["multiqc_input"])
 
     def test_tool_spec_requires_execution_verification(self):
         tool_data = load_tool_catalog().get("fastp", "1.3.3").model_dump(mode="python")
@@ -460,6 +640,69 @@ class CatalogResolutionTests(unittest.TestCase):
         workflow_ir = resolve_tool_plan(
             sample_scrnaseq_qc_clustering_plan(include_metadata=False),
             self.recipe_catalog,
+            self.tool_catalog,
+        )
+        wdl = render_wdl(workflow_ir)
+
+        result = wdl_validator.invoke({"wdl_code": wdl})
+
+        self.assertTrue(result["is_valid"], result["message"])
+
+    def test_variant_calling_tool_contracts_resolve_to_valid_renderable_ir(self):
+        workflow_ir = resolve_tool_plan(
+            sample_variant_calling_tool_contract_plan(),
+            variant_calling_tool_contract_recipe_catalog(),
+            self.tool_catalog,
+        )
+        report = analyze_workflow_ir(workflow_ir)
+        wdl = render_wdl(workflow_ir)
+
+        self.assertTrue(report.is_valid, report.errors)
+        self.assertIn("bwa_mem2_align", workflow_ir.tasks)
+        self.assertIn("samtools_prepare_bam", workflow_ir.tasks)
+        self.assertIn("bcftools_call_call_variants", workflow_ir.tasks)
+        self.assertIn("bcftools_filter_filter_variants", workflow_ir.tasks)
+        self.assertIn("call bwa_mem2_align as align", wdl)
+        self.assertIn("call samtools_prepare_bam as prepare_bam", wdl)
+        self.assertIn("call bcftools_call_call_variants as call_variants", wdl)
+        self.assertIn("call bcftools_filter_filter_variants as filter_variants", wdl)
+        self.assertIn("index_archive = bwa_index", wdl)
+        self.assertIn("alignment = align.aligned_sam", wdl)
+        self.assertIn("sorted_bam = prepare_bam.sorted_bam", wdl)
+        self.assertIn("bam_index = prepare_bam.bam_index", wdl)
+        self.assertIn("unfiltered_vcf = call_variants.unfiltered_vcf", wdl)
+        self.assertIn(
+            "unfiltered_vcf_index = call_variants.unfiltered_vcf_index",
+            wdl,
+        )
+        self.assertIn("find bwa_mem2_index_input -type f -name '*.0123'", wdl)
+        self.assertIn('index_prefix="${index_file%.0123}"', wdl)
+        self.assertIn('sample_id_file="~{write_lines([sample_id])}"', wdl)
+        self.assertIn('IFS= read -r sample_id < "$sample_id_file"', wdl)
+        self.assertIn(
+            '-R "@RG\\\\tID:${sample_id}\\\\tSM:${sample_id}\\\\tPL:ILLUMINA"',
+            wdl,
+        )
+        self.assertNotIn("ID:~{sample_id}", wdl)
+        self.assertIn("bwa-mem2 mem", wdl)
+        self.assertIn("bcftools mpileup", wdl)
+        self.assertIn("| bcftools call", wdl)
+        self.assertIn("bcftools filter", wdl)
+        self.assertIn("max_depth = 5000", wdl)
+        self.assertIn("ploidy = 2", wdl)
+        self.assertIn("min_qual = 30.0", wdl)
+        self.assertIn("min_depth = 12", wdl)
+        self.assertIn("File alignment_log = align.alignment_log", wdl)
+        self.assertIn("File unfiltered_vcf = call_variants.unfiltered_vcf", wdl)
+        self.assertIn("File filtered_vcf = filter_variants.filtered_vcf", wdl)
+        self.assertIn("File call_stats = call_variants.call_stats", wdl)
+        self.assertIn("File filter_stats = filter_variants.filter_stats", wdl)
+
+    @unittest.skipUnless(wdl_validator_available(), "WDL validator is not installed")
+    def test_variant_calling_tool_contract_wdl_passes_syntax_validation(self):
+        workflow_ir = resolve_tool_plan(
+            sample_variant_calling_tool_contract_plan(),
+            variant_calling_tool_contract_recipe_catalog(),
             self.tool_catalog,
         )
         wdl = render_wdl(workflow_ir)

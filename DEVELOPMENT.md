@@ -893,14 +893,26 @@ integration、automatic cell type annotation、trajectory 或 RNA velocity。run
 仍只是仓库构建脚本的发布目标；镜像尚无 build、smoke test 或真实数据执行记录，
 `execution_verification` 保持 `unverified`。
 
+`bwa_mem2@2.3`、`bcftools_call@1.24` 和 `bcftools_filter@1.24` 现已作为
+`unverified`、compile-ready 工具进入正式 Catalog。BCFtools 按 calling 和 filtering
+拆成两个边界明确的能力契约，并复用现有 `samtools@1.24`。测试专用 recipe probe 已
+验证 `BWA-MEM2 -> samtools -> BCFtools call -> BCFtools filter` 能通过 Resolver、
+Analyzer、Renderer 和 WOMtool 92；正式 `germline_short_variant_calling` recipe、
+example plan 和 supported retrieval queries 尚未加入，因此 variant calling family
+仍不属于正式支持范围。固定 BioContainers tag 已根据上游 release 与 Quay registry
+核实存在，但尚未进行 image pull、smoke test 或真实数据执行，三个工具的
+`execution_verification` 均保持 `unverified`。
+
 当前 query set 包含 47 条 family-labeled query，覆盖 22 条 supported bulk RNA-seq、
 6 条 supported ChIP-seq、14 条 supported scRNA-seq 和 5 条 unsupported 负例。
-`lexical_v1` 的 Recipe Recall@1 为 `0.8333`、Tool Recall@5 为 `0.8548`；三个 supported
-family 的 macro Recipe Recall@1 / Tool Recall@5 分别为 `0.8853` / `0.8517`，Planner
+16-tool `lexical_v1` checkpoint 的 Recipe Recall@1 为 `0.8333`、Tool Recall@5 为
+`0.8226`；三个 supported family 的 macro Recipe Recall@1 / Tool Recall@5 分别为
+`0.8853` / `0.8070`，Planner
 Context Tool Recall / Role Coverage 仍均为 `1.0000`。双向 bulk/scRNA confusion queries
-暴露了 lexical 对否定侧词汇的排序干扰，但完整 Planner context 仍能补齐所需工具和
-role。下一步加入 germline short variant calling；四个 family 完成后再决定是否进入
-R3 vector / hybrid backend。
+暴露了 lexical 对否定侧词汇的排序干扰；新增 alignment/variant metadata 还将 ChIP-seq
+Tool Recall@5 从 `0.7694` 降至 `0.6694`，但完整 Planner context 仍能补齐所需工具和
+role。下一步加入正式 germline short variant calling recipe 与 family retrieval
+baseline；四个 family 完成后再决定是否进入 R3 vector / hybrid backend。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

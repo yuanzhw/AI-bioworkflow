@@ -1,0 +1,78 @@
+id: bcftools_filter
+version: "1.24"
+aliases:
+  - BCFtools filter
+  - VCF hard filtering
+  - germline variant filtering
+  - filter SNVs and indels
+  - quality and depth filter
+description: Apply bounded quality and depth thresholds to a germline SNV and indel VCF with BCFtools filter.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  unfiltered_vcf:
+    type: File
+    required: true
+    description: BGZF-compressed VCF containing unfiltered germline variant calls.
+  unfiltered_vcf_index:
+    type: File
+    required: true
+    description: CSI index associated with the unfiltered VCF.
+
+params:
+  threads:
+    type: Int
+    default: 4
+    min: 1
+    description: Number of BCFtools worker threads.
+  min_qual:
+    type: Float
+    default: 20.0
+    min: 0.0
+    description: Minimum site-level QUAL retained in the filtered callset.
+  min_depth:
+    type: Int
+    default: 10
+    min: 0
+    description: Minimum site-level INFO/DP retained in the filtered callset.
+
+outputs:
+  filtered_vcf:
+    type: File
+    value: '"filtered.vcf.gz"'
+    description: BGZF-compressed VCF containing calls that pass the configured thresholds.
+  filtered_vcf_index:
+    type: File
+    value: '"filtered.vcf.gz.csi"'
+    description: CSI index for the filtered VCF.
+  filter_stats:
+    type: File
+    value: '"bcftools_filter.stats"'
+    description: BCFtools stats report for the filtered callset.
+    tags:
+      - multiqc_input
+  filter_log:
+    type: File
+    value: '"bcftools_filter.log"'
+    description: BCFtools filter, index, and stats diagnostics.
+
+command_template: |
+  set -euo pipefail;
+  ln -sf "~{unfiltered_vcf}" unfiltered.vcf.gz;
+  ln -sf "~{unfiltered_vcf_index}" unfiltered.vcf.gz.csi;
+  bcftools filter
+  --threads ~{threads}
+  --include 'QUAL>=~{min_qual} && INFO/DP>=~{min_depth}'
+  --output-type z
+  --output filtered.vcf.gz
+  unfiltered.vcf.gz
+  2> bcftools_filter.log;
+  bcftools index --csi --force filtered.vcf.gz 2>> bcftools_filter.log;
+  bcftools stats filtered.vcf.gz > bcftools_filter.stats 2>> bcftools_filter.log
+
+runtime:
+  docker: quay.io/biocontainers/bcftools:1.24--h118bc1c_2
+  cpu: 4
+  memory: 8G

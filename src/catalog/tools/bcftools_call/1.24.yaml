@@ -1,0 +1,100 @@
+id: bcftools_call
+version: "1.24"
+aliases:
+  - BCFtools mpileup and call
+  - germline SNV and indel calling
+  - short variant calling
+  - genotype calling
+  - BAM to VCF
+description: Call germline SNVs and short indels from one coordinate-sorted BAM with BCFtools mpileup and call.
+execution_verification:
+  status: unverified
+  evidence: []
+
+inputs:
+  sorted_bam:
+    type: File
+    required: true
+    description: Coordinate-sorted alignment for one germline sample.
+  bam_index:
+    type: File
+    required: true
+    description: BAI index associated with the coordinate-sorted BAM.
+  reference_fasta:
+    type: File
+    required: true
+    description: Uncompressed reference genome FASTA used for alignment and variant calling.
+  reference_fai:
+    type: File
+    required: true
+    description: Samtools faidx index associated with the reference FASTA.
+
+params:
+  threads:
+    type: Int
+    default: 4
+    min: 1
+    description: Number of BCFtools worker threads.
+  max_depth:
+    type: Int
+    default: 10000
+    min: 1
+    description: Maximum per-file read depth considered by mpileup at one position.
+  ploidy:
+    type: Int
+    default: 2
+    choices:
+      - 1
+      - 2
+    description: Haploid or diploid genotype model used by BCFtools call.
+
+outputs:
+  unfiltered_vcf:
+    type: File
+    value: '"unfiltered.vcf.gz"'
+    description: BGZF-compressed VCF containing unfiltered germline SNV and indel calls.
+  unfiltered_vcf_index:
+    type: File
+    value: '"unfiltered.vcf.gz.csi"'
+    description: CSI index for the unfiltered VCF.
+  call_stats:
+    type: File
+    value: '"bcftools_call.stats"'
+    description: BCFtools stats report for the unfiltered callset.
+    tags:
+      - multiqc_input
+  calling_log:
+    type: File
+    value: '"bcftools_calling.log"'
+    description: Combined BCFtools mpileup, call, index, and stats diagnostics.
+
+command_template: |
+  set -euo pipefail;
+  ln -sf "~{sorted_bam}" variant_input.bam;
+  ln -sf "~{bam_index}" variant_input.bam.bai;
+  ln -sf "~{reference_fasta}" variant_reference.fa;
+  ln -sf "~{reference_fai}" variant_reference.fa.fai;
+  bcftools mpileup
+  --threads ~{threads}
+  --max-depth ~{max_depth}
+  --annotate FORMAT/DP
+  --output-type u
+  --fasta-ref variant_reference.fa
+  variant_input.bam
+  2> bcftools_mpileup.log
+  | bcftools call
+  --threads ~{threads}
+  --multiallelic-caller
+  --variants-only
+  --ploidy ~{ploidy}
+  --output-type z
+  --output unfiltered.vcf.gz
+  2> bcftools_call.log;
+  cat bcftools_mpileup.log bcftools_call.log > bcftools_calling.log;
+  bcftools index --csi --force unfiltered.vcf.gz 2>> bcftools_calling.log;
+  bcftools stats unfiltered.vcf.gz > bcftools_call.stats 2>> bcftools_calling.log
+
+runtime:
+  docker: quay.io/biocontainers/bcftools:1.24--h118bc1c_2
+  cpu: 4
+  memory: 16G

@@ -481,7 +481,7 @@
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
-    "notes": "Negative case: variant calling tools are not in the approved catalog."
+    "notes": "Negative case: variant calling tools are approved, but no formal variant calling recipe is available yet."
   },
   {
     "id": "unsupported_metagenomics_cn",

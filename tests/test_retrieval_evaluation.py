@@ -149,7 +149,7 @@ class RetrievalEvaluationTests(unittest.TestCase):
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
         self.assertEqual(result["metrics"]["recipe_recall_at_1"], 0.8333)
-        self.assertEqual(result["metrics"]["tool_recall_at_5"], 0.8548)
+        self.assertEqual(result["metrics"]["tool_recall_at_5"], 0.8226)
         self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
         self.assertEqual(result["metrics"]["planner_context_role_coverage"], 1.0)
         self.assertEqual(result["metrics"]["unsupported_direct_match_rate"], 0.8)
@@ -160,6 +160,10 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 22)
         self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 7)
         self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 6)
+        self.assertEqual(
+            result["family_metrics"]["chipseq"]["metrics"]["tool_recall_at_5"],
+            0.6694,
+        )
         self.assertEqual(result["family_metrics"]["scrnaseq"]["query_count"], 16)
         self.assertEqual(result["family_metrics"]["scrnaseq"]["supported_query_count"], 14)
         self.assertEqual(
@@ -172,10 +176,10 @@ class RetrievalEvaluationTests(unittest.TestCase):
         )
         self.assertEqual(
             result["family_metrics"]["bulk_rnaseq"]["metrics"]["tool_recall_at_5"],
-            0.7856,
+            0.7515,
         )
         self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.8853)
-        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.8517)
+        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.8070)
         for metric in result["macro_family_metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)

@@ -193,6 +193,10 @@ class CatalogDtoTests(unittest.TestCase):
         self.assertIn("DEVELOPMENT.md", fastp.execution_verification.evidence)
         self.assertEqual(fastp.runtime.docker, "quay.io/biocontainers/fastp:1.3.3--h43da1c4_0")
         self.assertIn("clean_r1", fastp.outputs)
+        tool_ids = {tool.id for tool in response.tools}
+        self.assertTrue(
+            {"bwa_mem2", "bcftools_call", "bcftools_filter"}.issubset(tool_ids)
+        )
 
 
 class EventDtoTests(unittest.TestCase):
