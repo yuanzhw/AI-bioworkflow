@@ -15,7 +15,7 @@ inputs:
   unfiltered_vcf:
     type: File
     required: true
-    description: BGZF-compressed VCF containing unfiltered germline variant calls.
+    description: BGZF-compressed germline VCF; every variant record must include INFO/DP.
   unfiltered_vcf_index:
     type: File
     required: true
@@ -62,6 +62,10 @@ command_template: |
   set -euo pipefail;
   ln -sf "~{unfiltered_vcf}" unfiltered.vcf.gz;
   ln -sf "~{unfiltered_vcf_index}" unfiltered.vcf.gz.csi;
+  bcftools query
+  --format '%CHROM\t%POS\t%INFO/DP\n'
+  unfiltered.vcf.gz
+  | awk -F '\t' '$3 == "." && !missing_depth { print "bcftools_filter: missing INFO/DP at " $1 ":" $2 > "/dev/stderr"; missing_depth = 1 } END { exit missing_depth ? 1 : 0 }';
   bcftools filter
   --threads ~{threads}
   --include 'QUAL>=~{min_qual} && INFO/DP>=~{min_depth}'

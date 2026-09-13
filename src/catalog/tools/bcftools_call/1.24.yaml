@@ -52,7 +52,7 @@ outputs:
   unfiltered_vcf:
     type: File
     value: '"unfiltered.vcf.gz"'
-    description: BGZF-compressed VCF containing unfiltered germline SNV and indel calls.
+    description: BGZF-compressed VCF containing unfiltered germline SNV and indel calls; every variant record includes INFO/DP.
   unfiltered_vcf_index:
     type: File
     value: '"unfiltered.vcf.gz.csi"'

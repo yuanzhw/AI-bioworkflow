@@ -112,8 +112,16 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertEqual(bcftools_call["version"], "1.24")
         self.assertIn("reference_fai", bcftools_call["inputs"])
         self.assertIn("unfiltered_vcf_index", bcftools_call["outputs"])
+        self.assertIn(
+            "record includes INFO/DP",
+            bcftools_call["outputs"]["unfiltered_vcf"]["description"],
+        )
         self.assertEqual(bcftools_filter["params"]["min_qual"]["default"], 20.0)
         self.assertIn("filtered_vcf_index", bcftools_filter["outputs"])
+        self.assertIn(
+            "record must include INFO/DP",
+            bcftools_filter["inputs"]["unfiltered_vcf"]["description"],
+        )
         for tool in (bwa_mem2, bcftools_call, bcftools_filter):
             self.assertEqual(tool["trust_status"], "catalog-approved")
             self.assertEqual(

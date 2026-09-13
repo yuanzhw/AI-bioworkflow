@@ -315,8 +315,18 @@ class CatalogDefinitionTests(unittest.TestCase):
         bcftools_call = tool_catalog.get("bcftools_call", "1.24")
         self.assertEqual(bcftools_call.params["ploidy"].choices, [1, 2])
         self.assertEqual(bcftools_call.outputs["call_stats"].tags, ["multiqc_input"])
+        self.assertIn(
+            "record includes INFO/DP",
+            bcftools_call.outputs["unfiltered_vcf"].description,
+        )
         bcftools_filter = tool_catalog.get("bcftools_filter", "1.24")
         self.assertEqual(bcftools_filter.outputs["filter_stats"].tags, ["multiqc_input"])
+        self.assertIn(
+            "record must include INFO/DP",
+            bcftools_filter.inputs["unfiltered_vcf"].description,
+        )
+        self.assertIn("%INFO/DP", bcftools_filter.command_template)
+        self.assertIn("missing INFO/DP", bcftools_filter.command_template)
 
     def test_tool_spec_requires_execution_verification(self):
         tool_data = load_tool_catalog().get("fastp", "1.3.3").model_dump(mode="python")
@@ -580,7 +590,11 @@ class CatalogResolutionTests(unittest.TestCase):
         self.assertIn("bwa-mem2 mem", wdl)
         self.assertIn("bcftools mpileup", wdl)
         self.assertIn("| bcftools call", wdl)
+        self.assertIn("bcftools query", wdl)
+        self.assertIn("%INFO/DP", wdl)
+        self.assertIn("bcftools_filter: missing INFO/DP", wdl)
         self.assertIn("bcftools filter", wdl)
+        self.assertLess(wdl.index("bcftools query"), wdl.index("bcftools filter"))
         self.assertIn("max_depth = 5000", wdl)
         self.assertIn("ploidy = 2", wdl)
         self.assertIn("min_qual = 30.0", wdl)

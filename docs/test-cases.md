@@ -1642,8 +1642,9 @@ MACS2 call。
 - BWA-MEM2 task 解包 index archive，并从 `.0123` 文件确定 index prefix。
 - `sample_id` 通过 WDL `write_lines` materialization 跨过 WDL-to-shell 边界，shell
   仅在双引号参数中展开读取到的变量，不直接执行 WDL string interpolation。
-- BCFtools calling task 使用 `mpileup | call`，filtering task 使用 bounded
-  `QUAL`/`INFO/DP` expression。
+- BCFtools calling task 使用 `mpileup | call` 并将默认生成的 site-level `INFO/DP`
+  声明为输出契约；filtering task 在使用 bounded `QUAL`/`INFO/DP` expression 前验证
+  每条变异记录都具有该深度值。空 callset 可以通过该检查。
 - sample id、threads、max depth、ploidy、minimum QUAL 和 minimum depth 参数进入 WDL。
 - MultiQC 未显式传入 `report_files` 时，resolver 自动收集 fastp HTML/JSON、BWA-MEM2
   alignment log、BCFtools calling stats 和 filtering stats 的 `multiqc_input` tags。
@@ -2528,6 +2529,8 @@ admission、compile readiness 和 execution evidence。
 - 返回版本分别为 `2.3`、`1.24` 和 `1.24`，runtime 为固定 BioContainers tags。
 - API-ready metadata 保留 alignment、reference sidecar、VCF index、参数和 output
   schemas。
+- `bcftools_call` 的 VCF output 与 `bcftools_filter` 的 VCF input 通过 site-level
+  `INFO/DP` 描述公开一致的 producer/consumer 契约。
 - 三个工具均为 `catalog-approved`，execution verification 为 `unverified` 且
   evidence 为空。
 
