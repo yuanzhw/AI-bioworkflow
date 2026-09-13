@@ -474,14 +474,224 @@
     "notes": "Negative case: trajectory inference and RNA velocity are outside the bounded scRNA-seq recipe."
   },
   {
-    "id": "unsupported_variant_calling_en",
-    "query": "Call germline variants from WES BAM files and produce a filtered VCF.",
+    "id": "germline_variant_calling_basic_en",
+    "query": "Call germline SNVs and short indels from paired-end WES FASTQ files, hard-filter the VCF, and produce a workflow QC report.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["fastp", "bwa_mem2", "samtools", "bcftools_call", "bcftools_filter", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Complete supported germline short-variant request without explicit tool names."
+  },
+  {
+    "id": "germline_variant_calling_explicit_tools_en",
+    "query": "Use fastp, BWA-MEM2, samtools, BCFtools mpileup and call, BCFtools filter, and MultiQC for paired-end germline variant calling.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["fastp", "bwa_mem2", "samtools", "bcftools_call", "bcftools_filter", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported request naming every tool in the bounded recipe."
+  },
+  {
+    "id": "germline_variant_calling_cn_mixed",
+    "query": "对 paired-end WGS FASTQ 做 fastp 质控，用 BWA-MEM2 比对，samtools 排序建索引，再用 BCFtools call 和 filter 得到 germline SNV/indel VCF，最后汇总 MultiQC。",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["fastp", "bwa_mem2", "samtools", "bcftools_call", "bcftools_filter", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Chinese request with common English variant-calling tool and artifact names."
+  },
+  {
+    "id": "germline_variant_calling_goal_only_en",
+    "query": "Find inherited single-nucleotide variants and short insertions or deletions from paired-end whole-genome reads and retain high-confidence calls.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["bwa_mem2", "samtools", "bcftools_call", "bcftools_filter"],
+    "expected_roles": {
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"]
+    },
+    "notes": "Goal-oriented request using domain language instead of tool names."
+  },
+  {
+    "id": "germline_variant_calling_fastq_to_vcf_en",
+    "query": "Create a paired-end FASTQ-to-VCF workflow with read trimming, reference alignment, coordinate-sorted BAM preparation, germline calling, and hard filtering.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["fastp", "bwa_mem2", "samtools", "bcftools_call", "bcftools_filter"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"]
+    },
+    "notes": "Supported request emphasizing the complete artifact transition from FASTQ to VCF."
+  },
+  {
+    "id": "germline_variant_calling_reference_inputs_en",
+    "query": "Align paired WES reads with a prebuilt BWA-MEM2 index, then call germline variants using the matching reference FASTA and FAI.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["bwa_mem2", "samtools", "bcftools_call"],
+    "expected_roles": {
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"]
+    },
+    "notes": "Supported request emphasizing the recipe's explicit reference inputs."
+  },
+  {
+    "id": "germline_variant_calling_call_params_en",
+    "query": "Call diploid germline SNVs and indels with BCFtools using four threads, ploidy two, and maximum pileup depth 5000.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["bcftools_call"],
+    "expected_roles": {
+      "germline_small_variant_calling": ["bcftools_call"]
+    },
+    "notes": "Supported partial request focused on bounded calling parameters."
+  },
+  {
+    "id": "germline_variant_calling_filter_params_en",
+    "query": "Hard-filter the compressed germline VCF with BCFtools, retaining sites with QUAL at least 30 and INFO depth at least 12, then index it with CSI.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["bcftools_filter"],
+    "expected_roles": {
+      "germline_variant_filtering": ["bcftools_filter"]
+    },
+    "notes": "Supported partial request focused on bounded filtering parameters and VCF indexing."
+  },
+  {
+    "id": "germline_variant_calling_bam_vcf_outputs_en",
+    "query": "For a paired-end germline FASTQ workflow, emit a coordinate-sorted BAM and BAI plus unfiltered and filtered bgzipped VCF files with CSI indexes.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["samtools", "bcftools_call", "bcftools_filter"],
+    "expected_roles": {
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"]
+    },
+    "notes": "Supported request centered on BAM, VCF, and sidecar output contracts."
+  },
+  {
+    "id": "germline_variant_calling_qc_summary_en",
+    "query": "Summarize paired FASTQ quality, BWA-MEM2 alignment diagnostics, and BCFtools call and filter statistics in a MultiQC germline workflow report.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["fastp", "bwa_mem2", "bcftools_call", "bcftools_filter", "multiqc"],
+    "expected_roles": {
+      "read_quality_control": ["fastp"],
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"],
+      "quality_control_summary": ["multiqc"]
+    },
+    "notes": "Supported request focused on tagged QC artifacts and summary reporting."
+  },
+  {
+    "id": "cross_family_variant_not_chipseq_en",
+    "query": "Call inherited SNVs and short indels with BWA-MEM2 and BCFtools from WGS reads rather than calling MACS2 ChIP-seq peaks.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["bwa_mem2", "samtools", "bcftools_call", "bcftools_filter"],
+    "expected_roles": {
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"]
+    },
+    "notes": "Cross-family confusion case distinguishing germline variants from ChIP-seq peaks."
+  },
+  {
+    "id": "cross_family_variant_not_rnaseq_en",
+    "query": "Generate a hard-filtered genomic VCF with BWA-MEM2 and BCFtools instead of quantifying RNA expression with Salmon and DESeq2.",
+    "supported": true,
+    "workflow_family": "variant_calling",
+    "expected_recipe": "germline_short_variant_calling",
+    "expected_tools": ["bwa_mem2", "samtools", "bcftools_call", "bcftools_filter"],
+    "expected_roles": {
+      "germline_short_read_alignment": ["bwa_mem2"],
+      "bam_sort_and_index": ["samtools"],
+      "germline_small_variant_calling": ["bcftools_call"],
+      "germline_variant_filtering": ["bcftools_filter"]
+    },
+    "notes": "Cross-family confusion case distinguishing genomic variant calling from RNA-seq expression analysis."
+  },
+  {
+    "id": "unsupported_variant_bam_entry_en",
+    "query": "Start from an existing WES BAM file, call germline variants, and produce a filtered VCF without FASTQ alignment.",
     "supported": false,
     "workflow_family": "variant_calling",
     "expected_recipe": null,
     "expected_tools": [],
     "expected_roles": {},
-    "notes": "Negative case: variant calling tools are approved, but no formal variant calling recipe is available yet."
+    "notes": "Negative case: the bounded recipe requires paired FASTQ and does not support a BAM-only entry point."
+  },
+  {
+    "id": "unsupported_variant_somatic_tumor_normal_en",
+    "query": "Call somatic variants from matched tumor and normal samples, estimate contamination, and filter the tumor VCF.",
+    "supported": false,
+    "workflow_family": "variant_calling",
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: somatic tumor-normal calling is outside the germline single-sample recipe."
+  },
+  {
+    "id": "unsupported_variant_bqsr_joint_genotyping_en",
+    "query": "Run GATK BQSR and VQSR, create per-sample gVCFs, and jointly genotype a germline cohort.",
+    "supported": false,
+    "workflow_family": "variant_calling",
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: recalibration, gVCF production, and cohort joint genotyping are deferred."
+  },
+  {
+    "id": "unsupported_variant_long_read_structural_en",
+    "query": "Detect long-read structural variants and copy-number changes from PacBio HiFi alignments.",
+    "supported": false,
+    "workflow_family": "variant_calling",
+    "expected_recipe": null,
+    "expected_tools": [],
+    "expected_roles": {},
+    "notes": "Negative case: long-read, structural-variant, and CNV workflows are outside the bounded recipe."
   },
   {
     "id": "unsupported_metagenomics_cn",
@@ -611,5 +821,33 @@
       "differential_expression": ["deseq2"]
     },
     "notes": "Cross-family confusion case that distinguishes bulk differential expression from single-cell clustering."
+  },
+  {
+    "id": "cross_family_chipseq_not_variant_en",
+    "query": "Call narrow MACS2 binding peaks from ChIP-seq alignments rather than calling germline SNVs and indels with BCFtools.",
+    "supported": true,
+    "workflow_family": "chipseq",
+    "expected_recipe": "chipseq_peak_calling",
+    "expected_tools": ["bowtie2", "samtools", "macs2"],
+    "expected_roles": {
+      "genome_alignment": ["bowtie2"],
+      "bam_sort_and_index": ["samtools"],
+      "peak_calling": ["macs2"]
+    },
+    "notes": "Cross-family confusion case distinguishing ChIP-seq peaks from genomic variant calls."
+  },
+  {
+    "id": "cross_family_rnaseq_not_variant_en",
+    "query": "Quantify transcripts and compare bulk RNA-seq expression with Salmon, tximport, and DESeq2 rather than producing a genomic VCF with BCFtools.",
+    "supported": true,
+    "workflow_family": "bulk_rnaseq",
+    "expected_recipe": "rnaseq_differential_expression",
+    "expected_tools": ["salmon", "tximport", "deseq2"],
+    "expected_roles": {
+      "expression_quantification": ["salmon"],
+      "transcript_to_gene_count_summary": ["tximport"],
+      "differential_expression": ["deseq2"]
+    },
+    "notes": "Cross-family confusion case distinguishing bulk expression analysis from genomic variant calling."
   }
 ]

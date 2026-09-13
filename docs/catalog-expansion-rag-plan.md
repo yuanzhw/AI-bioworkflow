@@ -39,11 +39,13 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
 
 当前 approved Catalog 包含：
 
-- 4 个 recipe，覆盖 bulk RNA-seq、ChIP-seq 和 scRNA-seq 三个 family：
+- 5 个 recipe，覆盖 bulk RNA-seq、ChIP-seq、scRNA-seq 和 variant calling 四个
+  family：
   - `rnaseq_differential_expression`
   - `rnaseq_reference_preparation`
   - `chipseq_peak_calling`
   - `scrnaseq_qc_clustering`
+  - `germline_short_variant_calling`
 - 16 个 tool：
   - `fastp`
   - `salmon`
@@ -61,12 +63,13 @@ workflow 科学范围、参数数量和执行验证深度，不是 ToolSpec 契�
   - `bwa_mem2`
   - `bcftools_call`
   - `bcftools_filter`
-- 47 条带 `workflow_family` 标签的 retrieval query：
-  - 22 条 supported bulk RNA-seq query。
-  - 6 条 supported ChIP-seq query。
+- 64 条带 `workflow_family` 标签的 retrieval query：
+  - 23 条 supported bulk RNA-seq query。
+  - 7 条 supported ChIP-seq query。
   - 14 条 supported scRNA-seq query。
-  - 5 条 unsupported negative query，覆盖 ChIP-seq peak annotation、scRNA-seq
-    deferred scope、variant calling 和 metagenomics。
+  - 12 条 supported germline short variant calling query。
+  - 8 条 unsupported negative query，覆盖 ChIP-seq peak annotation、scRNA-seq
+    deferred scope、variant calling deferred/entry-point scope 和 metagenomics。
 
 `chipseq_peak_calling` 已达到 compile-ready：正式 example plan 可以经 Resolver、
 Analyzer 和 Renderer 生成 WDL，并已通过 WOMtool 92 syntax validation。其第一版范围
@@ -81,27 +84,28 @@ example plan 和 family-labeled retrieval cases。代表性 WDL 已通过 WOMtoo
 validation。工具仍保持 `unverified`，compile-ready 不表示镜像已发布或完成真实执行。
 
 PR 5A 已加入 `bwa_mem2@2.3`、`bcftools_call@1.24` 和
-`bcftools_filter@1.24` 的完整 ToolSpec，并复用 `samtools@1.24`。测试专用 recipe
-probe 生成的代表性 WDL 已通过 WOMtool 92 syntax validation。三个新工具使用已根据
-上游 release 和 Quay registry 核实存在的固定 BioContainers tag，但未进行 image
-pull、smoke test 或真实数据执行，因此均保持 `unverified`。正式 variant calling
-recipe 尚未加入，现有 variant query 继续是 unsupported negative case。
+`bcftools_filter@1.24` 的完整 ToolSpec，并复用 `samtools@1.24`。PR 5B 已加入正式
+`germline_short_variant_calling` recipe 和结构化 example plan，覆盖单个 paired-end
+样本的 `fastp -> bwa_mem2 -> samtools -> bcftools call -> bcftools filter -> multiqc`
+编译路径，代表性 WDL 已通过 WOMtool 92 syntax validation。三个新工具使用已核实存在
+的固定 BioContainers tag，但未进行 image pull、smoke test 或真实数据执行，因此均
+保持 `unverified`。
 
-当前 47-query `lexical_v1` baseline 为：Recipe Recall@1 `0.8333`、Recipe
-Recall@3 `1.0000`、Recipe MRR `0.9048`；16-tool checkpoint 的 Tool Recall@3
-`0.7492`、Tool Recall@5 `0.8226`、Tool Recall@8 `0.9016`、Tool MRR `0.8363`、
-Raw Role Coverage `0.8984`。Planner Context Tool Recall 和 Planner Context Role
+当前 64-query `lexical_v1` baseline 为：Recipe Recall@1 `0.8571`、Recipe
+Recall@3 `0.9821`、Recipe MRR `0.9137`；16-tool checkpoint 的 Tool Recall@3
+`0.7128`、Tool Recall@5 `0.7973`、Tool Recall@8 `0.9158`、Tool MRR `0.8549`、
+Raw Role Coverage `0.9134`。Planner Context Tool Recall 和 Planner Context Role
 Coverage 均为 `1.0000`。Supported Fallback Rate 为 `0.0000`，Unsupported
-Direct-Match Rate 为 `0.8000`。
+Direct-Match Rate 为 `0.8750`。
 
-Family-level 结果显示：ChIP-seq、scRNA-seq 和 bulk RNA-seq Recipe Recall@1 分别为
-`1.0000`、`0.9286` 和 `0.7273`；三个 supported family 的 macro Recipe Recall@1 为
-`0.8853`，macro Tool Recall@3/5 分别为 `0.7205` / `0.8070`。两条双向 bulk/scRNA
-confusion query 都将否定侧 workflow 排在目标 recipe 前，形成了明确的 lexical
-ranking miss；目标 recipe 仍在 top-3，且 Planner context 能通过 recipe allowed tools
-补齐所需角色。新增 variant metadata 使 ChIP-seq Tool Recall@5 从 `0.7694` 降至
-`0.6694`，形成新的 cross-family crowding 信号；当前仍缺少正式 variant calling
-recipe，因此暂不启动 R3 vector / hybrid backend。
+Family-level 结果显示：bulk RNA-seq、ChIP-seq、scRNA-seq 和 variant calling 的
+Recipe Recall@1 分别为 `0.7391`、`0.8571`、`0.9286` 和 `1.0000`；四个 supported
+family 的 macro Recipe Recall@1 为 `0.8812`，macro Tool Recall@3/5 分别为
+`0.6962` / `0.7902`。Variant calling 的 Tool Recall@5 为 `0.7583`，但 recipe
+expanded Planner context 可补齐完整工具与 role。双向 confusion queries 继续表明
+lexical scorer 会受到否定侧 workflow 词汇干扰，且现有 8 条 unsupported query 中有
+7 条产生 direct match。四个 family 已具备可比较 baseline，下一步由 PR 6 汇总 miss
+类别并明确 R3 lexical / vector / hybrid 决策。
 
 ## Goals
 
@@ -417,19 +421,21 @@ PR 5A 已新增 compile-ready 工具：
 - `quay.io/biocontainers/bcftools:1.24--h118bc1c_2`
 
 这些 tag 已核实存在，但三个工具尚无 smoke test 或真实 execution evidence，均保持
-`unverified`。PR 5A 只准入工具契约；正式 recipe 和 query 转正留给 PR 5B。
+`unverified`。PR 5A 只准入工具契约；PR 5B 已补齐正式 recipe、example plan 和
+family retrieval baseline，但没有改变 execution verification。
 
 ### Inputs And Outputs
 
-建议输入：
+当前正式输入：
 
-- sample ids。
-- paired-end FASTQ。
-- reference FASTA。
-- prebuilt BWA index 或显式 reference bundle。
-- ploidy 和基础过滤参数。
+- 单个样本的 paired-end FASTQ。
+- prebuilt BWA-MEM2 index archive。
+- reference FASTA 和对应 FAI sidecar。
 
-建议输出：
+`sample_id`、ploidy、max depth 和基础过滤阈值是 example plan 中显式、受 ToolSpec
+约束的 literal params，不伪装成当前 resolver 尚不支持的动态 workflow inputs。
+
+当前正式输出：
 
 - aligned and sorted BAM。
 - BAM index。
@@ -459,8 +465,9 @@ Variant calling query 应覆盖：
 - 与 ChIP-seq 共享的 alignment/BAM 描述。
 - 与 RNA-seq 共享的 paired-end FASTQ 和 QC 描述。
 
-当前 variant calling unsupported negative query 在该 family 落地后转为
-supported。
+原 generic variant calling negative query 已改写为 paired-end FASTQ 起点并转为
+supported。BAM-only entry point、somatic tumor/normal、BQSR/VQSR 与 joint genotyping、
+long-read/CNV/SV 继续作为明确 unsupported 边界。
 
 ## Retrieval Evaluation Expansion
 
@@ -472,8 +479,8 @@ Query fixture 从最初的 24 条单 family baseline 分阶段扩展：
 | --- | ---: | ---: | --- |
 | Current R2 | 20 | 4 | RNA-seq baseline |
 | After ChIP-seq | 27 | 4 | First cross-family ranking |
-| After scRNA-seq (current) | 42 | 5 | Bulk/single-cell disambiguation |
-| After variant calling | 55-70 | 6-10 | Multi-family retrieval |
+| After scRNA-seq | 42 | 5 | Bulk/single-cell disambiguation |
+| After variant calling (current) | 56 | 8 | Multi-family retrieval |
 
 新增 query 应包含：
 
@@ -613,12 +620,14 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - 已记录 47-query、16-tool intermediate checkpoint；Planner Context Tool Recall 和
   Role Coverage 仍均为 `1.0000`。
 
-### PR 5B: Variant Calling Recipe And Retrieval Baseline
+### PR 5B: Variant Calling Recipe And Retrieval Baseline（已实现）
 
-- 加入 `germline_short_variant_calling` 和结构化 example plan。
-- 增加 FASTQ/BAM/VCF supported、unsupported 和 confusion cases。
-- 将现有 generic variant calling negative query 转为 supported，并记录第四个 family
-  baseline。
+- 已加入 `germline_short_variant_calling` 和结构化 example plan。
+- 已增加 FASTQ/BAM/VCF supported、unsupported 和双向 confusion cases。
+- 已将原 generic variant calling negative query 改写为 FASTQ 起点并转为 supported，
+  同时保留 BAM-only entry point 负例。
+- 当前 baseline 覆盖 64 条 query、四个 supported workflow family；Planner Context
+  Tool Recall 和 Role Coverage 均为 `1.0000`。
 
 ### PR 6: Cross-family Baseline And R3 Decision
 
@@ -683,14 +692,13 @@ recipe resolution、Workflow IR 或 WDL 输出时，还应：
 
 ## Immediate Next Step
 
-Tool Capability And Verification Contract、简化版 ChIP-seq Catalog/recipe、首次
-跨 family lexical baseline，以及 scRNA-seq tool contract、正式 recipe 和 47-query
-baseline 已落地；variant calling 的三个 compile-ready tool contracts 和 16-tool
-intermediate checkpoint 也已完成。下一项工作是 PR 5B：加入正式
-`germline_short_variant_calling`、结构化 example plan，并增加 FASTQ/BAM/VCF
-retrieval cases。
+Tool Capability And Verification Contract、ChIP-seq、scRNA-seq 和 germline short
+variant calling 的 compile-ready Catalog/recipe 以及 64-query、four-family lexical
+baseline 均已落地。下一项工作是 PR 6：汇总 cross-family confusion、raw retrieval
+miss 和 unsupported direct-match 类别，并用同一 evaluation contract 明确继续优化
+lexical，还是进入 vector / hybrid prototype。
 
-PR 5B 不改变三个新工具的 `unverified` 状态，也不扩张到 BQSR/VQSR、joint
-genotyping、somatic、CNV/SV 或 long-read calling。Variant calling family baseline
-合并后，再推进 PR 6 的 four-family 汇总、confusion analysis 与 R3 lexical / vector /
-hybrid 决策。
+PR 6 不改变三个 variant calling 工具的 `unverified` 状态，也不扩张到 BQSR/VQSR、
+joint genotyping、somatic、CNV/SV 或 long-read calling。若选择 vector / hybrid，必须
+继续只检索 Approved Catalog，并保持现有 retrieval artifact 与全量 Catalog validation
+边界。

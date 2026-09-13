@@ -53,7 +53,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 `
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -v
-Ran 313 tests
+Ran 314 tests
 OK (skipped=2)
 ```
 
@@ -313,7 +313,8 @@ OK (skipped=2)
 - 可以按 id 找到 `rnaseq_differential_expression`。
 - `sample_ids` required input 类型为 `Array[String]`。
 - 第一个 step 的 allowed tools 为 `["fastp"]`。
-- recipe id 集合包含 `chipseq_peak_calling` 和 `scrnaseq_qc_clustering`。
+- recipe id 集合包含 `chipseq_peak_calling`、`scrnaseq_qc_clustering` 和
+  `germline_short_variant_calling`。
 
 覆盖点：
 
@@ -422,7 +423,8 @@ OK (skipped=2)
 - `catalog_service.list_recipes()` 被调用一次。
 - 响应中至少有一个 recipe。
 - 响应 recipe id 集合包含 `rnaseq_differential_expression`、
-  `chipseq_peak_calling` 和 `scrnaseq_qc_clustering`。
+  `chipseq_peak_calling`、`scrnaseq_qc_clustering` 和
+  `germline_short_variant_calling`。
 
 覆盖点：
 
@@ -1619,44 +1621,52 @@ MACS2 call。
 覆盖点：正式 scRNA-seq compile path 的 runtime、inputs、command 和 outputs 能组成
 合法 WDL 1.0 task；该语法验证不构成容器执行证据。
 
-### `test_variant_calling_tool_contracts_resolve_to_valid_renderable_ir`
+### `test_germline_short_variant_calling_recipe_resolves_to_valid_renderable_ir`
 
 输入：
 
-- 测试专用、不会进入正式 Recipe Catalog 的 variant calling probe recipe。
-- 串联 `bwa_mem2 -> samtools -> bcftools_call -> bcftools_filter` 的 Tool Plan。
-- paired-end FASTQ、BWA-MEM2 index archive、reference FASTA/FAI，以及显式 calling
-  和 filtering 参数。
+- 正式 `germline_short_variant_calling` recipe。
+- `examples/germline_short_variant_calling_recipe_plan.json` 中串联
+  `fastp -> bwa_mem2 -> samtools -> bcftools_call -> bcftools_filter -> multiqc` 的单样本
+  Recipe Tool Plan。
+- paired-end FASTQ、BWA-MEM2 index archive、reference FASTA/FAI，以及显式 QC、
+  alignment、calling 和 filtering 参数。
 
 执行：通过正式 resolver、Analyzer 和 WDL renderer 生成代表性 WDL。
 
 期望输出：
 
 - Analyzer 返回 `is_valid=True`。
-- 四个 task 和 call 均进入 IR/WDL，SAM、sorted BAM/BAI、unfiltered VCF/CSI 的依赖
-  连线保持显式。
+- 六个 task 和 call 均进入 IR/WDL；cleaned FASTQ、SAM、sorted BAM/BAI、unfiltered
+  VCF/CSI 的依赖连线保持显式。
 - BWA-MEM2 task 解包 index archive，并从 `.0123` 文件确定 index prefix。
 - `sample_id` 通过 WDL `write_lines` materialization 跨过 WDL-to-shell 边界，shell
   仅在双引号参数中展开读取到的变量，不直接执行 WDL string interpolation。
-- BCFtools calling task 使用 `mpileup | call`，filtering task 使用 bounded
-  `QUAL`/`INFO/DP` expression。
+- BCFtools calling task 使用 `mpileup | call` 并将默认生成的 site-level `INFO/DP`
+  声明为输出契约；filtering task 在使用 bounded `QUAL`/`INFO/DP` expression 前验证
+  每条变异记录都具有该深度值。空 callset 可以通过该检查。
 - sample id、threads、max depth、ploidy、minimum QUAL 和 minimum depth 参数进入 WDL。
-- workflow outputs 暴露 alignment log、filtered VCF/CSI、calling stats 和 filtering
-  stats。
+- MultiQC 未显式传入 `report_files` 时，resolver 自动收集 fastp HTML/JSON、BWA-MEM2
+  alignment log、BCFtools calling stats 和 filtering stats 的 `multiqc_input` tags。
+- workflow outputs 暴露 sorted BAM/BAI、unfiltered VCF/CSI、filtered VCF/CSI 和
+  MultiQC report。
 
-覆盖点：三个新 ToolSpec 能在不增加正式 recipe、也不绕过 Recipe Tool Plan / Workflow
-IR 边界的前提下组成可解析、可分析和可确定性渲染的契约链。
+覆盖点：正式 variant calling recipe 能在不绕过 Recipe Tool Plan / Workflow IR 边界的
+前提下组成可解析、可分析和可确定性渲染的完整 compile-ready 链路；产品范围限定为
+单个 paired-end FASTQ germline sample。
 
-### `test_variant_calling_tool_contract_wdl_passes_syntax_validation`
+### `test_germline_short_variant_calling_wdl_passes_syntax_validation`
 
-输入：与上一测试相同的测试专用 recipe、Tool Plan 和正式 Tool Catalog。
+输入：与上一测试相同的正式 recipe、example plan 和 Tool Catalog。
 
 期望输出：统一 WDL validator 返回 `is_valid=True`；本地无 validator 时按现有约定
 跳过。
 
-覆盖点：PR 5A 的 runtime、sidecar inputs、commands 和 outputs 能组成合法 WDL 1.0；
-该验证只证明 compile readiness，不把三个工具升级为已执行验证，也不把测试专用
-recipe 暴露为产品能力。
+覆盖点：正式 variant calling compile path 的 runtime、sidecar inputs、commands 和
+outputs 能组成合法 WDL 1.0；该验证只证明 compile readiness，不把三个 PR 5A 工具
+升级为已执行验证。
+
+本次正式 recipe admission 使用 WOMtool 92 实际执行该测试并通过。
 
 ### `test_rnaseq_de_tool_alternatives_resolve_to_valid_wdl`
 
@@ -2024,20 +2034,20 @@ marker genes 的 scRNA-seq query。
 覆盖点：正式 recipe 加入后，Retriever 能召回 scRNA-seq workflow family，同时不会把
 compile-ready tool 的可检索性误写成执行验证。
 
-### `test_retrieves_variant_calling_tools_without_claiming_recipe_support`
+### `test_retrieves_variant_calling_recipe_and_compile_ready_tools`
 
 输入：显式请求 BWA-MEM2 alignment、samtools sort/index、BCFtools mpileup/call 和
 hard filtering 的 paired-end germline variant calling query。
 
 期望输出：
 
-- 不触发 fallback，top-8 tools 包含 `bwa_mem2`、`bcftools_call` 和
+- 不触发 fallback，top-8 tools 包含 `bwa_mem2`、`samtools`、`bcftools_call` 和
   `bcftools_filter`。
+- 首位 recipe 为 `germline_short_variant_calling`。
 - 三个新工具的 execution verification 均保持 `unverified`。
-- recipe 结果不包含尚未建立的 `germline_short_variant_calling`。
 
-覆盖点：PR 5A 让 variant calling 工具进入 Approved Catalog retrieval surface，同时
-保持“可检索工具”和“正式支持 workflow family”的能力边界。
+覆盖点：PR 5B 让正式 variant calling recipe 进入 Approved Catalog retrieval surface，
+同时保持“compile-ready workflow”和“已完成真实执行验证”的能力边界。
 
 ### `test_tokenizer_supports_sequencing_variants_and_cjk_ngrams`
 
@@ -2105,9 +2115,9 @@ hard filtering 的 paired-end germline variant calling query。
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
-fixture，调用当前 16-tool Approved Catalog Retriever，并计算 expanded RNA-seq、
-ChIP-seq 与 scRNA-seq 的 cross-family baseline metrics。Fixture 不伪造正式 recipe；
-unsupported 负例单独统计，不污染 supported recall。
+fixture，调用当前 16-tool Approved Catalog Retriever，并计算 bulk RNA-seq、ChIP-seq、
+scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负例单独
+统计，不污染 supported recall。
 
 ### `test_loads_current_catalog_query_fixture`
 
@@ -2121,8 +2131,8 @@ unsupported 负例单独统计，不污染 supported recall。
 
 期望输出：
 
-- fixture 共 47 条 query。
-- 42 条 `supported == True`，5 条 `supported == False`。
+- fixture 共 64 条 query。
+- 56 条 `supported == True`，8 条 `supported == False`。
 - 每条 query 都包含必填 `workflow_family`。
 - 第一条 query id 为 `rnaseq_deg_basic_en`。
 - 第一条 query 的 expected tools 包含 `fastp`。
@@ -2131,7 +2141,7 @@ unsupported 负例单独统计，不污染 supported recall。
 - 显式指定 DESeq2 的 query 将 `deseq2` 记录为 required expected tool。
 - 未指定 differential expression backend 的 query 允许 `deseq2`、`edger`
   或 `limma_voom` 任一 approved tool 覆盖该 role。
-- fixture 包含 6 条 supported ChIP-seq query；其 expected recipe 为
+- fixture 包含 7 条 supported ChIP-seq query；其 expected recipe 为
   `chipseq_peak_calling`，expected tools 包含 `macs2`。
 - `unsupported_chipseq_peak_annotation_en` 保留为 ChIP-seq family 的负例。
 - fixture 包含 14 条 supported scRNA-seq query；其 expected recipe 为
@@ -2139,14 +2149,18 @@ unsupported 负例单独统计，不污染 supported recall。
 - `unsupported_scrnaseq_batch_integration_en` 和
   `unsupported_scrnaseq_trajectory_velocity_en` 保留 scRNA-seq deferred scope 边界。
 - fixture 包含双向 bulk/scRNA confusion queries。
-- `unsupported_variant_calling_en` 在三个工具获准后仍保持 unsupported，因为正式
-  variant calling recipe 尚未建立。
+- fixture 包含 12 条 supported variant calling query；其 expected recipe 为
+  `germline_short_variant_calling`，并覆盖 BWA-MEM2、samtools、BCFtools calling/
+  filtering 和 MultiQC roles。
+- `unsupported_variant_bam_entry_en` 与 somatic、advanced germline 和 long-read/SV
+  负例保留正式 recipe 之外的产品边界。
+- fixture 包含 ChIP-seq/variant calling 和 bulk RNA-seq/variant calling 的双向
+  confusion queries。
 
 覆盖点：
 
 - R2 query set schema 可被稳定读取。
-- 当前 baseline 明确区分 supported bulk RNA-seq / ChIP-seq / scRNA-seq 查询和
-  unsupported 负例。
+- 当前 baseline 明确区分四个 supported workflow family 和 unsupported 负例。
 - Fixture 标注明确区分显式 tool intent 和通用 role intent。
 
 ### `test_evaluates_current_catalog_baseline`
@@ -2166,21 +2180,24 @@ unsupported 负例单独统计，不污染 supported recall。
 - `strategy == "lexical_v1"`。
 - `top_k_recipes == 3`。
 - `top_k_tools == 8`。
-- `query_count == 47`。
-- `supported_query_count == 42`。
-- `unsupported_query_count == 5`。
+- `query_count == 64`。
+- `supported_query_count == 56`。
+- `unsupported_query_count == 8`。
 - 每个 metric 均为 0 到 1 之间的稳定数值。
-- overall Recipe Recall@1 为 `0.8333`，Tool Recall@5 为 `0.8226`。
+- overall Recipe Recall@1 / @3 为 `0.8571` / `0.9821`，Tool Recall@5 为
+  `0.7973`。
 - `planner_context_tool_recall == 1.0`。
 - `planner_context_role_coverage == 1.0`。
-- Unsupported Direct-Match Rate 为 `0.8000`。
+- Unsupported Direct-Match Rate 为 `0.8750`。
 - `family_metrics` 包含 `bulk_rnaseq`、`chipseq`、`scrnaseq`、
   `variant_calling` 和 `metagenomics`。
-- bulk RNA-seq family 共 22 条 query；ChIP-seq family 共 7 条，其中 6 条 supported。
+- bulk RNA-seq family 共 23 条 query；ChIP-seq family 共 8 条，其中 7 条 supported。
 - scRNA-seq family 共 16 条 query，其中 14 条 supported；Recipe Recall@1 为
   `0.9286`，Tool Recall@5 为 `1.0000`。
-- bulk RNA-seq Tool Recall@5 为 `0.7515`，ChIP-seq Tool Recall@5 为 `0.6694`。
-- macro Recipe Recall@1 为 `0.8853`，macro Tool Recall@5 为 `0.8070`。
+- variant calling family 共 16 条 query，其中 12 条 supported；Recipe Recall@1 为
+  `1.0000`，Tool Recall@5 为 `0.7583`。
+- bulk RNA-seq Tool Recall@5 为 `0.7333`，ChIP-seq Tool Recall@5 为 `0.6690`。
+- macro Recipe Recall@1 为 `0.8812`，macro Tool Recall@5 为 `0.7902`。
 - `macro_family_metrics` 中每个值都在 0 到 1 之间。
 
 覆盖点：
@@ -2188,9 +2205,9 @@ unsupported 负例单独统计，不污染 supported recall。
 - 当前 Catalog 可以生成可重复 retrieval baseline。
 - Baseline artifact 包含 per-query retrieval、miss、fallback 与 aggregate metrics。
 - Family-level 和 macro metrics 可以区分 overall 分数、样本量较大的 bulk RNA-seq
-  family 与 ChIP-seq、scRNA-seq family。
-- 16-tool PR 5A baseline 保持 Planner context 完整，同时量化新工具进入共享 lexical
-  排名后对 raw Tool Recall@5 的候选拥挤影响。
+  family 与 ChIP-seq、scRNA-seq、variant calling family。
+- 16-tool PR 5B baseline 保持 Planner context 完整，同时量化第四个正式 recipe 和
+  双向 confusion cases 对 lexical ranking 与 raw Tool Recall@5 的影响。
 
 ### `test_macro_family_metrics_use_unrounded_family_values`
 
@@ -2512,6 +2529,8 @@ admission、compile readiness 和 execution evidence。
 - 返回版本分别为 `2.3`、`1.24` 和 `1.24`，runtime 为固定 BioContainers tags。
 - API-ready metadata 保留 alignment、reference sidecar、VCF index、参数和 output
   schemas。
+- `bcftools_call` 的 VCF output 与 `bcftools_filter` 的 VCF input 通过 site-level
+  `INFO/DP` 描述公开一致的 producer/consumer 契约。
 - 三个工具均为 `catalog-approved`，execution verification 为 `unverified` 且
   evidence 为空。
 
@@ -2531,6 +2550,22 @@ admission、compile readiness 和 execution evidence。
 
 覆盖点：正式 scRNA-seq recipe 可通过 Catalog service/API surface 查询，同时保持
 单个 bounded wrapper 与完整 workflow family contract 的边界。
+
+### `test_get_germline_short_variant_calling_recipe_returns_bounded_steps`
+
+输入：recipe id `germline_short_variant_calling`。
+
+期望输出：
+
+- recipe name 为 `Germline short variant calling`。
+- required inputs 精确包含 paired FASTQ、BWA index archive 和 reference FASTA/FAI。
+- step 顺序为 `qc`、`align_reads`、`sort_and_index`、`call_variants`、
+  `filter_variants`、`qc_report`。
+- alignment、calling 和 filtering steps 分别只允许 `bwa_mem2`、`bcftools_call` 和
+  `bcftools_filter`，report step 保持 optional。
+
+覆盖点：正式 variant calling recipe 可通过 Catalog service/API surface 查询，并将
+单样本 FASTQ 起点、reference sidecars 和 bounded hard-filtering 范围保持为显式契约。
 
 ### `test_unknown_recipe_and_tool_raise_key_error`
 
