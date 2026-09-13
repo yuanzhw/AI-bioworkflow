@@ -130,6 +130,30 @@ class CatalogServiceTests(unittest.TestCase):
         self.assertEqual(recipe["steps"][0]["role"], "single_cell_qc_clustering")
         self.assertEqual(recipe["steps"][0]["allowed_tools"], ["scanpy_qc_clustering"])
 
+    def test_get_germline_short_variant_calling_recipe_returns_bounded_steps(self):
+        recipe = get_recipe("germline_short_variant_calling")
+
+        self.assertEqual(recipe["name"], "Germline short variant calling")
+        self.assertEqual(
+            set(recipe["required_inputs"]),
+            {"raw_r1", "raw_r2", "bwa_index", "reference_fasta", "reference_fai"},
+        )
+        self.assertEqual(
+            [step["id"] for step in recipe["steps"]],
+            [
+                "qc",
+                "align_reads",
+                "sort_and_index",
+                "call_variants",
+                "filter_variants",
+                "qc_report",
+            ],
+        )
+        self.assertEqual(recipe["steps"][1]["allowed_tools"], ["bwa_mem2"])
+        self.assertEqual(recipe["steps"][3]["allowed_tools"], ["bcftools_call"])
+        self.assertEqual(recipe["steps"][4]["allowed_tools"], ["bcftools_filter"])
+        self.assertTrue(recipe["steps"][5]["optional"])
+
     def test_unknown_recipe_and_tool_raise_key_error(self):
         with self.assertRaisesRegex(KeyError, "unknown recipe"):
             get_recipe("missing_recipe")

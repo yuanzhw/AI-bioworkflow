@@ -1,0 +1,59 @@
+id: germline_short_variant_calling
+name: Germline short variant calling
+description: Call and hard-filter germline SNVs and short indels from paired-end short reads for one sample.
+aliases:
+  - germline variant calling
+  - germline SNV and indel workflow
+  - WGS short variant calling
+  - WES short variant calling
+  - paired-end FASTQ to VCF
+  - BWA-MEM2 and BCFtools workflow
+
+required_inputs:
+  raw_r1:
+    type: File
+    description: First raw paired-end FASTQ file for one germline sample.
+  raw_r2:
+    type: File
+    description: Second raw paired-end FASTQ file for one germline sample.
+  bwa_index:
+    type: File
+    description: Gzip-compressed tar archive containing the BWA-MEM2 reference index.
+  reference_fasta:
+    type: File
+    description: Uncompressed reference genome FASTA used for variant calling.
+  reference_fai:
+    type: File
+    description: Samtools faidx index associated with the reference FASTA.
+
+steps:
+  - id: qc
+    role: read_quality_control
+    allowed_tools:
+      - fastp
+
+  - id: align_reads
+    role: germline_short_read_alignment
+    allowed_tools:
+      - bwa_mem2
+
+  - id: sort_and_index
+    role: bam_sort_and_index
+    allowed_tools:
+      - samtools
+
+  - id: call_variants
+    role: germline_small_variant_calling
+    allowed_tools:
+      - bcftools_call
+
+  - id: filter_variants
+    role: germline_variant_filtering
+    allowed_tools:
+      - bcftools_filter
+
+  - id: qc_report
+    role: quality_control_summary
+    optional: true
+    allowed_tools:
+      - multiqc

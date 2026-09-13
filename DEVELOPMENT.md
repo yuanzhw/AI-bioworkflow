@@ -895,24 +895,25 @@ integration、automatic cell type annotation、trajectory 或 RNA velocity。run
 
 `bwa_mem2@2.3`、`bcftools_call@1.24` 和 `bcftools_filter@1.24` 现已作为
 `unverified`、compile-ready 工具进入正式 Catalog。BCFtools 按 calling 和 filtering
-拆成两个边界明确的能力契约，并复用现有 `samtools@1.24`。测试专用 recipe probe 已
-验证 `BWA-MEM2 -> samtools -> BCFtools call -> BCFtools filter` 能通过 Resolver、
-Analyzer、Renderer 和 WOMtool 92；正式 `germline_short_variant_calling` recipe、
-example plan 和 supported retrieval queries 尚未加入，因此 variant calling family
-仍不属于正式支持范围。固定 BioContainers tag 已根据上游 release 与 Quay registry
+拆成两个边界明确的能力契约，并复用现有 `samtools@1.24`。正式
+`germline_short_variant_calling` recipe 和结构化 example plan 已验证单个 paired-end
+样本的 `fastp -> BWA-MEM2 -> samtools -> BCFtools call -> BCFtools filter -> MultiQC`
+链路能通过 Resolver、Analyzer、Renderer 和 WOMtool 92，因此 variant calling family
+已达到 compile-ready。固定 BioContainers tag 已根据上游 release 与 Quay registry
 核实存在，但尚未进行 image pull、smoke test 或真实数据执行，三个工具的
-`execution_verification` 均保持 `unverified`。
+`execution_verification` 均保持 `unverified`。该范围不支持 BAM-only 入口、somatic、
+BQSR/VQSR、joint genotyping、CNV/SV 或 long-read calling。
 
-当前 query set 包含 47 条 family-labeled query，覆盖 22 条 supported bulk RNA-seq、
-6 条 supported ChIP-seq、14 条 supported scRNA-seq 和 5 条 unsupported 负例。
-16-tool `lexical_v1` checkpoint 的 Recipe Recall@1 为 `0.8333`、Tool Recall@5 为
-`0.8226`；三个 supported family 的 macro Recipe Recall@1 / Tool Recall@5 分别为
-`0.8853` / `0.8070`，Planner
-Context Tool Recall / Role Coverage 仍均为 `1.0000`。双向 bulk/scRNA confusion queries
-暴露了 lexical 对否定侧词汇的排序干扰；新增 alignment/variant metadata 还将 ChIP-seq
-Tool Recall@5 从 `0.7694` 降至 `0.6694`，但完整 Planner context 仍能补齐所需工具和
-role。下一步加入正式 germline short variant calling recipe 与 family retrieval
-baseline；四个 family 完成后再决定是否进入 R3 vector / hybrid backend。
+当前 query set 包含 64 条 family-labeled query，覆盖 23 条 supported bulk RNA-seq、
+7 条 supported ChIP-seq、14 条 supported scRNA-seq、12 条 supported variant calling
+和 8 条 unsupported 负例。16-tool `lexical_v1` checkpoint 的 Recipe Recall@1 / @3
+为 `0.8571` / `0.9821`，Tool Recall@5 为 `0.7973`；四个 supported family 的 macro
+Recipe Recall@1 / Tool Recall@5 分别为 `0.8812` / `0.7902`，Planner Context Tool
+Recall / Role Coverage 仍均为 `1.0000`。Variant calling Recipe Recall@1 为
+`1.0000`，但 ChIP-seq/variant 反向 confusion 和 generic QC/reporting query 继续暴露
+lexical 对否定侧词汇与共享 role 的排序干扰；Unsupported Direct-Match Rate 也升至
+`0.8750`。下一步进入 PR 6，完成 four-family miss 分类和 R3 lexical / vector /
+hybrid 决策，不再继续扩大 workflow family。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

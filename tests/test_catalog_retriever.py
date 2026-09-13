@@ -117,7 +117,7 @@ class CatalogRetrieverTests(unittest.TestCase):
             {"status": "unverified", "evidence": []},
         )
 
-    def test_retrieves_variant_calling_tools_without_claiming_recipe_support(self):
+    def test_retrieves_variant_calling_recipe_and_compile_ready_tools(self):
         result = retrieve_catalog_context(
             (
                 "Align paired-end whole-genome reads with BWA-MEM2, sort and index "
@@ -131,9 +131,12 @@ class CatalogRetrieverTests(unittest.TestCase):
         )
 
         self.assertFalse(result["fallback_used"])
+        self.assertEqual(result["recipes"][0]["id"], "germline_short_variant_calling")
         tools = {tool["id"]: tool for tool in result["tools"]}
         self.assertTrue(
-            {"bwa_mem2", "bcftools_call", "bcftools_filter"}.issubset(tools),
+            {"bwa_mem2", "samtools", "bcftools_call", "bcftools_filter"}.issubset(
+                tools
+            ),
             result["tools"],
         )
         for tool_id in ("bwa_mem2", "bcftools_call", "bcftools_filter"):
@@ -141,10 +144,6 @@ class CatalogRetrieverTests(unittest.TestCase):
                 tools[tool_id]["execution_verification"],
                 {"status": "unverified", "evidence": []},
             )
-        self.assertNotIn(
-            "germline_short_variant_calling",
-            {recipe["id"] for recipe in result["recipes"]},
-        )
 
     def test_tokenizer_supports_sequencing_variants_and_cjk_ngrams(self):
         tokens = tokenize_for_retrieval("做差异表达 RNAseq 和 ChIPseq")

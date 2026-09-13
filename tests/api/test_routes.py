@@ -43,6 +43,7 @@ class ApiRouteTests(unittest.TestCase):
         self.assertIn("rnaseq_differential_expression", recipe_ids)
         self.assertIn("chipseq_peak_calling", recipe_ids)
         self.assertIn("scrnaseq_qc_clustering", recipe_ids)
+        self.assertIn("germline_short_variant_calling", recipe_ids)
 
     def test_get_recipe_not_found(self):
         with patch(

@@ -200,6 +200,23 @@ PR 5A 在正式 Catalog 中加入 `bwa_mem2@2.3`、`bcftools_call@1.24` 和
 - PR 5B 再加入正式 recipe、转正 generic variant query、增加 FASTQ/BAM/VCF
   confusion cases，并建立第四个 supported family baseline。
 
+### R2h Variant Calling Recipe And Four-Family Baseline
+
+正式 Catalog 增加 `germline_short_variant_calling` 后，query set 扩展到 64 条：
+
+- 12 条 supported `variant_calling` query，覆盖显式工具、隐式目标、中英文、
+  FASTQ-to-VCF、reference inputs、BAM/VCF outputs、calling/filtering 参数和 QC
+  summary。
+- 原 generic variant negative 改写为 paired FASTQ 起点并转为 supported；BAM-only
+  entry point、somatic tumor-normal、BQSR/VQSR/joint genotyping 和 long-read/SV/CNV
+  保留为 4 条 unsupported 边界。
+- 新增 ChIP-seq/variant calling 与 bulk RNA-seq/variant calling 的双向 confusion
+  cases；bulk 和 ChIP-seq supported query 分别增加到 23 条和 7 条。
+- Tool Catalog 仍为 16 个 tool；正式 recipe/example 已通过 Resolver、Analyzer、
+  Renderer 和 WOMtool 92，但三个 PR 5A 工具仍为 `unverified`。
+- 四个 supported family 的 Planner Context Tool Recall 和 Role Coverage 均为
+  `1.0000`，可以进入 PR 6 的 cross-family miss 分类和 R3 backend 决策。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -375,6 +392,26 @@ R2g variant calling tool contracts 的 16-tool 中间 checkpoint：
 | Fallback Rate | 0.0213 | 0.0000 | 0.0000 | 0.0000 | - |
 | Unsupported Direct-Match Rate | 0.8000 | 0.0000 | 1.0000 | 1.0000 | - |
 
+R2h variant calling recipe 与 64-query four-family baseline：
+
+| Metric | Overall | bulk_rnaseq | chipseq | scrnaseq | variant_calling | Macro supported-family |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Query count | 64 | 23 | 8 | 16 | 16 | - |
+| Supported queries | 56 | 23 | 7 | 14 | 12 | 4 families |
+| Unsupported queries | 8 | 0 | 1 | 2 | 4 | - |
+| Recipe Recall@1 | 0.8571 | 0.7391 | 0.8571 | 0.9286 | 1.0000 | 0.8812 |
+| Recipe Recall@3 | 0.9821 | 0.9565 | 1.0000 | 1.0000 | 1.0000 | 0.9891 |
+| Recipe MRR | 0.9137 | 0.8333 | 0.9286 | 0.9643 | 1.0000 | 0.9315 |
+| Tool Recall@3 | 0.7128 | 0.6275 | 0.4810 | 1.0000 | 0.6764 | 0.6962 |
+| Tool Recall@5 | 0.7973 | 0.7333 | 0.6690 | 1.0000 | 0.7583 | 0.7902 |
+| Tool Recall@8 | 0.9158 | 0.8522 | 0.8952 | 1.0000 | 0.9514 | 0.9247 |
+| Tool MRR | 0.8549 | 0.6902 | 0.8571 | 1.0000 | 1.0000 | 0.8868 |
+| Role Coverage | 0.9134 | 0.8464 | 0.8952 | 1.0000 | 0.9514 | 0.9233 |
+| Planner Context Tool Recall | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Planner Context Role Coverage | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Fallback Rate | 0.0156 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | - |
+| Unsupported Direct-Match Rate | 0.8750 | 0.0000 | 1.0000 | 1.0000 | 1.0000 | - |
+
 已知 baseline 观察：
 
 - 9-tool checkpoint 中，`rnaseq_deg_no_tool_names_en` 和
@@ -413,6 +450,18 @@ R2g variant calling tool contracts 的 16-tool 中间 checkpoint：
   Coverage 均未退化。现有 recipe allowed tools 仍可补齐 supported family，但
   generic variant query 即使直接召回新工具，也必须在 PR 5B 正式 recipe 加入前保持
   unsupported。
+- R2h 的 variant calling Recipe Recall@1 / MRR 均为 `1.0000`，Tool Recall@5 为
+  `0.7583`；该多步骤 family 的 raw top-K 会漏掉部分中间工具，但 recipe expansion
+  后 Planner Context Tool Recall 和 Role Coverage 均为 `1.0000`。
+- Variant 作为目标的两条 cross-family query 均把目标 recipe 排在首位；反向
+  ChIP-seq/variant query 则把 variant recipe 排在 ChIP-seq 前，说明对比句中的否定侧
+  词汇仍是 lexical 排序的稳定弱点。反向 bulk/variant query 的 bulk recipe 排在首位。
+- 增加第五个正式 recipe 后，`rnaseq_quality_report_en` 的 bulk recipe 从 top-3
+  候选中退出，使 overall Recipe Recall@3 降至 `0.9821`；这是 PR 6 应分析的 generic
+  QC/reporting intent ambiguity，而不应通过扩大 K 掩盖。
+- 8 条 unsupported query 中仅 metagenomics 触发 fallback，Unsupported Direct-Match
+  Rate 上升到 `0.8750`。BAM-only、somatic 和 advanced/long-read variant negatives
+  再次确认 lexical direct match 不能承担产品能力拒绝策略。
 
 ## Vector / Hybrid Retriever
 

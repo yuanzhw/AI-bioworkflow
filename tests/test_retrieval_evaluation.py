@@ -78,9 +78,9 @@ class RetrievalEvaluationTests(unittest.TestCase):
     def test_loads_current_catalog_query_fixture(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
 
-        self.assertEqual(len(queries), 47)
-        self.assertEqual(sum(1 for query in queries if query.supported), 42)
-        self.assertEqual(sum(1 for query in queries if not query.supported), 5)
+        self.assertEqual(len(queries), 64)
+        self.assertEqual(sum(1 for query in queries if query.supported), 56)
+        self.assertEqual(sum(1 for query in queries if not query.supported), 8)
         self.assertEqual(queries[0].id, "rnaseq_deg_basic_en")
         self.assertEqual(queries[0].workflow_family, "bulk_rnaseq")
         self.assertIn("fastp", queries[0].expected_tools)
@@ -128,6 +128,23 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(scrnaseq_boundary.workflow_family, "scrnaseq")
         self.assertIn("cross_family_scrnaseq_not_bulk_en", queries_by_id)
         self.assertIn("cross_family_bulk_not_scrnaseq_en", queries_by_id)
+        variant_calling = queries_by_id["germline_variant_calling_basic_en"]
+        self.assertTrue(variant_calling.supported)
+        self.assertEqual(variant_calling.workflow_family, "variant_calling")
+        self.assertEqual(
+            variant_calling.expected_recipe,
+            "germline_short_variant_calling",
+        )
+        self.assertIn("bcftools_call", variant_calling.expected_tools)
+        self.assertIn("bcftools_filter", variant_calling.expected_tools)
+        self.assertFalse(queries_by_id["unsupported_variant_bam_entry_en"].supported)
+        self.assertFalse(
+            queries_by_id["unsupported_variant_somatic_tumor_normal_en"].supported
+        )
+        self.assertIn("cross_family_variant_not_chipseq_en", queries_by_id)
+        self.assertIn("cross_family_chipseq_not_variant_en", queries_by_id)
+        self.assertIn("cross_family_variant_not_rnaseq_en", queries_by_id)
+        self.assertIn("cross_family_rnaseq_not_variant_en", queries_by_id)
 
     def test_evaluates_current_catalog_baseline(self):
         queries = load_retrieval_queries(FIXTURE_PATH)
@@ -141,28 +158,29 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["strategy"], "lexical_v1")
         self.assertEqual(result["top_k_recipes"], 3)
         self.assertEqual(result["top_k_tools"], 8)
-        self.assertEqual(result["query_count"], 47)
-        self.assertEqual(result["supported_query_count"], 42)
-        self.assertEqual(result["unsupported_query_count"], 5)
-        self.assertEqual(len(result["queries"]), 47)
+        self.assertEqual(result["query_count"], 64)
+        self.assertEqual(result["supported_query_count"], 56)
+        self.assertEqual(result["unsupported_query_count"], 8)
+        self.assertEqual(len(result["queries"]), 64)
         for metric in result["metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
-        self.assertEqual(result["metrics"]["recipe_recall_at_1"], 0.8333)
-        self.assertEqual(result["metrics"]["tool_recall_at_5"], 0.8226)
+        self.assertEqual(result["metrics"]["recipe_recall_at_1"], 0.8571)
+        self.assertEqual(result["metrics"]["recipe_recall_at_k"], 0.9821)
+        self.assertEqual(result["metrics"]["tool_recall_at_5"], 0.7973)
         self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
         self.assertEqual(result["metrics"]["planner_context_role_coverage"], 1.0)
-        self.assertEqual(result["metrics"]["unsupported_direct_match_rate"], 0.8)
+        self.assertEqual(result["metrics"]["unsupported_direct_match_rate"], 0.875)
         self.assertEqual(
             set(result["family_metrics"]),
             {"bulk_rnaseq", "chipseq", "metagenomics", "scrnaseq", "variant_calling"},
         )
-        self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 22)
-        self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 7)
-        self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 6)
+        self.assertEqual(result["family_metrics"]["bulk_rnaseq"]["query_count"], 23)
+        self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 8)
+        self.assertEqual(result["family_metrics"]["chipseq"]["supported_query_count"], 7)
         self.assertEqual(
             result["family_metrics"]["chipseq"]["metrics"]["tool_recall_at_5"],
-            0.6694,
+            0.669,
         )
         self.assertEqual(result["family_metrics"]["scrnaseq"]["query_count"], 16)
         self.assertEqual(result["family_metrics"]["scrnaseq"]["supported_query_count"], 14)
@@ -176,10 +194,27 @@ class RetrievalEvaluationTests(unittest.TestCase):
         )
         self.assertEqual(
             result["family_metrics"]["bulk_rnaseq"]["metrics"]["tool_recall_at_5"],
-            0.7515,
+            0.7333,
         )
-        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.8853)
-        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.8070)
+        self.assertEqual(result["family_metrics"]["variant_calling"]["query_count"], 16)
+        self.assertEqual(
+            result["family_metrics"]["variant_calling"]["supported_query_count"],
+            12,
+        )
+        self.assertEqual(
+            result["family_metrics"]["variant_calling"]["metrics"][
+                "recipe_recall_at_1"
+            ],
+            1.0,
+        )
+        self.assertEqual(
+            result["family_metrics"]["variant_calling"]["metrics"][
+                "tool_recall_at_5"
+            ],
+            0.7583,
+        )
+        self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.8812)
+        self.assertEqual(result["macro_family_metrics"]["tool_recall_at_5"], 0.7902)
         for metric in result["macro_family_metrics"].values():
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
