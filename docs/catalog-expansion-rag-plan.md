@@ -1,9 +1,8 @@
 # Catalog Expansion for RAG Development Plan
 
-本文档记录 R2 retrieval evaluation baseline 之后的 Catalog 扩展计划。当前目标
-不是立即引入 vector / hybrid backend，而是先通过更多 workflow family 扩大
-Approved Catalog Retriever 的语义空间，再用跨 family 评测决定 R3 是否值得
-投入。
+本文档记录 R2 retrieval evaluation baseline 之后的 Catalog 扩展计划及完成状态。
+ChIP-seq、scRNA-seq 和 variant calling family 已落地，four-family baseline 已用于
+决定 R3：下一阶段进入 hybrid-first experiment，`lexical_v1` 暂时保持默认。
 
 本阶段以工程能力、领域建模、可解释检索和边界设计展示为优先，不要求每个新增
 workflow 都完成真实生物数据 e2e。但正式 Catalog 仍必须保持结构化、可审计，
@@ -104,8 +103,10 @@ family 的 macro Recipe Recall@1 为 `0.8812`，macro Tool Recall@3/5 分别为
 `0.6962` / `0.7902`。Variant calling 的 Tool Recall@5 为 `0.7583`，但 recipe
 expanded Planner context 可补齐完整工具与 role。双向 confusion queries 继续表明
 lexical scorer 会受到否定侧 workflow 词汇干扰，且现有 8 条 unsupported query 中有
-7 条产生 direct match。四个 family 已具备可比较 baseline，下一步由 PR 6 汇总 miss
-类别并明确 R3 lexical / vector / hybrid 决策。
+7 条产生 direct match。PR 6 已将 8 条 exact recipe top-1 miss 拆分为 7 条 family
+confusion 和 1 条 same-family recipe competition，并决定 R3 采用 hybrid-first
+experiment。详细证据见
+[R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md)。
 
 ## Goals
 
@@ -543,7 +544,9 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 
 ## R3 Decision Gate
 
-完成四个 workflow family 的 lexical baseline 后再决定 R3。
+四个 workflow family 的 lexical baseline 和 PR 6 miss classification 已完成。R3
+决定为 hybrid-first experiment，`lexical_v1` 保持生产默认和回归基线，直到候选
+backend 通过明确的 promotion gates。
 
 优先尝试 vector / hybrid 的信号包括：
 
@@ -560,8 +563,10 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - Catalog 仍过小，top-K 几乎覆盖全部条目。
 - Query set 规模不足，无法证明新 backend 优于 `lexical_v1`。
 
-如果进入 R3，vector 或 hybrid backend 必须保持现有 retrieval artifact contract
-和完整 Catalog validation 边界。
+R3A-R3C 的 backend contract、vector prototype、hybrid fusion 顺序与 promotion
+gates 见 [R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md)。Vector
+或 hybrid backend 必须保持现有 retrieval artifact contract 和完整 Catalog
+validation 边界。
 
 ## Proposed PR Sequence
 
@@ -629,12 +634,14 @@ supported recall，但必须暴露 direct lexical match 和 fallback 风险。
 - 当前 baseline 覆盖 64 条 query、四个 supported workflow family；Planner Context
   Tool Recall 和 Role Coverage 均为 `1.0000`。
 
-### PR 6: Cross-family Baseline And R3 Decision
+### PR 6: Cross-family Baseline And R3 Decision（已实现）
 
-- 汇总四个 family 的 metrics。
-- 增加 family macro metrics 和 confusion matrix。
-- 记录 lexical miss categories。
-- 明确继续 lexical、尝试 vector，或实现 hybrid 的决策。
+- 已汇总四个 family 的 metrics，并记录 `0.8750` top-1 family agreement。
+- 已在 evaluation artifact 增加 per-query top recipe family、family confusion matrix
+  和稳定 miss categories。
+- 已区分 negation/comparison、generic shared intent、same-family competition、raw
+  tool/role recovery 和 unsupported direct match。
+- 已决定进入 hybrid-first experiment，同时保留 `lexical_v1` 为默认 backend。
 
 每个 PR 保持单一主题。工具 schema、recipe、evaluation 和 frontend contract
 变化较大时继续拆分，避免在一个 PR 中同时修改过多架构边界。
@@ -692,13 +699,11 @@ recipe resolution、Workflow IR 或 WDL 输出时，还应：
 
 ## Immediate Next Step
 
-Tool Capability And Verification Contract、ChIP-seq、scRNA-seq 和 germline short
-variant calling 的 compile-ready Catalog/recipe 以及 64-query、four-family lexical
-baseline 均已落地。下一项工作是 PR 6：汇总 cross-family confusion、raw retrieval
-miss 和 unsupported direct-match 类别，并用同一 evaluation contract 明确继续优化
-lexical，还是进入 vector / hybrid prototype。
+Catalog expansion 和 PR 6 R3 decision 已完成。下一项工作是 R3A：抽取可替换的
+retriever backend contract，把现有 `lexical_v1` 接入该 contract，并让 evaluation
+runner 能显式选择 backend。R3A 不引入 embedding dependency，也不改变默认 Planner
+行为。
 
-PR 6 不改变三个 variant calling 工具的 `unverified` 状态，也不扩张到 BQSR/VQSR、
-joint genotyping、somatic、CNV/SV 或 long-read calling。若选择 vector / hybrid，必须
-继续只检索 Approved Catalog，并保持现有 retrieval artifact 与全量 Catalog validation
-边界。
+后续 R3B 才实现可复现的 vector prototype，R3C 实现 hybrid rank fusion。所有阶段
+继续只检索 Approved Catalog，并保持现有 retrieval artifact、完整 Catalog validation、
+结构化编译入口和 execution verification 边界。

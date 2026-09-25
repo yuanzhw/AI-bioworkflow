@@ -462,5 +462,5 @@ R1 的职责是建立受控、可解释、可展示的 approved catalog retrieva
 | --- | --- | --- |
 | R1 | 本文档 | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | 规划中 | 基于 R2 baseline 选择 vector 或 hybrid backend，并保持 artifact contract 不变 |
+| R3 | [决策完成，实施中](./r3-retrieval-backend-decision.md) | Hybrid-first experiment；`lexical_v1` 保持默认，先建立可替换 backend contract |
 | R4 | 规划中 | 在 catalog 和标注数据足够后再评估 reranker 或 embedding fine-tuning |

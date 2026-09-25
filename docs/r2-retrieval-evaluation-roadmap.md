@@ -83,8 +83,11 @@ Planner prompt，也不替代 `expected_recipe`。
 - 只描述分析目标但不说工具名。
 - RNA-seq reference preparation，例如 Salmon index 和 GTF -> tx2gene。
 - edgeR 和 limma-voom 等 differential expression 替代后端。
+- Germline short variant calling 的显式工具、隐式目标、FASTQ/BAM/VCF、参数和
+  QC summary 表达。
 - Catalog 暂不支持的负例，例如 ChIP-seq peak annotation、scRNA-seq batch
-  integration / trajectory、variant calling 和 metagenomics。
+  integration / trajectory、BAM-only 或 somatic/advanced/long-read variant calling
+  和 metagenomics。
 - 模糊需求，例如 quality report、quantification、gene-level counts。
 - 参数相关请求，例如 paired-end reads、contrast、threads。
 
@@ -215,7 +218,26 @@ PR 5A 在正式 Catalog 中加入 `bwa_mem2@2.3`、`bcftools_call@1.24` 和
 - Tool Catalog 仍为 16 个 tool；正式 recipe/example 已通过 Resolver、Analyzer、
   Renderer 和 WOMtool 92，但三个 PR 5A 工具仍为 `unverified`。
 - 四个 supported family 的 Planner Context Tool Recall 和 Role Coverage 均为
-  `1.0000`，可以进入 PR 6 的 cross-family miss 分类和 R3 backend 决策。
+  `1.0000`，为 PR 6 的 cross-family miss 分类和 R3 backend 决策提供输入。
+
+### PR 6 Cross-Family Diagnosis And R3 Decision
+
+PR 6 保持 `lexical_v1` scoring 和 Catalog 内容不变，为 evaluation artifact 增加：
+
+- per-query `top_recipe_id`、`top_recipe_family` 和可重叠 `miss_categories`；
+- supported expected-recipe query 的 top-1 family confusion matrix；
+- aggregate miss category counts 和稳定的 query id 列表；
+- CLI summary 中的人类可读 confusion matrix 和非零 miss categories。
+
+四个 supported family 的 top-1 family agreement 为 `0.8750`（49/56）。7 条 family
+confusion 中，4 条来自 “A, not B” 对比句，3 条来自 generic QC、parameter 或 counts
+表达；另有 1 条同 family exact-recipe top-1 miss。15 条 raw tool miss 和 16 条 raw
+role miss 均被 recipe context 完整恢复，Planner Context Tool Recall / Role Coverage
+继续为 `1.0000`。
+
+R3 决策为 **hybrid-first experiment**，同时保留 `lexical_v1` 为生产默认和回归
+基线。完整证据、promotion gates 与 R3A-R3C 实施顺序见
+[R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md)。
 
 ## Metrics
 
@@ -234,6 +256,8 @@ PR 5A 在正式 Catalog 中加入 `bwa_mem2@2.3`、`bcftools_call@1.24` 和
 | `Fallback Rate` | 触发 fallback 的 query 占比 | 判断 catalog 覆盖和检索置信度 |
 | `Unsupported Direct-Match Rate` | unsupported query 未触发 fallback 的比例 | 暴露 Retriever 不具备 intent rejection 的风险 |
 | `Family / Macro Metrics` | 分 family 统计，并仅对 supported families 做宏平均 | 防止样本量较大的 family 掩盖新 family 的排序问题 |
+| `Recipe Family Confusion` | expected workflow family 与 top-ranked recipe family 的矩阵 | 区分 exact recipe miss 和跨 family ranking miss |
+| `Miss Categories` | 对 recipe、raw tool/role、planner context 和 unsupported direct match 分类 | 为不同 backend 提供可比较的 per-query root-cause artifact |
 
 Evaluation 在 per-query、family 和 macro 聚合期间保留原始浮点精度，只在最终公开
 artifact 边界统一舍入四位，避免从已舍入 family score 再求 macro average。
@@ -265,6 +289,7 @@ tests/test_retrieval_evaluation.py
 - missed expected recipe/tool。
 - aggregate metrics。
 - workflow-family metrics 和 supported-family macro metrics。
+- top-ranked recipe family、family confusion matrix 和 miss categories。
 - fallback queries。
 - unsupported direct-match queries。
 
@@ -457,15 +482,22 @@ R2h variant calling recipe 与 64-query four-family baseline：
   ChIP-seq/variant query 则把 variant recipe 排在 ChIP-seq 前，说明对比句中的否定侧
   词汇仍是 lexical 排序的稳定弱点。反向 bulk/variant query 的 bulk recipe 排在首位。
 - 增加第五个正式 recipe 后，`rnaseq_quality_report_en` 的 bulk recipe 从 top-3
-  候选中退出，使 overall Recipe Recall@3 降至 `0.9821`；这是 PR 6 应分析的 generic
-  QC/reporting intent ambiguity，而不应通过扩大 K 掩盖。
+  候选中退出，使 overall Recipe Recall@3 降至 `0.9821`；PR 6 将其归为 generic
+  QC/reporting intent ambiguity，而没有通过扩大 K 掩盖。
 - 8 条 unsupported query 中仅 metagenomics 触发 fallback，Unsupported Direct-Match
   Rate 上升到 `0.8750`。BAM-only、somatic 和 advanced/long-read variant negatives
   再次确认 lexical direct match 不能承担产品能力拒绝策略。
+- PR 6 将 8 条 exact recipe top-1 miss 拆为 7 条跨 family confusion 和 1 条同 family
+  recipe competition。4 条 confusion 明确来自否定对比句，说明 lexical scoring 会把
+  否定侧术语当成正向证据。
+- 15 条 raw tool miss 和 16 条 raw role miss 全部被 recipe allowed tools 恢复；R3
+  应优化首位 recipe/family ranking，同时保留 recipe context expansion。
 
 ## Vector / Hybrid Retriever
 
-在 baseline 建立后，再引入可替换 retriever backend。
+PR 6 已决定进入 hybrid-first experiment；`lexical_v1` 在候选 backend 通过 promotion
+gates 前继续作为默认。详细决策见
+[R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md)。
 
 ### Vector Retriever
 
@@ -533,28 +565,20 @@ Retrieval eval 的结果可以被前端轻量展示，但前端不应重新计�
 
 ## Deliverables
 
-建议 PR 顺序：
+R2 query set 和 baseline 已完成。后续 R3 PR 顺序由
+[R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md) 维护：
 
-1. **Retrieval query set**
-   - 添加 `tests/fixtures/retrieval_queries.json`。
-   - 覆盖中英文、缩写、工具名显式、工具名隐式、负例。
-
-2. **Retrieval eval baseline**
-   - 添加 eval 脚本或测试。
-   - 输出 Recall@K、MRR、Role Coverage、Fallback Rate。
-   - 文档记录 lexical baseline。
-
-3. **Retriever interface**
+1. **R3A Retriever backend contract**
    - 抽象 lexical backend。
-   - 保持现有 artifact contract。
+   - 保持 `lexical_v1` 默认行为和现有 artifact contract。
 
-4. **Vector backend prototype**
+2. **R3B Vector backend prototype**
    - 加入本地 vector index 或轻量 embedding backend。
-   - 不影响结构化入口。
+   - 仅显式配置或离线评估，不影响结构化入口。
 
-5. **Hybrid scoring**
+3. **R3C Hybrid scoring**
    - 融合 lexical 和 vector。
-   - 用 eval 证明效果。
+   - 用 promotion gates 决定是否改变默认 backend。
 
 ## Verification
 

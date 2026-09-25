@@ -865,10 +865,10 @@ RAG 开发序列放在 P4 之下维护：
 | --- | --- | --- |
 | R1 | [Internal Catalog RAG / Tool Retriever](./docs/r1-internal-catalog-rag-plan.md) | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./docs/r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | 规划中 | 在 R2 baseline 后选择 vector 或 hybrid backend，并保持现有 artifact contract |
+| R3 | [决策完成，实施中](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；先建立 backend contract，`lexical_v1` 保持默认直到 promotion gates 通过 |
 | R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
 
-进入 R3 前，先按
+R3 决策前，项目先按
 [Catalog Expansion for RAG Development Plan](./docs/catalog-expansion-rag-plan.md)
 依次扩展 ChIP-seq、scRNA-seq 和 variant calling family，建立具有区分度的
 跨 family lexical baseline。该计划同时定义 compile-ready 与 execution
@@ -912,8 +912,12 @@ Recipe Recall@1 / Tool Recall@5 分别为 `0.8812` / `0.7902`，Planner Context 
 Recall / Role Coverage 仍均为 `1.0000`。Variant calling Recipe Recall@1 为
 `1.0000`，但 ChIP-seq/variant 反向 confusion 和 generic QC/reporting query 继续暴露
 lexical 对否定侧词汇与共享 role 的排序干扰；Unsupported Direct-Match Rate 也升至
-`0.8750`。下一步进入 PR 6，完成 four-family miss 分类和 R3 lexical / vector /
-hybrid 决策，不再继续扩大 workflow family。
+`0.8750`。PR 6 已进一步记录 `0.8750`（49/56）的 top-1 recipe family agreement、
+7 条 family confusion、15 条 raw tool miss 和 16 条 raw role miss；后两类均被 recipe
+context 完整恢复。R3 因此选择 hybrid-first experiment，并保留 `lexical_v1` 为默认。
+下一步进入 R3A，抽取可替换 backend contract 和可比较 evaluation interface；详细
+promotion gates 与 R3A-R3C 顺序见
+[R3 Retrieval Backend Decision](./docs/r3-retrieval-backend-decision.md)。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

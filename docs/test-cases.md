@@ -2199,6 +2199,19 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
 - bulk RNA-seq Tool Recall@5 为 `0.7333`，ChIP-seq Tool Recall@5 为 `0.6690`。
 - macro Recipe Recall@1 为 `0.8812`，macro Tool Recall@5 为 `0.7902`。
 - `macro_family_metrics` 中每个值都在 0 到 1 之间。
+- `recipe_family_confusion` 覆盖 56 条 supported expected-recipe query，top-1 family
+  agreement 为 `49 / 56 == 0.8750`。
+- confusion matrix 记录 bulk RNA-seq 的 18 条正确 family hit，以及 1 条 ChIP-seq、
+  3 条 scRNA-seq、1 条 variant calling 误排；ChIP-seq 有 1 条误排到 variant
+  calling，scRNA-seq 有 1 条误排到 bulk RNA-seq，variant calling 12 条全部正确。
+- `recipe_top_1_miss == 8`、`recipe_top_k_miss == 1`、
+  `recipe_family_confusion == 7`。
+- `raw_tool_miss == 15`、`raw_role_miss == 16`，且这些 miss 全部由 recipe context
+  恢复；`planner_context_tool_miss` 和 `planner_context_role_miss` 均为 0。
+- `unsupported_direct_match == 7`，并保留对应 query ids。
+- 每条 query 包含 `top_recipe_id`、`top_recipe_family` 和可重叠
+  `miss_categories`；`cross_family_chipseq_not_variant_en` 被标记为 family confusion，
+  `rnaseq_quality_report_en` 被标记为唯一 top-3 recipe miss。
 
 覆盖点：
 
@@ -2208,6 +2221,9 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
   family 与 ChIP-seq、scRNA-seq、variant calling family。
 - 16-tool PR 5B baseline 保持 Planner context 完整，同时量化第四个正式 recipe 和
   双向 confusion cases 对 lexical ranking 与 raw Tool Recall@5 的影响。
+- PR 6 artifact 可以区分 exact recipe miss、跨 family confusion、raw retrieval miss、
+  recipe-context recovery 和 unsupported direct match，为 lexical/vector/hybrid A/B
+  comparison 提供稳定基线。
 
 ### `test_macro_family_metrics_use_unrounded_family_values`
 
@@ -2260,6 +2276,14 @@ artifact 边界统一舍入四位。
 - 只对 supported family 求宏平均，`macro_family_metrics.recipe_recall_at_1 == 0.5`。
 - 第一条 query 的 `planner_context_tools` 包含 `deseq2`。
 - 第二条 query 的 `planner_context_missed_expected_tools == ["deseq2"]`。
+- 第一条 query 的 top recipe family 为 `bulk_rnaseq`；其 raw tool/role miss 均由
+  recipe context 恢复，并记录对应 recovery categories。
+- 第二条 query 返回未知 synthetic recipe，top recipe family 记录为 `unmapped`；它被
+  分类为 top-1/top-K recipe miss、family confusion、raw tool/role miss 和 planner
+  context tool/role miss。
+- 第三条 query 只记录 `unsupported_direct_match`。
+- aggregate confusion matrix 记录 1 条 `bulk_rnaseq -> bulk_rnaseq` 和 1 条
+  `bulk_rnaseq -> unmapped`，same-family rate 为 `0.5`。
 
 覆盖点：
 
@@ -2269,6 +2293,8 @@ artifact 边界统一舍入四位。
 - Unsupported queries 不污染 supported recall，但会暴露 direct-match 风险。
 - Fallback rate 按 all / supported / unsupported 三个视角记录。
 - 固定 top-1/top-3/top-5 与 family macro 计算不依赖当前动态 K 的展示名称。
+- 未能从 labeled expected recipes 推导 family 的 recipe 会稳定标记为 `unmapped`，
+  不会被误计为某个真实 workflow family。
 
 ### `test_deduplicates_planner_context_tool_ids_from_multiple_versions`
 

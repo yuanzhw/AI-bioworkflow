@@ -219,6 +219,86 @@ class RetrievalEvaluationTests(unittest.TestCase):
             self.assertGreaterEqual(metric, 0.0)
             self.assertLessEqual(metric, 1.0)
 
+        confusion = result["recipe_family_confusion"]
+        self.assertEqual(confusion["query_count"], 56)
+        self.assertEqual(
+            confusion["actual_labels"],
+            ["bulk_rnaseq", "chipseq", "scrnaseq", "variant_calling"],
+        )
+        self.assertEqual(
+            confusion["predicted_labels"],
+            ["bulk_rnaseq", "chipseq", "scrnaseq", "variant_calling"],
+        )
+        self.assertEqual(
+            confusion["counts"],
+            {
+                "bulk_rnaseq": {
+                    "bulk_rnaseq": 18,
+                    "chipseq": 1,
+                    "scrnaseq": 3,
+                    "variant_calling": 1,
+                },
+                "chipseq": {
+                    "bulk_rnaseq": 0,
+                    "chipseq": 6,
+                    "scrnaseq": 0,
+                    "variant_calling": 1,
+                },
+                "scrnaseq": {
+                    "bulk_rnaseq": 1,
+                    "chipseq": 0,
+                    "scrnaseq": 13,
+                    "variant_calling": 0,
+                },
+                "variant_calling": {
+                    "bulk_rnaseq": 0,
+                    "chipseq": 0,
+                    "scrnaseq": 0,
+                    "variant_calling": 12,
+                },
+            },
+        )
+        self.assertEqual(confusion["same_family_count"], 49)
+        self.assertEqual(confusion["same_family_rate"], 0.875)
+
+        miss_categories = result["miss_categories"]
+        self.assertEqual(miss_categories["recipe_top_1_miss"]["count"], 8)
+        self.assertEqual(miss_categories["recipe_top_k_miss"]["count"], 1)
+        self.assertEqual(miss_categories["recipe_family_confusion"]["count"], 7)
+        self.assertEqual(miss_categories["raw_tool_miss"]["count"], 15)
+        self.assertEqual(miss_categories["raw_role_miss"]["count"], 16)
+        self.assertEqual(
+            miss_categories["raw_tool_miss_recovered_by_recipe_context"]["count"],
+            15,
+        )
+        self.assertEqual(
+            miss_categories["raw_role_miss_recovered_by_recipe_context"]["count"],
+            16,
+        )
+        self.assertEqual(miss_categories["planner_context_tool_miss"]["count"], 0)
+        self.assertEqual(miss_categories["planner_context_role_miss"]["count"], 0)
+        self.assertEqual(miss_categories["unsupported_direct_match"]["count"], 7)
+        self.assertEqual(
+            miss_categories["recipe_top_k_miss"]["query_ids"],
+            ["rnaseq_quality_report_en"],
+        )
+        self.assertIn(
+            "cross_family_chipseq_not_variant_en",
+            miss_categories["recipe_family_confusion"]["query_ids"],
+        )
+        self.assertIn(
+            "unsupported_variant_somatic_tumor_normal_en",
+            miss_categories["unsupported_direct_match"]["query_ids"],
+        )
+
+        queries_by_id = {query["id"]: query for query in result["queries"]}
+        cross_family_miss = queries_by_id["cross_family_chipseq_not_variant_en"]
+        self.assertEqual(cross_family_miss["top_recipe_family"], "variant_calling")
+        self.assertIn("recipe_family_confusion", cross_family_miss["miss_categories"])
+        quality_report = queries_by_id["rnaseq_quality_report_en"]
+        self.assertIsNotNone(quality_report["top_recipe_id"])
+        self.assertIn("recipe_top_k_miss", quality_report["miss_categories"])
+
     def test_macro_family_metrics_use_unrounded_family_values(self):
         queries = [
             RetrievalQuery(
@@ -319,11 +399,66 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["family_metrics"]["chipseq"]["query_count"], 1)
         self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.5)
         self.assertIn("deseq2", result["queries"][0]["planner_context_tools"])
+        self.assertEqual(result["queries"][0]["top_recipe_family"], "bulk_rnaseq")
+        self.assertEqual(
+            result["queries"][0]["miss_categories"],
+            [
+                "raw_tool_miss",
+                "raw_tool_miss_recovered_by_recipe_context",
+                "raw_role_miss",
+                "raw_role_miss_recovered_by_recipe_context",
+            ],
+        )
         self.assertEqual(result["queries"][1]["missed_expected_tools"], ["deseq2"])
         self.assertEqual(result["queries"][1]["missed_roles"], ["differential_expression"])
         self.assertEqual(
             result["queries"][1]["planner_context_missed_expected_tools"],
             ["deseq2"],
+        )
+        self.assertEqual(result["queries"][1]["top_recipe_family"], "unmapped")
+        self.assertEqual(
+            result["queries"][1]["miss_categories"],
+            [
+                "recipe_top_1_miss",
+                "recipe_top_k_miss",
+                "recipe_family_confusion",
+                "raw_tool_miss",
+                "raw_role_miss",
+                "planner_context_tool_miss",
+                "planner_context_role_miss",
+            ],
+        )
+        self.assertEqual(
+            result["queries"][2]["miss_categories"],
+            ["unsupported_direct_match"],
+        )
+        self.assertEqual(
+            result["recipe_family_confusion"],
+            {
+                "query_count": 2,
+                "actual_labels": ["bulk_rnaseq"],
+                "predicted_labels": ["bulk_rnaseq", "unmapped"],
+                "counts": {
+                    "bulk_rnaseq": {
+                        "bulk_rnaseq": 1,
+                        "unmapped": 1,
+                    }
+                },
+                "same_family_count": 1,
+                "same_family_rate": 0.5,
+            },
+        )
+        self.assertEqual(result["miss_categories"]["recipe_top_1_miss"]["count"], 1)
+        self.assertEqual(result["miss_categories"]["raw_tool_miss"]["count"], 2)
+        self.assertEqual(
+            result["miss_categories"]["raw_tool_miss_recovered_by_recipe_context"][
+                "count"
+            ],
+            1,
+        )
+        self.assertEqual(
+            result["miss_categories"]["unsupported_direct_match"]["query_ids"],
+            ["q3"],
         )
 
     def test_deduplicates_planner_context_tool_ids_from_multiple_versions(self):

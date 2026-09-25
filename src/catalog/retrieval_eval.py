@@ -17,6 +17,20 @@ DEFAULT_TOP_K_RECIPES = 3
 DEFAULT_TOP_K_TOOLS = 8
 METRIC_PRECISION = 4
 STRICT_TOOL_RECALL_CUTOFFS = (3, 5)
+NO_RECIPE_MATCH_FAMILY = "no_match"
+UNMAPPED_RECIPE_FAMILY = "unmapped"
+MISS_CATEGORY_KEYS = (
+    "recipe_top_1_miss",
+    "recipe_top_k_miss",
+    "recipe_family_confusion",
+    "raw_tool_miss",
+    "raw_role_miss",
+    "raw_tool_miss_recovered_by_recipe_context",
+    "raw_role_miss_recovered_by_recipe_context",
+    "planner_context_tool_miss",
+    "planner_context_role_miss",
+    "unsupported_direct_match",
+)
 MACRO_FAMILY_METRIC_KEYS = (
     "recipe_recall_at_1",
     "recipe_recall_at_k",
@@ -133,11 +147,13 @@ def evaluate_retrieval_queries(
             "to compute the fixed Tool Recall@3/@5 metrics"
         )
 
+    recipe_family_by_id = _recipe_family_map(queries)
     per_query = [
         _evaluate_one_query(
             query,
             tool_catalog,
             recipe_catalog,
+            recipe_family_by_id=recipe_family_by_id,
             top_k_recipes=top_k_recipes,
             top_k_tools=top_k_tools,
             retriever=retriever,
@@ -153,6 +169,7 @@ def evaluate_retrieval_queries(
     ]
     family_metrics = _family_metrics(per_query)
     macro_family_metrics = _macro_family_metrics(family_metrics)
+    recipe_family_confusion = _recipe_family_confusion(per_query)
 
     return {
         "strategy": _first_strategy(per_query),
@@ -164,6 +181,8 @@ def evaluate_retrieval_queries(
         "metrics": _round_metrics(_aggregate_metrics(per_query)),
         "family_metrics": _round_family_metrics(family_metrics),
         "macro_family_metrics": _round_metrics(macro_family_metrics),
+        "recipe_family_confusion": recipe_family_confusion,
+        "miss_categories": _miss_category_summary(per_query),
         "fallback_query_ids": fallback_query_ids,
         "unsupported_direct_match_query_ids": unsupported_direct_match_query_ids,
         "queries": [_round_query_metrics(result) for result in per_query],
@@ -175,6 +194,7 @@ def _evaluate_one_query(
     tool_catalog: ToolCatalog,
     recipe_catalog: RecipeCatalog,
     *,
+    recipe_family_by_id: dict[str, str],
     top_k_recipes: int,
     top_k_tools: int,
     retriever: RetrievalFn,
@@ -224,8 +244,10 @@ def _evaluate_one_query(
         query.expected_roles,
         planner_context_tool_ids,
     )
+    top_recipe_id = retrieved_recipe_ids[0] if retrieved_recipe_ids else None
+    top_recipe_family = _top_recipe_family(top_recipe_id, recipe_family_by_id)
 
-    return {
+    result = {
         "id": query.id,
         "query": query.query,
         "supported": query.supported,
@@ -234,6 +256,8 @@ def _evaluate_one_query(
         "expected_tools": query.expected_tools,
         "expected_roles": query.expected_roles,
         "retrieved_recipes": retrieved_recipe_ids,
+        "top_recipe_id": top_recipe_id,
+        "top_recipe_family": top_recipe_family,
         "retrieved_tools": retrieved_tool_ids,
         "planner_context_tools": planner_context_tool_ids,
         "expected_recipe_recalled": expected_recipe_rank is not None,
@@ -266,6 +290,106 @@ def _evaluate_one_query(
         "strategy": retrieval.get("strategy"),
         "notes": query.notes,
     }
+    result["miss_categories"] = _classify_misses(result)
+    return result
+
+
+def _recipe_family_map(queries: Sequence[RetrievalQuery]) -> dict[str, str]:
+    recipe_families: dict[str, str] = {}
+    for query in queries:
+        if not query.supported or query.expected_recipe is None:
+            continue
+        existing_family = recipe_families.get(query.expected_recipe)
+        if existing_family is not None and existing_family != query.workflow_family:
+            recipe_families[query.expected_recipe] = UNMAPPED_RECIPE_FAMILY
+        elif existing_family is None:
+            recipe_families[query.expected_recipe] = query.workflow_family
+    return recipe_families
+
+
+def _top_recipe_family(
+    top_recipe_id: str | None,
+    recipe_family_by_id: dict[str, str],
+) -> str:
+    if top_recipe_id is None:
+        return NO_RECIPE_MATCH_FAMILY
+    return recipe_family_by_id.get(top_recipe_id, UNMAPPED_RECIPE_FAMILY)
+
+
+def _classify_misses(result: dict[str, Any]) -> list[str]:
+    categories: list[str] = []
+    if result["supported"]:
+        if result["expected_recipe"] is not None:
+            if not result["expected_recipe_recalled_at_1"]:
+                categories.append("recipe_top_1_miss")
+            if not result["expected_recipe_recalled"]:
+                categories.append("recipe_top_k_miss")
+            if result["top_recipe_family"] != result["workflow_family"]:
+                categories.append("recipe_family_confusion")
+        if result["missed_expected_tools"]:
+            categories.append("raw_tool_miss")
+            if not result["planner_context_missed_expected_tools"]:
+                categories.append("raw_tool_miss_recovered_by_recipe_context")
+        if result["missed_roles"]:
+            categories.append("raw_role_miss")
+            if not result["planner_context_missed_roles"]:
+                categories.append("raw_role_miss_recovered_by_recipe_context")
+        if result["planner_context_missed_expected_tools"]:
+            categories.append("planner_context_tool_miss")
+        if result["planner_context_missed_roles"]:
+            categories.append("planner_context_role_miss")
+    elif not result["fallback_used"]:
+        categories.append("unsupported_direct_match")
+    return categories
+
+
+def _recipe_family_confusion(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    included_results = [
+        result
+        for result in results
+        if result["supported"] and result["expected_recipe"] is not None
+    ]
+    actual_labels = sorted({result["workflow_family"] for result in included_results})
+    predicted_labels = sorted({result["top_recipe_family"] for result in included_results})
+    counts = {
+        actual_label: {predicted_label: 0 for predicted_label in predicted_labels}
+        for actual_label in actual_labels
+    }
+    same_family_count = 0
+    for result in included_results:
+        actual_family = result["workflow_family"]
+        predicted_family = result["top_recipe_family"]
+        counts[actual_family][predicted_family] += 1
+        if actual_family == predicted_family:
+            same_family_count += 1
+    return {
+        "query_count": len(included_results),
+        "actual_labels": actual_labels,
+        "predicted_labels": predicted_labels,
+        "counts": counts,
+        "same_family_count": same_family_count,
+        "same_family_rate": round(
+            _rate(same_family_count, len(included_results)),
+            METRIC_PRECISION,
+        ),
+    }
+
+
+def _miss_category_summary(
+    results: Sequence[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    summary: dict[str, dict[str, Any]] = {}
+    for category in MISS_CATEGORY_KEYS:
+        query_ids = [
+            result["id"]
+            for result in results
+            if category in result["miss_categories"]
+        ]
+        summary[category] = {
+            "count": len(query_ids),
+            "query_ids": query_ids,
+        }
+    return summary
 
 
 def _aggregate_metrics(results: Sequence[dict[str, Any]]) -> dict[str, float]:
