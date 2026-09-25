@@ -23,7 +23,9 @@ natural language request
 - 使用确定性 lexical scoring。
 - 输出 `score`、`matched_terms`、`matched_fields`、`reason`。
 - Tool 结果包含 `trust_status`。
-- recipe 或 tool 召回无匹配时触发 fallback，并在 artifact 中记录 `fallback_used` / `fallback_reason`。
+- recipe 或 tool 召回无匹配时触发 fallback，并在 artifact 中分别记录
+  `recipe_fallback_used` / `tool_fallback_used`，同时保留 aggregate
+  `fallback_used` / `fallback_reason`。
 - Retrieval artifact 会保存到 run snapshot，并可在前端展示。
 - 完整 Catalog validation 仍使用全量 approved catalog。
 
@@ -228,6 +230,11 @@ PR 6 保持 `lexical_v1` scoring 和 Catalog 内容不变，为 evaluation artif
 - supported expected-recipe query 的 top-1 family confusion matrix；
 - aggregate miss category counts 和稳定的 query id 列表；
 - CLI summary 中的人类可读 confusion matrix 和非零 miss categories。
+
+Fallback candidates 继续进入实际 Planner context，但不作为 ranked matches 参与
+Recall、MRR、raw role coverage 或 top-family confusion；recipe fallback 在评估中记录
+为 `top_recipe_family == "no_match"`。Confusion matrix 的预测轴始终包含全部 expected
+families，并补充实际出现的 `no_match` / `unmapped` 等 sentinel labels。
 
 四个 supported family 的 top-1 family agreement 为 `0.8750`（49/56）。7 条 family
 confusion 中，4 条来自 “A, not B” 对比句，3 条来自 generic QC、parameter 或 counts

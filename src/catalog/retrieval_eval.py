@@ -22,6 +22,7 @@ UNMAPPED_RECIPE_FAMILY = "unmapped"
 MISS_CATEGORY_KEYS = (
     "recipe_top_1_miss",
     "recipe_top_k_miss",
+    "recipe_no_match",
     "recipe_family_confusion",
     "raw_tool_miss",
     "raw_role_miss",
@@ -208,15 +209,19 @@ def _evaluate_one_query(
     )
     retrieved_recipe_ids = [str(recipe["id"]) for recipe in retrieval.get("recipes", [])]
     retrieved_tool_ids = [str(tool["id"]) for tool in retrieval.get("tools", [])]
+    recipe_fallback_used = bool(retrieval.get("recipe_fallback_used", False))
+    tool_fallback_used = bool(retrieval.get("tool_fallback_used", False))
+    ranked_recipe_ids = [] if recipe_fallback_used else retrieved_recipe_ids
+    ranked_tool_ids = [] if tool_fallback_used else retrieved_tool_ids
     planner_context_tool_ids = _planner_context_tool_ids(
         retrieved_recipe_ids,
         retrieved_tool_ids,
         recipe_catalog,
     )
 
-    expected_recipe_rank = _rank_of(query.expected_recipe, retrieved_recipe_ids)
+    expected_recipe_rank = _rank_of(query.expected_recipe, ranked_recipe_ids)
     expected_tool_ranks = {
-        tool_id: _rank_of(tool_id, retrieved_tool_ids)
+        tool_id: _rank_of(tool_id, ranked_tool_ids)
         for tool_id in query.expected_tools
     }
     planner_context_tool_ranks = {
@@ -239,12 +244,12 @@ def _evaluate_one_query(
         for tool_id, rank in planner_context_tool_ranks.items()
         if rank is None
     ]
-    role_coverage = _role_coverage(query.expected_roles, retrieved_tool_ids)
+    role_coverage = _role_coverage(query.expected_roles, ranked_tool_ids)
     planner_context_role_coverage = _role_coverage(
         query.expected_roles,
         planner_context_tool_ids,
     )
-    top_recipe_id = retrieved_recipe_ids[0] if retrieved_recipe_ids else None
+    top_recipe_id = ranked_recipe_ids[0] if ranked_recipe_ids else None
     top_recipe_family = _top_recipe_family(top_recipe_id, recipe_family_by_id)
 
     result = {
@@ -285,6 +290,8 @@ def _evaluate_one_query(
         "planner_context_covered_roles": planner_context_role_coverage["covered_roles"],
         "planner_context_missed_roles": planner_context_role_coverage["missed_roles"],
         "planner_context_role_coverage": planner_context_role_coverage["coverage"],
+        "recipe_fallback_used": recipe_fallback_used,
+        "tool_fallback_used": tool_fallback_used,
         "fallback_used": bool(retrieval.get("fallback_used")),
         "fallback_reason": retrieval.get("fallback_reason"),
         "strategy": retrieval.get("strategy"),
@@ -324,7 +331,9 @@ def _classify_misses(result: dict[str, Any]) -> list[str]:
                 categories.append("recipe_top_1_miss")
             if not result["expected_recipe_recalled"]:
                 categories.append("recipe_top_k_miss")
-            if result["top_recipe_family"] != result["workflow_family"]:
+            if result["top_recipe_family"] == NO_RECIPE_MATCH_FAMILY:
+                categories.append("recipe_no_match")
+            elif result["top_recipe_family"] != result["workflow_family"]:
                 categories.append("recipe_family_confusion")
         if result["missed_expected_tools"]:
             categories.append("raw_tool_miss")
@@ -350,7 +359,10 @@ def _recipe_family_confusion(results: Sequence[dict[str, Any]]) -> dict[str, Any
         if result["supported"] and result["expected_recipe"] is not None
     ]
     actual_labels = sorted({result["workflow_family"] for result in included_results})
-    predicted_labels = sorted({result["top_recipe_family"] for result in included_results})
+    observed_predictions = {
+        result["top_recipe_family"] for result in included_results
+    }
+    predicted_labels = sorted(set(actual_labels) | observed_predictions)
     counts = {
         actual_label: {predicted_label: 0 for predicted_label in predicted_labels}
         for actual_label in actual_labels

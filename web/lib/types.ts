@@ -152,6 +152,8 @@ export type CatalogRetrievalArtifact = {
   strategy: string;
   recipes: CatalogRetrievalRecipe[];
   tools: CatalogRetrievalTool[];
+  recipe_fallback_used?: boolean;
+  tool_fallback_used?: boolean;
   fallback_used: boolean;
   fallback_reason: string | null;
 };

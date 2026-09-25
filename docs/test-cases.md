@@ -2084,6 +2084,7 @@ hard filtering 的 paired-end germline variant calling query。
 期望输出：
 
 - `fallback_used == True`。
+- `recipe_fallback_used == True`，`tool_fallback_used == True`。
 - `fallback_reason` 说明 recipe 和 tool recall 均无匹配。
 - fallback recipe/tool 结果的 `score == 0.0`，`matched_terms == []`。
 - fallback tool 仍包含 `trust_status == "catalog-approved"`。
@@ -2091,6 +2092,8 @@ hard filtering 的 paired-end germline variant calling query。
 覆盖点：
 
 - 低置信度召回不会静默返回空结果，会记录可审计 fallback 原因。
+- Recipe 与 tool fallback provenance 分开记录，便于 evaluation 区分真实排名与
+  fallback candidates。
 - fallback 结果仍限定在 approved local catalog 内。
 
 ### `test_rejects_empty_query`
@@ -2205,13 +2208,16 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
   3 条 scRNA-seq、1 条 variant calling 误排；ChIP-seq 有 1 条误排到 variant
   calling，scRNA-seq 有 1 条误排到 bulk RNA-seq，variant calling 12 条全部正确。
 - `recipe_top_1_miss == 8`、`recipe_top_k_miss == 1`、
-  `recipe_family_confusion == 7`。
+  `recipe_family_confusion == 7`，当前 supported baseline 的 `recipe_no_match == 0`。
 - `raw_tool_miss == 15`、`raw_role_miss == 16`，且这些 miss 全部由 recipe context
   恢复；`planner_context_tool_miss` 和 `planner_context_role_miss` 均为 0。
 - `unsupported_direct_match == 7`，并保留对应 query ids。
 - 每条 query 包含 `top_recipe_id`、`top_recipe_family` 和可重叠
   `miss_categories`；`cross_family_chipseq_not_variant_en` 被标记为 family confusion，
   `rnaseq_quality_report_en` 被标记为唯一 top-3 recipe miss。
+- unsupported metagenomics fallback 保留返回的 approved candidates，但
+  `top_recipe_id == null`、`top_recipe_family == "no_match"`，且 component fallback
+  flags 均为 `true`。
 
 覆盖点：
 
@@ -2239,9 +2245,30 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
 - 对外暴露的 `family_a` Recipe Recall@1 舍入为 `0.8095`。
 - macro Recipe Recall@1 使用未舍入的 `17 / 21` 参与计算，最终为 `0.9048`，而非
   从 `0.8095` 二次求平均得到的 `0.9047`。
+- Confusion matrix 的预测轴包含 `family_a`、`family_b` 和 `unmapped`；即使没有 query
+  被预测为 `family_a` 或 `family_b`，对应零值列仍保留。
 
 覆盖点：per-query、family 和 macro 聚合链路保持原始精度，只在最终 evaluation
 artifact 边界统一舍入四位。
+
+### `test_excludes_fallback_candidates_from_ranked_metrics`
+
+输入：一条 supported synthetic query；fake retriever 返回恰好包含 expected recipe/tool
+的 fallback candidates，并显式记录 recipe/tool component fallback。
+
+期望输出：
+
+- 返回 candidates 继续保留在 `retrieved_recipes` / `retrieved_tools` 和 Planner
+  context。
+- fallback recipe 不计为 Recall/MRR hit；`top_recipe_id == null`，
+  `top_recipe_family == "no_match"`。
+- fallback tool 不计为 raw Tool Recall 或 Role Coverage hit，但 Planner Context Tool
+  Recall 仍为 `1.0`。
+- query 记录 `recipe_no_match` 以及 raw tool/role recovery categories。
+- Confusion matrix 同时保留 `bulk_rnaseq` 零值列和 `no_match` prediction 列。
+
+覆盖点：fallback candidates 是真实 Planner 降级上下文，但不是 retriever 的 ranked
+matches，不会偶然抬高 Recall、MRR、family agreement 或 raw tool/role metrics。
 
 ### `test_computes_supported_metrics_and_tracks_unsupported_matches`
 
@@ -5626,10 +5653,12 @@ npm run test:catalog-retrieval
 - `null` retrieval。
 - 空 query、空 recipes、空 tools 且未 fallback 的 retrieval。
 - 包含 RNA-seq query、recipe 和带 execution verification 的 tool 候选的 retrieval。
+- component fallback flag 使用非法字符串值的 retrieval。
 
 期望输出：
 
 - `null` 与空 retrieval 返回 `false`。
+- component fallback flag 只接受 boolean；非法类型返回 `false`。
 - 包含候选或 query 的 retrieval 返回 `true`。
 
 覆盖点：
@@ -5647,6 +5676,15 @@ retrieval artifact。
 - UI 可以显示“执行状态未记录”，而不是隐藏整份历史 artifact。
 
 覆盖点：execution verification 对新 artifact 必填，但前端读取层保持历史兼容。
+
+### `accepts legacy retrieval artifacts without component fallback flags`
+
+输入：尚未包含 `recipe_fallback_used` / `tool_fallback_used` 的历史 retrieval artifact。
+
+期望输出：artifact 仍被识别为有效 retrieval。
+
+覆盖点：新 artifact 暴露 component fallback provenance，同时前端继续兼容已持久化的
+旧 run snapshots。
 
 ### `selects top catalog recipe and limited tools`
 

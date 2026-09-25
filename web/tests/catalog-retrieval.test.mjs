@@ -49,6 +49,8 @@ const retrieval = {
       reason: "Matched approved catalog tool fields.",
     },
   ],
+  recipe_fallback_used: false,
+  tool_fallback_used: false,
   fallback_used: false,
   fallback_reason: null,
 };
@@ -62,6 +64,13 @@ test("detects non-empty catalog retrieval artifacts", () => {
       query: "Run bulk RNA-seq differential expression.",
       recipes: [],
       tools: [],
+    }),
+    false,
+  );
+  assert.equal(
+    hasCatalogRetrieval({
+      ...retrieval,
+      recipe_fallback_used: "false",
     }),
     false,
   );
@@ -103,6 +112,16 @@ test("accepts legacy retrieval tools without execution verification", () => {
     ...retrieval,
     tools: retrieval.tools.map(({ execution_verification: _verification, ...tool }) => tool),
   };
+
+  assert.equal(hasCatalogRetrieval(legacyRetrieval), true);
+});
+
+test("accepts legacy retrieval artifacts without component fallback flags", () => {
+  const {
+    recipe_fallback_used: _recipeFallback,
+    tool_fallback_used: _toolFallback,
+    ...legacyRetrieval
+  } = retrieval;
 
   assert.equal(hasCatalogRetrieval(legacyRetrieval), true);
 });

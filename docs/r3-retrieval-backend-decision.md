@@ -62,6 +62,7 @@ ranking miss、raw tool miss 和由 recipe context 恢复的 miss。
 | --- | ---: | --- |
 | `recipe_top_1_miss` | 8 | expected recipe 未排在首位 |
 | `recipe_top_k_miss` | 1 | expected recipe 未进入 top-3 |
+| `recipe_no_match` | 0 | supported query 的 recipe ranker 无真实匹配；fallback candidates 不计为命中 |
 | `recipe_family_confusion` | 7 | top recipe 属于另一个 workflow family |
 | `raw_tool_miss` | 15 | raw top-8 未覆盖全部 expected tools |
 | `raw_role_miss` | 16 | raw top-8 未覆盖全部 expected roles |
@@ -154,9 +155,9 @@ lexical score 和 vector similarity；只有离线证据支持时才考虑权重
 4. 显式指定 recipe/tool 的 query 不得从正确 top-1 或可用 top-K 退化为 miss。
 5. 每个 workflow family、confusion cell 和 per-query regression 都必须可见；不能只用
    overall 平均分掩盖小 family 退化。
-6. Retrieval artifact 必须保留 recipe/tool identity、rank、score/reason、fallback、
-   trust status 和 execution verification；hybrid 还应记录各分支 rank/score 与 fusion
-   依据。
+6. Retrieval artifact 必须保留 recipe/tool identity、rank、score/reason、recipe/tool
+   component fallback provenance、trust status 和 execution verification；hybrid 还应
+   记录各分支 rank/score 与 fusion 依据。
 7. 所有结果仍只来自 approved Catalog，完整 Catalog validation 继续执行；结构化
    `--input` 编译路径不得依赖 embedding 服务。
 
@@ -208,6 +209,10 @@ PR 6 为 evaluation artifact 增加：
 - aggregate `recipe_family_confusion`。
 - aggregate `miss_categories`，包含稳定的零计数类别和对应 query ids。
 - CLI summary 中的 family confusion matrix 与 populated miss categories。
+- component-level recipe/tool fallback provenance；fallback candidates 保留在 Planner
+  context，但从 ranked metrics 中排除。
+- 保留全部 expected family confusion columns，并以 `no_match` / `unmapped` 表达额外
+  prediction states。
 
 这些字段建立了后续 backend A/B comparison 的可审计基线；PR 6 本身不改变
 `lexical_v1` scoring、默认 retrieval path 或 Catalog 内容。

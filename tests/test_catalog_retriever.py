@@ -23,6 +23,8 @@ class CatalogRetrieverTests(unittest.TestCase):
         )
 
         self.assertEqual(result["strategy"], "lexical_v1")
+        self.assertFalse(result["recipe_fallback_used"])
+        self.assertFalse(result["tool_fallback_used"])
         self.assertFalse(result["fallback_used"])
         self.assertIsNone(result["fallback_reason"])
         self.assertEqual(result["recipes"][0]["id"], "rnaseq_differential_expression")
@@ -167,6 +169,8 @@ class CatalogRetrieverTests(unittest.TestCase):
         )
 
         self.assertTrue(result["fallback_used"])
+        self.assertTrue(result["recipe_fallback_used"])
+        self.assertTrue(result["tool_fallback_used"])
         self.assertIn("recipe recall returned no matches", result["fallback_reason"])
         self.assertIn("tool recall returned no matches", result["fallback_reason"])
         self.assertGreaterEqual(len(result["recipes"]), 1)

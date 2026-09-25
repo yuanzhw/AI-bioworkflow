@@ -136,7 +136,8 @@ lexical retriever
 
 训练后的实现必须保持与第一版 retriever 相同的外部契约：recipe 和 tool 结果
 仍包含 `score`、`matched_terms`、`matched_fields` 和 `reason`，顶层结果仍包含
-`fallback_used` 与 `fallback_reason`，tool 结果仍包含 `trust_status`。
+`recipe_fallback_used`、`tool_fallback_used`、`fallback_used` 与 `fallback_reason`，
+tool 结果仍包含 `trust_status`。
 完整 Catalog validation 仍然是准入边界，训练模型不能直接准入未知工具、
 替换镜像或绕过 Analyzer / Renderer / Checker。
 
@@ -249,6 +250,8 @@ User request
       "reason": "Matched differential expression role and tool description."
     }
   ],
+  "recipe_fallback_used": false,
+  "tool_fallback_used": false,
   "fallback_used": false,
   "fallback_reason": null
 }
@@ -289,7 +292,8 @@ User request
 
 - 如果 recipe 召回为空，回退完整 recipe catalog。
 - 如果 tool 召回为空，回退 recipe allowed tools 或完整 tool catalog。
-- fallback 必须记录 `fallback_used: true` 和 `fallback_reason`。
+- fallback 必须记录 component-level `recipe_fallback_used` / `tool_fallback_used`、
+  aggregate `fallback_used: true` 和 `fallback_reason`。
 
 ## Planner 集成
 
