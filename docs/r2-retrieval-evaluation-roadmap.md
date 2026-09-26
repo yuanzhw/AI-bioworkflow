@@ -235,6 +235,9 @@ Fallback candidates 继续进入实际 Planner context，但不作为 ranked mat
 Recall、MRR、raw role coverage 或 top-family confusion；recipe fallback 在评估中记录
 为 `top_recipe_family == "no_match"`。Confusion matrix 的预测轴始终包含全部 expected
 families，并补充实际出现的 `no_match` / `unmapped` 等 sentinel labels。
+当 aggregate `fallback_used` 为 `true` 时，evaluation 要求 retriever 同时提供两个
+boolean component flags，并校验 aggregate 等于它们的逻辑或；缺失 provenance 时直接
+拒绝生成可能失真的指标。
 
 四个 supported family 的 top-1 family agreement 为 `0.8750`（49/56）。7 条 family
 confusion 中，4 条来自 “A, not B” 对比句，3 条来自 generic QC、parameter 或 counts

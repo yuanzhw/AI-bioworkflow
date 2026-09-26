@@ -207,10 +207,12 @@ def _evaluate_one_query(
         top_k_recipes,
         top_k_tools,
     )
+    recipe_fallback_used, tool_fallback_used, fallback_used = _fallback_provenance(
+        retrieval,
+        query_id=query.id,
+    )
     retrieved_recipe_ids = [str(recipe["id"]) for recipe in retrieval.get("recipes", [])]
     retrieved_tool_ids = [str(tool["id"]) for tool in retrieval.get("tools", [])]
-    recipe_fallback_used = bool(retrieval.get("recipe_fallback_used", False))
-    tool_fallback_used = bool(retrieval.get("tool_fallback_used", False))
     ranked_recipe_ids = [] if recipe_fallback_used else retrieved_recipe_ids
     ranked_tool_ids = [] if tool_fallback_used else retrieved_tool_ids
     planner_context_tool_ids = _planner_context_tool_ids(
@@ -292,13 +294,43 @@ def _evaluate_one_query(
         "planner_context_role_coverage": planner_context_role_coverage["coverage"],
         "recipe_fallback_used": recipe_fallback_used,
         "tool_fallback_used": tool_fallback_used,
-        "fallback_used": bool(retrieval.get("fallback_used")),
+        "fallback_used": fallback_used,
         "fallback_reason": retrieval.get("fallback_reason"),
         "strategy": retrieval.get("strategy"),
         "notes": query.notes,
     }
     result["miss_categories"] = _classify_misses(result)
     return result
+
+
+def _fallback_provenance(
+    retrieval: dict[str, Any],
+    *,
+    query_id: str,
+) -> tuple[bool, bool, bool]:
+    fallback_used = retrieval.get("fallback_used", False)
+    if not isinstance(fallback_used, bool):
+        raise ValueError(f"{query_id}: fallback_used must be a boolean")
+
+    component_fields = ("recipe_fallback_used", "tool_fallback_used")
+    for field_name in component_fields:
+        if field_name in retrieval and not isinstance(retrieval[field_name], bool):
+            raise ValueError(f"{query_id}: {field_name} must be a boolean")
+
+    if fallback_used and any(field_name not in retrieval for field_name in component_fields):
+        raise ValueError(
+            f"{query_id}: fallback_used=true requires boolean "
+            "recipe_fallback_used and tool_fallback_used"
+        )
+
+    recipe_fallback_used = retrieval.get("recipe_fallback_used", False)
+    tool_fallback_used = retrieval.get("tool_fallback_used", False)
+    if fallback_used != (recipe_fallback_used or tool_fallback_used):
+        raise ValueError(
+            f"{query_id}: fallback_used must equal recipe_fallback_used or "
+            "tool_fallback_used"
+        )
+    return recipe_fallback_used, tool_fallback_used, fallback_used
 
 
 def _recipe_family_map(queries: Sequence[RetrievalQuery]) -> dict[str, str]:

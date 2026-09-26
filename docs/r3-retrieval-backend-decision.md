@@ -211,6 +211,8 @@ PR 6 为 evaluation artifact 增加：
 - CLI summary 中的 family confusion matrix 与 populated miss categories。
 - component-level recipe/tool fallback provenance；fallback candidates 保留在 Planner
   context，但从 ranked metrics 中排除。
+- evaluation backend 在 aggregate fallback 为 `true` 时必须提供两个 component flags，
+  且 aggregate 必须等于 component flags 的逻辑或；不允许从 aggregate 状态猜测来源。
 - 保留全部 expected family confusion columns，并以 `no_match` / `unmapped` 表达额外
   prediction states。
 

@@ -31,6 +31,8 @@ def fake_retriever(
         "supported miss": {
             "recipes": [{"id": "other_recipe"}],
             "tools": [{"id": "multiqc"}],
+            "recipe_fallback_used": True,
+            "tool_fallback_used": True,
             "fallback_used": True,
             "fallback_reason": "synthetic fallback",
         },
@@ -76,6 +78,42 @@ def multi_version_fake_retriever(
             {"id": "fastp", "version": "1.3.3"},
         ],
         "recipe_fallback_used": False,
+        "tool_fallback_used": False,
+        "fallback_used": False,
+        "fallback_reason": None,
+    }
+
+
+def aggregate_only_fallback_retriever(
+    query: str,
+    _tool_catalog,
+    _recipe_catalog,
+    _top_k_recipes: int,
+    _top_k_tools: int,
+) -> dict[str, Any]:
+    return {
+        "query": query,
+        "strategy": "legacy_fallback_v1",
+        "recipes": [{"id": "rnaseq_differential_expression"}],
+        "tools": [{"id": "deseq2"}],
+        "fallback_used": True,
+        "fallback_reason": "legacy aggregate-only fallback",
+    }
+
+
+def inconsistent_fallback_retriever(
+    query: str,
+    _tool_catalog,
+    _recipe_catalog,
+    _top_k_recipes: int,
+    _top_k_tools: int,
+) -> dict[str, Any]:
+    return {
+        "query": query,
+        "strategy": "inconsistent_fallback_v1",
+        "recipes": [{"id": "rnaseq_differential_expression"}],
+        "tools": [{"id": "deseq2"}],
+        "recipe_fallback_used": True,
         "tool_fallback_used": False,
         "fallback_used": False,
         "fallback_reason": None,
@@ -356,11 +394,11 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertEqual(result["macro_family_metrics"]["recipe_recall_at_1"], 0.9048)
         self.assertEqual(
             result["recipe_family_confusion"]["predicted_labels"],
-            ["family_a", "family_b", "unmapped"],
+            ["family_a", "family_b", "no_match", "unmapped"],
         )
         self.assertEqual(
             result["recipe_family_confusion"]["counts"]["family_b"],
-            {"family_a": 0, "family_b": 0, "unmapped": 1},
+            {"family_a": 0, "family_b": 0, "no_match": 0, "unmapped": 1},
         )
 
     def test_excludes_fallback_candidates_from_ranked_metrics(self):
@@ -506,13 +544,16 @@ class RetrievalEvaluationTests(unittest.TestCase):
             result["queries"][1]["planner_context_missed_expected_tools"],
             ["deseq2"],
         )
-        self.assertEqual(result["queries"][1]["top_recipe_family"], "unmapped")
+        self.assertTrue(result["queries"][1]["recipe_fallback_used"])
+        self.assertTrue(result["queries"][1]["tool_fallback_used"])
+        self.assertIsNone(result["queries"][1]["top_recipe_id"])
+        self.assertEqual(result["queries"][1]["top_recipe_family"], "no_match")
         self.assertEqual(
             result["queries"][1]["miss_categories"],
             [
                 "recipe_top_1_miss",
                 "recipe_top_k_miss",
-                "recipe_family_confusion",
+                "recipe_no_match",
                 "raw_tool_miss",
                 "raw_role_miss",
                 "planner_context_tool_miss",
@@ -528,11 +569,11 @@ class RetrievalEvaluationTests(unittest.TestCase):
             {
                 "query_count": 2,
                 "actual_labels": ["bulk_rnaseq"],
-                "predicted_labels": ["bulk_rnaseq", "unmapped"],
+                "predicted_labels": ["bulk_rnaseq", "no_match"],
                 "counts": {
                     "bulk_rnaseq": {
                         "bulk_rnaseq": 1,
-                        "unmapped": 1,
+                        "no_match": 1,
                     }
                 },
                 "same_family_count": 1,
@@ -540,6 +581,7 @@ class RetrievalEvaluationTests(unittest.TestCase):
             },
         )
         self.assertEqual(result["miss_categories"]["recipe_top_1_miss"]["count"], 1)
+        self.assertEqual(result["miss_categories"]["recipe_no_match"]["count"], 1)
         self.assertEqual(result["miss_categories"]["raw_tool_miss"]["count"], 2)
         self.assertEqual(
             result["miss_categories"]["raw_tool_miss_recovered_by_recipe_context"][
@@ -551,6 +593,50 @@ class RetrievalEvaluationTests(unittest.TestCase):
             result["miss_categories"]["unsupported_direct_match"]["query_ids"],
             ["q3"],
         )
+
+    def test_requires_component_flags_for_fallback_results(self):
+        query = RetrievalQuery(
+            id="legacy-fallback",
+            query="legacy aggregate-only fallback",
+            supported=True,
+            workflow_family="bulk_rnaseq",
+            expected_recipe="rnaseq_differential_expression",
+            expected_tools=["deseq2"],
+            expected_roles={"differential_expression": ["deseq2"]},
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "fallback_used=true requires boolean recipe_fallback_used",
+        ):
+            evaluate_retrieval_queries(
+                [query],
+                self.tool_catalog,
+                self.recipe_catalog,
+                retriever=aggregate_only_fallback_retriever,
+            )
+
+    def test_rejects_inconsistent_component_fallback_flags(self):
+        query = RetrievalQuery(
+            id="inconsistent-fallback",
+            query="inconsistent fallback provenance",
+            supported=True,
+            workflow_family="bulk_rnaseq",
+            expected_recipe="rnaseq_differential_expression",
+            expected_tools=["deseq2"],
+            expected_roles={"differential_expression": ["deseq2"]},
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "fallback_used must equal recipe_fallback_used or tool_fallback_used",
+        ):
+            evaluate_retrieval_queries(
+                [query],
+                self.tool_catalog,
+                self.recipe_catalog,
+                retriever=inconsistent_fallback_retriever,
+            )
 
     def test_deduplicates_planner_context_tool_ids_from_multiple_versions(self):
         queries = [

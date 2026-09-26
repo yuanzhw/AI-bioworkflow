@@ -294,6 +294,9 @@ User request
 - 如果 tool 召回为空，回退 recipe allowed tools 或完整 tool catalog。
 - fallback 必须记录 component-level `recipe_fallback_used` / `tool_fallback_used`、
   aggregate `fallback_used: true` 和 `fallback_reason`。
+- 新 retriever backend 必须满足
+  `fallback_used == (recipe_fallback_used or tool_fallback_used)`；evaluation 不从
+  aggregate flag 猜测缺失的 component provenance。
 
 ## Planner 集成
 
