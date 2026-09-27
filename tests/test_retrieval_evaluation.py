@@ -50,6 +50,22 @@ def fake_retriever(
             "fallback_used": True,
             "fallback_reason": "synthetic recipe and tool fallback",
         },
+        "tool-only fallback": {
+            "recipes": [{"id": "rnaseq_differential_expression"}],
+            "tools": [{"id": "deseq2"}],
+            "recipe_fallback_used": False,
+            "tool_fallback_used": True,
+            "fallback_used": True,
+            "fallback_reason": "synthetic tool-only fallback",
+        },
+        "recipe-only fallback": {
+            "recipes": [{"id": "rnaseq_differential_expression"}],
+            "tools": [{"id": "deseq2"}],
+            "recipe_fallback_used": True,
+            "tool_fallback_used": False,
+            "fallback_used": True,
+            "fallback_reason": "synthetic recipe-only fallback",
+        },
     }
     retrieval = fixtures[query]
     return {
@@ -465,6 +481,61 @@ class RetrievalEvaluationTests(unittest.TestCase):
                 "same_family_rate": 0.0,
             },
         )
+
+    def test_one_sided_fallback_excludes_only_affected_ranked_candidates(self):
+        queries = [
+            RetrievalQuery(
+                id="tool-only-fallback",
+                query="tool-only fallback",
+                supported=True,
+                workflow_family="bulk_rnaseq",
+                expected_recipe="rnaseq_differential_expression",
+                expected_tools=["deseq2"],
+                expected_roles={},
+            ),
+            RetrievalQuery(
+                id="recipe-only-fallback",
+                query="recipe-only fallback",
+                supported=True,
+                workflow_family="bulk_rnaseq",
+                expected_recipe="rnaseq_differential_expression",
+                expected_tools=["deseq2"],
+                expected_roles={},
+            ),
+        ]
+
+        result = evaluate_retrieval_queries(
+            queries,
+            self.tool_catalog,
+            self.recipe_catalog,
+            retriever=fake_retriever,
+        )
+
+        tool_fallback = result["queries"][0]
+        self.assertFalse(tool_fallback["recipe_fallback_used"])
+        self.assertTrue(tool_fallback["tool_fallback_used"])
+        self.assertTrue(tool_fallback["fallback_used"])
+        self.assertEqual(tool_fallback["top_recipe_id"], "rnaseq_differential_expression")
+        self.assertTrue(tool_fallback["expected_recipe_recalled"])
+        self.assertEqual(tool_fallback["missed_expected_tools"], ["deseq2"])
+        self.assertEqual(tool_fallback["planner_context_missed_expected_tools"], [])
+        self.assertIn("raw_tool_miss", tool_fallback["miss_categories"])
+        self.assertNotIn("recipe_no_match", tool_fallback["miss_categories"])
+
+        recipe_fallback = result["queries"][1]
+        self.assertTrue(recipe_fallback["recipe_fallback_used"])
+        self.assertFalse(recipe_fallback["tool_fallback_used"])
+        self.assertTrue(recipe_fallback["fallback_used"])
+        self.assertIsNone(recipe_fallback["top_recipe_id"])
+        self.assertEqual(recipe_fallback["top_recipe_family"], "no_match")
+        self.assertFalse(recipe_fallback["expected_recipe_recalled"])
+        self.assertEqual(recipe_fallback["missed_expected_tools"], [])
+        self.assertIn("recipe_no_match", recipe_fallback["miss_categories"])
+        self.assertNotIn("raw_tool_miss", recipe_fallback["miss_categories"])
+
+        self.assertEqual(result["metrics"]["recipe_recall_at_1"], 0.5)
+        self.assertEqual(result["metrics"]["tool_recall_at_k"], 0.5)
+        self.assertEqual(result["metrics"]["planner_context_tool_recall"], 1.0)
 
     def test_computes_supported_metrics_and_tracks_unsupported_matches(self):
         queries = [

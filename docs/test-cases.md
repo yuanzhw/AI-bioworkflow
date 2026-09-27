@@ -2270,6 +2270,37 @@ artifact 边界统一舍入四位。
 覆盖点：fallback candidates 是真实 Planner 降级上下文，但不是 retriever 的 ranked
 matches，不会偶然抬高 Recall、MRR、family agreement 或 raw tool/role metrics。
 
+### `test_tool_only_fallback_preserves_recipe_match_provenance`
+
+输入：只命中 ChIP-seq recipe 字段、不命中 tool 字段的 `chromatin` 查询。
+
+期望输出：component flags 为 `(false, true)`，aggregate fallback 为 `true`；recipe
+保留正分 match，tool candidates 明确来自零分 fallback，reason 只记录 tool fallback。
+
+覆盖点：tool-only fallback 不会抹掉正常 recipe match 的 provenance。
+
+### `test_recipe_only_fallback_preserves_tool_match_provenance`
+
+输入：只命中 MACS2 tool 字段、不命中 recipe 字段的 `callpeak` 查询。
+
+期望输出：component flags 为 `(true, false)`，aggregate fallback 为 `true`；recipe
+candidates 明确来自零分 fallback，MACS2 保留正分 match，reason 只记录 recipe fallback。
+
+覆盖点：recipe-only fallback 不会把正常 tool match 错标为 fallback。
+
+### `test_one_sided_fallback_excludes_only_affected_ranked_candidates`
+
+输入：synthetic retriever 分别返回 tool-only `(false, true)` 与 recipe-only
+`(true, false)` fallback；两条 query 都携带 aggregate `fallback_used == true`。
+
+期望输出：tool-only case 保留 recipe hit、排除 fallback tool ranking，并由 Planner
+context 恢复 expected tool；recipe-only case 将 recipe 记为 `no_match`，但保留正常
+tool hit。两条 query 聚合后的 Recipe Recall@1 与 Tool Recall@K 均为 `0.5`，Planner
+context tool recall 为 `1.0`。
+
+覆盖点：evaluation 按 component provenance 独立控制 recipe/tool ranked metrics，避免
+错误地使用 aggregate fallback 同时排除或保留两侧 candidates。
+
 ### `test_requires_component_flags_for_fallback_results`
 
 输入：custom retriever 返回 `fallback_used == true`，但只使用旧 aggregate contract，
