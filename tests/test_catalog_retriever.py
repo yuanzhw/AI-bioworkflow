@@ -23,6 +23,8 @@ class CatalogRetrieverTests(unittest.TestCase):
         )
 
         self.assertEqual(result["strategy"], "lexical_v1")
+        self.assertFalse(result["recipe_fallback_used"])
+        self.assertFalse(result["tool_fallback_used"])
         self.assertFalse(result["fallback_used"])
         self.assertIsNone(result["fallback_reason"])
         self.assertEqual(result["recipes"][0]["id"], "rnaseq_differential_expression")
@@ -167,6 +169,8 @@ class CatalogRetrieverTests(unittest.TestCase):
         )
 
         self.assertTrue(result["fallback_used"])
+        self.assertTrue(result["recipe_fallback_used"])
+        self.assertTrue(result["tool_fallback_used"])
         self.assertIn("recipe recall returned no matches", result["fallback_reason"])
         self.assertIn("tool recall returned no matches", result["fallback_reason"])
         self.assertGreaterEqual(len(result["recipes"]), 1)
@@ -182,6 +186,42 @@ class CatalogRetrieverTests(unittest.TestCase):
             )
             self.assertEqual(tool["matched_terms"], [])
             self.assertIn("Fallback result", tool["reason"])
+
+    def test_tool_only_fallback_preserves_recipe_match_provenance(self):
+        result = retrieve_catalog_context(
+            "chromatin",
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=2,
+            top_k_tools=3,
+        )
+
+        self.assertFalse(result["recipe_fallback_used"])
+        self.assertTrue(result["tool_fallback_used"])
+        self.assertTrue(result["fallback_used"])
+        self.assertNotIn("recipe recall returned no matches", result["fallback_reason"])
+        self.assertIn("tool recall returned no matches", result["fallback_reason"])
+        self.assertEqual(result["recipes"][0]["id"], "chipseq_peak_calling")
+        self.assertGreater(result["recipes"][0]["score"], 0)
+        self.assertTrue(all(tool["score"] == 0.0 for tool in result["tools"]))
+
+    def test_recipe_only_fallback_preserves_tool_match_provenance(self):
+        result = retrieve_catalog_context(
+            "callpeak",
+            self.tool_catalog,
+            self.recipe_catalog,
+            top_k_recipes=2,
+            top_k_tools=3,
+        )
+
+        self.assertTrue(result["recipe_fallback_used"])
+        self.assertFalse(result["tool_fallback_used"])
+        self.assertTrue(result["fallback_used"])
+        self.assertIn("recipe recall returned no matches", result["fallback_reason"])
+        self.assertNotIn("tool recall returned no matches", result["fallback_reason"])
+        self.assertTrue(all(recipe["score"] == 0.0 for recipe in result["recipes"]))
+        self.assertEqual(result["tools"][0]["id"], "macs2")
+        self.assertGreater(result["tools"][0]["score"], 0)
 
     def test_rejects_empty_query(self):
         with self.assertRaisesRegex(ValueError, "query must not be empty"):

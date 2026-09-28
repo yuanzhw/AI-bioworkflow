@@ -136,7 +136,8 @@ lexical retriever
 
 训练后的实现必须保持与第一版 retriever 相同的外部契约：recipe 和 tool 结果
 仍包含 `score`、`matched_terms`、`matched_fields` 和 `reason`，顶层结果仍包含
-`fallback_used` 与 `fallback_reason`，tool 结果仍包含 `trust_status`。
+`recipe_fallback_used`、`tool_fallback_used`、`fallback_used` 与 `fallback_reason`，
+tool 结果仍包含 `trust_status`。
 完整 Catalog validation 仍然是准入边界，训练模型不能直接准入未知工具、
 替换镜像或绕过 Analyzer / Renderer / Checker。
 
@@ -249,6 +250,8 @@ User request
       "reason": "Matched differential expression role and tool description."
     }
   ],
+  "recipe_fallback_used": false,
+  "tool_fallback_used": false,
   "fallback_used": false,
   "fallback_reason": null
 }
@@ -289,7 +292,11 @@ User request
 
 - 如果 recipe 召回为空，回退完整 recipe catalog。
 - 如果 tool 召回为空，回退 recipe allowed tools 或完整 tool catalog。
-- fallback 必须记录 `fallback_used: true` 和 `fallback_reason`。
+- fallback 必须记录 component-level `recipe_fallback_used` / `tool_fallback_used`、
+  aggregate `fallback_used: true` 和 `fallback_reason`。
+- 新 retriever backend 必须满足
+  `fallback_used == (recipe_fallback_used or tool_fallback_used)`；evaluation 不从
+  aggregate flag 猜测缺失的 component provenance。
 
 ## Planner 集成
 
@@ -462,5 +469,5 @@ R1 的职责是建立受控、可解释、可展示的 approved catalog retrieva
 | --- | --- | --- |
 | R1 | 本文档 | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | 规划中 | 基于 R2 baseline 选择 vector 或 hybrid backend，并保持 artifact contract 不变 |
+| R3 | [决策完成，实施中](./r3-retrieval-backend-decision.md) | Hybrid-first experiment；`lexical_v1` 保持默认，先建立可替换 backend contract |
 | R4 | 规划中 | 在 catalog 和标注数据足够后再评估 reranker 或 embedding fine-tuning |

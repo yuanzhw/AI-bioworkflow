@@ -56,18 +56,18 @@ def retrieve_catalog_context(
     recipe_matches = _rank_recipes(query_tokens, recipe_catalog)[:top_k_recipes]
     tool_matches = _rank_tools(query_tokens, tool_catalog)[:top_k_tools]
 
-    fallback_used = False
+    recipe_fallback_used = not recipe_matches
+    tool_fallback_used = not tool_matches
+    fallback_used = recipe_fallback_used or tool_fallback_used
     fallback_reasons: list[str] = []
 
-    if not recipe_matches:
-        fallback_used = True
+    if recipe_fallback_used:
         fallback_reasons.append("recipe recall returned no matches; used complete recipe catalog")
         recipes = _fallback_recipe_results(recipe_catalog, top_k_recipes)
     else:
         recipes = [_recipe_result(match) for match in recipe_matches]
 
-    if not tool_matches:
-        fallback_used = True
+    if tool_fallback_used:
         fallback_tools = _allowed_tools_from_recipe_results(recipes, recipe_catalog, tool_catalog)
         if fallback_tools:
             fallback_reasons.append(
@@ -85,6 +85,8 @@ def retrieve_catalog_context(
         "strategy": LEXICAL_RETRIEVER_STRATEGY,
         "recipes": recipes,
         "tools": tools,
+        "recipe_fallback_used": recipe_fallback_used,
+        "tool_fallback_used": tool_fallback_used,
         "fallback_used": fallback_used,
         "fallback_reason": "; ".join(fallback_reasons) if fallback_reasons else None,
     }

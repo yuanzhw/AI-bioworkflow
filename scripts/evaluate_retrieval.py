@@ -133,6 +133,35 @@ def _format_summary(evaluation: dict[str, Any]) -> str:
         f"Tool@5={macro['tool_recall_at_5']:.4f}"
     )
 
+    confusion = evaluation["recipe_family_confusion"]
+    lines.append(
+        "Recipe family top-1 agreement: "
+        f"{confusion['same_family_rate']:.4f} "
+        f"({confusion['same_family_count']}/{confusion['query_count']})"
+    )
+    lines.append("Recipe family confusion matrix (expected -> top-ranked):")
+    for actual_family in confusion["actual_labels"]:
+        row = confusion["counts"][actual_family]
+        populated_cells = [
+            f"{predicted_family}={count}"
+            for predicted_family, count in row.items()
+            if count
+        ]
+        lines.append(f"  - {actual_family}: " + ", ".join(populated_cells))
+
+    populated_miss_categories = [
+        (category, details)
+        for category, details in evaluation["miss_categories"].items()
+        if details["count"]
+    ]
+    if populated_miss_categories:
+        lines.append("Miss categories:")
+        for category, details in populated_miss_categories:
+            lines.append(
+                f"  - {category} ({details['count']}): "
+                + ", ".join(details["query_ids"])
+            )
+
     if evaluation["fallback_query_ids"]:
         lines.append("Fallback queries: " + ", ".join(evaluation["fallback_query_ids"]))
     if evaluation["unsupported_direct_match_query_ids"]:

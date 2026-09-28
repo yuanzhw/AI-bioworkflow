@@ -89,6 +89,10 @@ function isCatalogRetrievalArtifact(value: unknown): value is CatalogRetrievalAr
     value.recipes.every(isCatalogRetrievalRecipe) &&
     Array.isArray(value.tools) &&
     value.tools.every(isCatalogRetrievalTool) &&
+    (value.recipe_fallback_used === undefined ||
+      typeof value.recipe_fallback_used === "boolean") &&
+    (value.tool_fallback_used === undefined ||
+      typeof value.tool_fallback_used === "boolean") &&
     typeof value.fallback_used === "boolean" &&
     (value.fallback_reason === null || typeof value.fallback_reason === "string")
   );

@@ -2084,6 +2084,7 @@ hard filtering 的 paired-end germline variant calling query。
 期望输出：
 
 - `fallback_used == True`。
+- `recipe_fallback_used == True`，`tool_fallback_used == True`。
 - `fallback_reason` 说明 recipe 和 tool recall 均无匹配。
 - fallback recipe/tool 结果的 `score == 0.0`，`matched_terms == []`。
 - fallback tool 仍包含 `trust_status == "catalog-approved"`。
@@ -2091,6 +2092,8 @@ hard filtering 的 paired-end germline variant calling query。
 覆盖点：
 
 - 低置信度召回不会静默返回空结果，会记录可审计 fallback 原因。
+- Recipe 与 tool fallback provenance 分开记录，便于 evaluation 区分真实排名与
+  fallback candidates。
 - fallback 结果仍限定在 approved local catalog 内。
 
 ### `test_rejects_empty_query`
@@ -2199,6 +2202,22 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
 - bulk RNA-seq Tool Recall@5 为 `0.7333`，ChIP-seq Tool Recall@5 为 `0.6690`。
 - macro Recipe Recall@1 为 `0.8812`，macro Tool Recall@5 为 `0.7902`。
 - `macro_family_metrics` 中每个值都在 0 到 1 之间。
+- `recipe_family_confusion` 覆盖 56 条 supported expected-recipe query，top-1 family
+  agreement 为 `49 / 56 == 0.8750`。
+- confusion matrix 记录 bulk RNA-seq 的 18 条正确 family hit，以及 1 条 ChIP-seq、
+  3 条 scRNA-seq、1 条 variant calling 误排；ChIP-seq 有 1 条误排到 variant
+  calling，scRNA-seq 有 1 条误排到 bulk RNA-seq，variant calling 12 条全部正确。
+- `recipe_top_1_miss == 8`、`recipe_top_k_miss == 1`、
+  `recipe_family_confusion == 7`，当前 supported baseline 的 `recipe_no_match == 0`。
+- `raw_tool_miss == 15`、`raw_role_miss == 16`，且这些 miss 全部由 recipe context
+  恢复；`planner_context_tool_miss` 和 `planner_context_role_miss` 均为 0。
+- `unsupported_direct_match == 7`，并保留对应 query ids。
+- 每条 query 包含 `top_recipe_id`、`top_recipe_family` 和可重叠
+  `miss_categories`；`cross_family_chipseq_not_variant_en` 被标记为 family confusion，
+  `rnaseq_quality_report_en` 被标记为唯一 top-3 recipe miss。
+- unsupported metagenomics fallback 保留返回的 approved candidates，但
+  `top_recipe_id == null`、`top_recipe_family == "no_match"`，且 component fallback
+  flags 均为 `true`。
 
 覆盖点：
 
@@ -2208,6 +2227,9 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
   family 与 ChIP-seq、scRNA-seq、variant calling family。
 - 16-tool PR 5B baseline 保持 Planner context 完整，同时量化第四个正式 recipe 和
   双向 confusion cases 对 lexical ranking 与 raw Tool Recall@5 的影响。
+- PR 6 artifact 可以区分 exact recipe miss、跨 family confusion、raw retrieval miss、
+  recipe-context recovery 和 unsupported direct match，为 lexical/vector/hybrid A/B
+  comparison 提供稳定基线。
 
 ### `test_macro_family_metrics_use_unrounded_family_values`
 
@@ -2223,9 +2245,83 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
 - 对外暴露的 `family_a` Recipe Recall@1 舍入为 `0.8095`。
 - macro Recipe Recall@1 使用未舍入的 `17 / 21` 参与计算，最终为 `0.9048`，而非
   从 `0.8095` 二次求平均得到的 `0.9047`。
+- Confusion matrix 的预测轴包含 `family_a`、`family_b`、`no_match` 和 `unmapped`；
+  即使没有 query 被预测为 `family_a` 或 `family_b`，对应零值列仍保留。
 
 覆盖点：per-query、family 和 macro 聚合链路保持原始精度，只在最终 evaluation
 artifact 边界统一舍入四位。
+
+### `test_excludes_fallback_candidates_from_ranked_metrics`
+
+输入：一条 supported synthetic query；fake retriever 返回恰好包含 expected recipe/tool
+的 fallback candidates，并显式记录 recipe/tool component fallback。
+
+期望输出：
+
+- 返回 candidates 继续保留在 `retrieved_recipes` / `retrieved_tools` 和 Planner
+  context。
+- fallback recipe 不计为 Recall/MRR hit；`top_recipe_id == null`，
+  `top_recipe_family == "no_match"`。
+- fallback tool 不计为 raw Tool Recall 或 Role Coverage hit，但 Planner Context Tool
+  Recall 仍为 `1.0`。
+- query 记录 `recipe_no_match` 以及 raw tool/role recovery categories。
+- Confusion matrix 同时保留 `bulk_rnaseq` 零值列和 `no_match` prediction 列。
+
+覆盖点：fallback candidates 是真实 Planner 降级上下文，但不是 retriever 的 ranked
+matches，不会偶然抬高 Recall、MRR、family agreement 或 raw tool/role metrics。
+
+### `test_tool_only_fallback_preserves_recipe_match_provenance`
+
+输入：只命中 ChIP-seq recipe 字段、不命中 tool 字段的 `chromatin` 查询。
+
+期望输出：component flags 为 `(false, true)`，aggregate fallback 为 `true`；recipe
+保留正分 match，tool candidates 明确来自零分 fallback，reason 只记录 tool fallback。
+
+覆盖点：tool-only fallback 不会抹掉正常 recipe match 的 provenance。
+
+### `test_recipe_only_fallback_preserves_tool_match_provenance`
+
+输入：只命中 MACS2 tool 字段、不命中 recipe 字段的 `callpeak` 查询。
+
+期望输出：component flags 为 `(true, false)`，aggregate fallback 为 `true`；recipe
+candidates 明确来自零分 fallback，MACS2 保留正分 match，reason 只记录 recipe fallback。
+
+覆盖点：recipe-only fallback 不会把正常 tool match 错标为 fallback。
+
+### `test_one_sided_fallback_excludes_only_affected_ranked_candidates`
+
+输入：synthetic retriever 分别返回 tool-only `(false, true)` 与 recipe-only
+`(true, false)` fallback；两条 query 都携带 aggregate `fallback_used == true`。
+
+期望输出：tool-only case 保留 recipe hit、排除 fallback tool ranking，并由 Planner
+context 恢复 expected tool；recipe-only case 将 recipe 记为 `no_match`，但保留正常
+tool hit。两条 query 聚合后的 Recipe Recall@1 与 Tool Recall@K 均为 `0.5`，Planner
+context tool recall 为 `1.0`。
+
+覆盖点：evaluation 按 component provenance 独立控制 recipe/tool ranked metrics，避免
+错误地使用 aggregate fallback 同时排除或保留两侧 candidates。
+
+### `test_requires_component_flags_for_fallback_results`
+
+输入：custom retriever 返回 `fallback_used == true`，但只使用旧 aggregate contract，
+未提供 `recipe_fallback_used` / `tool_fallback_used`。
+
+期望输出：evaluation 抛出 `ValueError`，指出 aggregate fallback 必须提供两个 boolean
+component flags。
+
+覆盖点：recipe-only、tool-only 和双组件 fallback 无法从 aggregate flag 无损推断；
+evaluation 会拒绝缺失 provenance 的 backend，而不是静默生成可能失真的排名指标。
+
+### `test_rejects_inconsistent_component_fallback_flags`
+
+输入：custom retriever 将 `recipe_fallback_used` 设为 `true`，但 aggregate
+`fallback_used` 错误地设为 `false`。
+
+期望输出：evaluation 抛出 `ValueError`，说明 aggregate fallback 必须等于两个
+component flags 的逻辑或。
+
+覆盖点：backend 不能提交内部矛盾的 fallback provenance，从而避免 fallback rate、
+ranked metrics 和 Planner context interpretation 使用不同语义。
 
 ### `test_computes_supported_metrics_and_tracks_unsupported_matches`
 
@@ -2260,6 +2356,14 @@ artifact 边界统一舍入四位。
 - 只对 supported family 求宏平均，`macro_family_metrics.recipe_recall_at_1 == 0.5`。
 - 第一条 query 的 `planner_context_tools` 包含 `deseq2`。
 - 第二条 query 的 `planner_context_missed_expected_tools == ["deseq2"]`。
+- 第一条 query 的 top recipe family 为 `bulk_rnaseq`；其 raw tool/role miss 均由
+  recipe context 恢复，并记录对应 recovery categories。
+- 第二条 query 明确记录 recipe/tool fallback，返回 candidates 仍用于 Planner context，
+  但 top recipe family 记录为 `no_match`；它被分类为 top-1/top-K recipe miss、
+  `recipe_no_match`、raw tool/role miss 和 planner context tool/role miss。
+- 第三条 query 只记录 `unsupported_direct_match`。
+- aggregate confusion matrix 记录 1 条 `bulk_rnaseq -> bulk_rnaseq` 和 1 条
+  `bulk_rnaseq -> no_match`，same-family rate 为 `0.5`。
 
 覆盖点：
 
@@ -2269,6 +2373,8 @@ artifact 边界统一舍入四位。
 - Unsupported queries 不污染 supported recall，但会暴露 direct-match 风险。
 - Fallback rate 按 all / supported / unsupported 三个视角记录。
 - 固定 top-1/top-3/top-5 与 family macro 计算不依赖当前动态 K 的展示名称。
+- 未能从 labeled expected recipes 推导 family 的 recipe 会稳定标记为 `unmapped`，
+  不会被误计为某个真实 workflow family。
 
 ### `test_deduplicates_planner_context_tool_ids_from_multiple_versions`
 
@@ -5600,10 +5706,12 @@ npm run test:catalog-retrieval
 - `null` retrieval。
 - 空 query、空 recipes、空 tools 且未 fallback 的 retrieval。
 - 包含 RNA-seq query、recipe 和带 execution verification 的 tool 候选的 retrieval。
+- component fallback flag 使用非法字符串值的 retrieval。
 
 期望输出：
 
 - `null` 与空 retrieval 返回 `false`。
+- component fallback flag 只接受 boolean；非法类型返回 `false`。
 - 包含候选或 query 的 retrieval 返回 `true`。
 
 覆盖点：
@@ -5621,6 +5729,16 @@ retrieval artifact。
 - UI 可以显示“执行状态未记录”，而不是隐藏整份历史 artifact。
 
 覆盖点：execution verification 对新 artifact 必填，但前端读取层保持历史兼容。
+
+### `accepts legacy retrieval artifacts without component fallback flags`
+
+输入：尚未包含 `recipe_fallback_used` / `tool_fallback_used` 的历史 retrieval artifact。
+
+期望输出：artifact 仍被识别为有效 retrieval。
+
+覆盖点：新 artifact 暴露 component fallback provenance，同时前端继续兼容已持久化的
+旧 run snapshots。该读取兼容不放宽 evaluation backend contract；新评估遇到
+aggregate fallback 时仍强制要求 component provenance。
 
 ### `selects top catalog recipe and limited tools`
 
