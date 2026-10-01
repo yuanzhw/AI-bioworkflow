@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.catalog.loader import load_tool_catalog
+from src.catalog.retrieval_backend import (
+    DEFAULT_RETRIEVAL_BACKEND,
+    SUPPORTED_RETRIEVAL_BACKENDS,
+    get_catalog_retrieval_backend,
+)
 from src.catalog.retrieval_eval import (
     DEFAULT_TOP_K_RECIPES,
     DEFAULT_TOP_K_TOOLS,
@@ -25,9 +31,15 @@ from src.recipes.loader import load_recipe_catalog
 DEFAULT_QUERY_FIXTURE = PROJECT_ROOT / "tests" / "fixtures" / "retrieval_queries.json"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Evaluate approved catalog retrieval against labeled query fixtures.",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=SUPPORTED_RETRIEVAL_BACKENDS,
+        default=DEFAULT_RETRIEVAL_BACKEND,
+        help=f"Retrieval backend to evaluate. Default: {DEFAULT_RETRIEVAL_BACKEND}",
     )
     parser.add_argument(
         "--queries",
@@ -60,7 +72,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print the full JSON evaluation artifact instead of a summary.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main() -> int:
@@ -68,12 +80,14 @@ def main() -> int:
     tool_catalog = load_tool_catalog()
     recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)
     queries = load_retrieval_queries(args.queries)
+    backend = get_catalog_retrieval_backend(args.backend)
     evaluation = evaluate_retrieval_queries(
         queries,
         tool_catalog,
         recipe_catalog,
         top_k_recipes=args.top_k_recipes,
         top_k_tools=args.top_k_tools,
+        backend=backend,
     )
 
     if args.json_output:

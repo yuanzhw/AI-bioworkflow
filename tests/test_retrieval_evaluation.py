@@ -136,6 +136,38 @@ def inconsistent_fallback_retriever(
     }
 
 
+class FakeRetrievalBackend:
+    name = "fake_v1"
+
+    def __init__(self):
+        self.queries: list[str] = []
+
+    def retrieve(
+        self,
+        query: str,
+        tool_catalog,
+        recipe_catalog,
+        top_k_recipes: int = 3,
+        top_k_tools: int = 8,
+    ) -> dict[str, Any]:
+        self.queries.append(query)
+        result = fake_retriever(
+            query,
+            tool_catalog,
+            recipe_catalog,
+            top_k_recipes,
+            top_k_tools,
+        )
+        return {
+            **result,
+            "backend_evidence": {
+                "schema_version": "1.0",
+                "backend": self.name,
+                "source": "synthetic",
+            },
+        }
+
+
 class RetrievalEvaluationTests(unittest.TestCase):
     def setUp(self):
         self.tool_catalog = load_tool_catalog()
@@ -211,6 +243,58 @@ class RetrievalEvaluationTests(unittest.TestCase):
         self.assertIn("cross_family_chipseq_not_variant_en", queries_by_id)
         self.assertIn("cross_family_variant_not_rnaseq_en", queries_by_id)
         self.assertIn("cross_family_rnaseq_not_variant_en", queries_by_id)
+
+    def test_evaluates_explicit_backend_and_preserves_backend_evidence(self):
+        backend = FakeRetrievalBackend()
+        query = RetrievalQuery(
+            id="backend-hit",
+            query="supported hit",
+            supported=True,
+            workflow_family="bulk_rnaseq",
+            expected_recipe="rnaseq_differential_expression",
+            expected_tools=["fastp"],
+            expected_roles={},
+        )
+
+        result = evaluate_retrieval_queries(
+            [query],
+            self.tool_catalog,
+            self.recipe_catalog,
+            backend=backend,
+        )
+
+        self.assertEqual(backend.queries, ["supported hit"])
+        self.assertEqual(result["strategy"], "fake_v1")
+        evaluated_query = result["queries"][0]
+        self.assertEqual(
+            evaluated_query["backend_evidence"],
+            {
+                "schema_version": "1.0",
+                "backend": "fake_v1",
+                "source": "synthetic",
+            },
+        )
+        self.assertEqual(
+            evaluated_query["retrieved_recipe_candidates"],
+            [{"id": "rnaseq_differential_expression"}],
+        )
+        self.assertEqual(
+            evaluated_query["retrieved_tool_candidates"],
+            [{"id": "fastp"}, {"id": "salmon"}],
+        )
+
+    def test_rejects_backend_and_legacy_retriever_together(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "backend and retriever cannot both be provided",
+        ):
+            evaluate_retrieval_queries(
+                [],
+                self.tool_catalog,
+                self.recipe_catalog,
+                backend=FakeRetrievalBackend(),
+                retriever=fake_retriever,
+            )
 
     def test_evaluates_current_catalog_baseline(self):
         queries = load_retrieval_queries(FIXTURE_PATH)

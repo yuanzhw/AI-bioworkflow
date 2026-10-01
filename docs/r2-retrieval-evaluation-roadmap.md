@@ -249,6 +249,22 @@ R3 决策为 **hybrid-first experiment**，同时保留 `lexical_v1` 为生产�
 基线。完整证据、promotion gates 与 R3A-R3C 实施顺序见
 [R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md)。
 
+### R3A Retriever Backend Contract Checkpoint
+
+R3A 在不改变 lexical scoring 的前提下完成：
+
+- `CatalogRetrievalBackend` Protocol、`LexicalCatalogRetrievalBackend` 与显式 factory；
+- Planner node、直接 Natural Language Planner 和 evaluation runner 的 backend 注入；
+- `scripts/evaluate_retrieval.py --backend lexical_v1` 显式选择；
+- versioned `backend_evidence`，以及 per-query candidate objects/evidence 的 evaluation
+  artifact 保留；
+- active backend output 对 query、strategy、candidate shape、component fallback provenance
+  和 evidence version 的统一校验；
+- legacy `retrieve_catalog_context(...)` 与已持久化、缺少 evidence 的旧 artifact 继续兼容。
+
+64-query `lexical_v1` metrics 与 PR 6 baseline 逐项一致。R3A 不包含 embedding model、
+vector index、fusion 或默认 backend 切换。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -295,7 +311,8 @@ tests/test_retrieval_evaluation.py
 
 输出应包括：
 
-- 每条 query 的 retrieved recipes/tools。
+- 每条 query 的 retrieved recipe/tool IDs 与完整 candidate objects。
+- versioned backend evidence。
 - missed expected recipe/tool。
 - aggregate metrics。
 - workflow-family metrics 和 supported-family macro metrics。
@@ -308,7 +325,7 @@ tests/test_retrieval_evaluation.py
 当前命令：
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py
+.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --backend lexical_v1
 ```
 
 R2b expanded RNA-seq catalog 的 9-tool checkpoint：
@@ -578,11 +595,11 @@ Retrieval eval 的结果可以被前端轻量展示，但前端不应重新计�
 R2 query set 和 baseline 已完成。后续 R3 PR 顺序由
 [R3 Retrieval Backend Decision](./r3-retrieval-backend-decision.md) 维护：
 
-1. **R3A Retriever backend contract**
-   - 抽象 lexical backend。
-   - 保持 `lexical_v1` 默认行为和现有 artifact contract。
+1. **R3A Retriever backend contract（已完成）**
+   - 已抽象 lexical backend、显式 factory 与受校验 artifact contract。
+   - `lexical_v1` 默认行为和 64-query metrics 保持不变。
 
-2. **R3B Vector backend prototype**
+2. **R3B Vector backend prototype（下一步）**
    - 加入本地 vector index 或轻量 embedding backend。
    - 仅显式配置或离线评估，不影响结构化入口。
 

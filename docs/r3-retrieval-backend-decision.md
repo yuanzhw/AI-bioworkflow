@@ -191,6 +191,29 @@ intent routing/capability rejection 的风险信号，而不是相关性 ranking
 
 Reranker、embedding fine-tuning 和 unsupported intent classifier 不进入 R3A-R3C。
 
+## R3A Outcome
+
+R3A 已完成以下基础设施，同时保持 `lexical_v1` scoring 与 64-query baseline 不变：
+
+- `CatalogRetrievalBackend` Protocol、`LexicalCatalogRetrievalBackend` 和只接受显式名称的
+  backend factory；未知 backend 会列出当前支持值并立即失败。
+- active backend output 统一校验 normalized query、strategy、recipe/tool candidate shape、
+  component fallback provenance、aggregate fallback 和 versioned `backend_evidence`。
+- 原 `retrieve_catalog_context(...)` 继续作为 lexical compatibility API；Planner 与
+  evaluation 的默认运行路径改由 backend contract 驱动。
+- Natural Language Planner、Orchestration Planner node 与 evaluation runner 均支持
+  backend dependency injection。
+- `scripts/evaluate_retrieval.py` 增加 `--backend`；当前唯一允许值和默认值均为
+  `lexical_v1`。
+- Evaluation per-query artifact 同时保留 candidate IDs、完整 candidate objects 和
+  backend evidence，为 R3B/R3C 的 model/index/fusion provenance 留出稳定位置。
+- 前端读取接受新 evidence，同时继续兼容缺少 evidence 或 component fallback flags 的
+  legacy run snapshots。
+
+下一步是 R3B：引入可本地复现、只能显式选择的 vector prototype，记录 model revision、
+document schema 和 index fingerprint，并用相同 64-query fixture 离线评估。R3B 不改变
+生产默认 backend。
+
 ## Contract Boundaries
 
 - LLM 不直接生成 WDL。
