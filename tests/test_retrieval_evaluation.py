@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from src.catalog import load_tool_catalog
+from src.catalog import load_tool_catalog, retrieve_catalog_context
 from src.catalog.retrieval_eval import (
     RetrievalQuery,
     evaluate_retrieval_queries,
@@ -141,6 +141,7 @@ class FakeRetrievalBackend:
 
     def __init__(self):
         self.queries: list[str] = []
+        self.results: list[dict[str, Any]] = []
 
     def retrieve(
         self,
@@ -151,21 +152,25 @@ class FakeRetrievalBackend:
         top_k_tools: int = 8,
     ) -> dict[str, Any]:
         self.queries.append(query)
-        result = fake_retriever(
-            query,
+        lexical_result = retrieve_catalog_context(
+            "Run RNA-seq differential expression.",
             tool_catalog,
             recipe_catalog,
             top_k_recipes,
             top_k_tools,
         )
-        return {
-            **result,
+        result = {
+            **lexical_result,
+            "query": query,
+            "strategy": self.name,
             "backend_evidence": {
                 "schema_version": "1.0",
                 "backend": self.name,
                 "source": "synthetic",
             },
         }
+        self.results.append(result)
+        return result
 
 
 class RetrievalEvaluationTests(unittest.TestCase):
@@ -276,11 +281,11 @@ class RetrievalEvaluationTests(unittest.TestCase):
         )
         self.assertEqual(
             evaluated_query["retrieved_recipe_candidates"],
-            [{"id": "rnaseq_differential_expression"}],
+            backend.results[0]["recipes"],
         )
         self.assertEqual(
             evaluated_query["retrieved_tool_candidates"],
-            [{"id": "fastp"}, {"id": "salmon"}],
+            backend.results[0]["tools"],
         )
 
     def test_rejects_backend_and_legacy_retriever_together(self):

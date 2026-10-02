@@ -197,8 +197,10 @@ R3A 已完成以下基础设施，同时保持 `lexical_v1` scoring 与 64-query
 
 - `CatalogRetrievalBackend` Protocol、`LexicalCatalogRetrievalBackend` 和只接受显式名称的
   backend factory；未知 backend 会列出当前支持值并立即失败。
-- active backend output 统一校验 normalized query、strategy、recipe/tool candidate shape、
-  component fallback provenance、aggregate fallback 和 versioned `backend_evidence`。
+- active backend output 统一校验 normalized query、strategy、完整 recipe/tool candidate
+  shape、精确 approved Catalog 成员、Catalog-owned tool trust/verification metadata、
+  component fallback provenance、aggregate fallback、versioned `backend_evidence` 和递归
+  JSON compatibility。
 - 原 `retrieve_catalog_context(...)` 继续作为 lexical compatibility API；Planner 与
   evaluation 的默认运行路径改由 backend contract 驱动。
 - Natural Language Planner、Orchestration Planner node 与 evaluation runner 均支持

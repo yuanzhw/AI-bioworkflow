@@ -2188,6 +2188,70 @@ backend provenance。
 
 覆盖点：后续 vector model、index 和 hybrid fusion provenance 可以在版本化字段内演进。
 
+### `test_contract_requires_complete_candidate_shape`
+
+输入：缺少 `score` 的 recipe candidate。
+
+期望输出：contract 拒绝该 artifact，并要求有限数值 score。
+
+覆盖点：通过 backend contract 的候选可以直接被 Planner、evaluation 和前端共同消费。
+
+### `test_contract_rejects_recipe_outside_approved_catalog`
+
+输入：candidate 声明不存在于当前 Recipe Catalog 的 recipe ID。
+
+期望输出：contract 在进入 Planner prompt 构造前抛出 `ValueError`。
+
+覆盖点：替换 backend 不能绕过 approved Recipe Catalog 边界。
+
+### `test_contract_requires_tool_version`
+
+输入：缺少 `version` 的 tool candidate。
+
+期望输出：contract 要求非空 tool version。
+
+覆盖点：Planner 不会在已验证边界之后因缺少 tool version 才失败。
+
+### `test_contract_rejects_tool_version_outside_approved_catalog`
+
+输入：tool ID 存在，但 candidate 声明未准入的版本 `999.0`。
+
+期望输出：contract 拒绝未知的 approved tool id/version 组合。
+
+覆盖点：backend 只能排序正式 Tool Catalog 中的精确工具版本。
+
+### `test_contract_preserves_catalog_tool_metadata`
+
+输入：candidate 修改正式 ToolSpec 的 `execution_verification`。
+
+期望输出：contract 拒绝被修改的 verification metadata。
+
+覆盖点：retrieval backend 不拥有工具执行可信度，artifact 必须保留 Catalog 的权威值。
+
+### `test_contract_requires_catalog_approved_trust_status`
+
+输入：tool candidate 将 `trust_status` 改为 `candidate`。
+
+期望输出：contract 要求 `catalog-approved`。
+
+覆盖点：R3 approved Catalog retrieval 不与 P6 candidate tool discovery 边界混合。
+
+### `test_contract_rejects_non_json_backend_evidence`
+
+输入：`backend_evidence` 嵌套不可 JSON 序列化的 Python object。
+
+期望输出：contract 在 prompt 或持久化之前拒绝该 artifact。
+
+覆盖点：versioned backend evidence 必须是可安全传递的严格 JSON 数据。
+
+### `test_contract_rejects_non_finite_values`
+
+输入：candidate score 为 `NaN`。
+
+期望输出：contract 拒绝非有限数值。
+
+覆盖点：backend artifact 不产生 Python 可编码但不属于标准 JSON 的数值。
+
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query

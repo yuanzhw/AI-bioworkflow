@@ -12,6 +12,9 @@ from src.catalog import (
 from src.recipes import load_recipe_catalog
 
 
+VALID_QUERY = "Run RNA-seq differential expression."
+
+
 class StaticRetrievalBackend:
     name = "static_v1"
 
@@ -29,16 +32,11 @@ class StaticRetrievalBackend:
         return self.result
 
 
-def valid_static_result():
+def valid_static_result(tool_catalog, recipe_catalog):
+    result = retrieve_catalog_context(VALID_QUERY, tool_catalog, recipe_catalog)
     return {
-        "query": "demo",
+        **result,
         "strategy": "static_v1",
-        "recipes": [{"id": "demo_recipe"}],
-        "tools": [{"id": "demo_tool"}],
-        "recipe_fallback_used": False,
-        "tool_fallback_used": False,
-        "fallback_used": False,
-        "fallback_reason": None,
         "backend_evidence": {
             "schema_version": "1.0",
             "backend": "static_v1",
@@ -77,7 +75,7 @@ class RetrievalBackendContractTests(unittest.TestCase):
         self.recipe_catalog = load_recipe_catalog(tool_catalog=self.tool_catalog)
 
     def test_lexical_backend_preserves_legacy_results_and_adds_evidence(self):
-        query = "Run RNA-seq differential expression."
+        query = VALID_QUERY
         legacy = retrieve_catalog_context(query, self.tool_catalog, self.recipe_catalog)
 
         result = retrieve_catalog_context_with_backend(
@@ -94,37 +92,136 @@ class RetrievalBackendContractTests(unittest.TestCase):
         self.assertIn("differential", evidence["query_tokens"])
 
     def test_contract_rejects_mismatched_strategy(self):
-        result = valid_static_result()
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
         result["strategy"] = "other_v1"
 
         with self.assertRaisesRegex(ValueError, "returned strategy 'other_v1'"):
             retrieve_catalog_context_with_backend(
                 StaticRetrievalBackend(result),
-                "demo",
+                VALID_QUERY,
                 self.tool_catalog,
                 self.recipe_catalog,
             )
 
     def test_contract_rejects_inconsistent_fallback_provenance(self):
-        result = valid_static_result()
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
         result["recipe_fallback_used"] = True
 
         with self.assertRaisesRegex(ValueError, "fallback_used must equal"):
             retrieve_catalog_context_with_backend(
                 StaticRetrievalBackend(result),
-                "demo",
+                VALID_QUERY,
                 self.tool_catalog,
                 self.recipe_catalog,
             )
 
     def test_contract_requires_versioned_backend_evidence(self):
-        result = valid_static_result()
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
         result["backend_evidence"] = {"backend": "static_v1"}
 
         with self.assertRaisesRegex(ValueError, "schema version 1.0"):
             retrieve_catalog_context_with_backend(
                 StaticRetrievalBackend(result),
-                "demo",
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_requires_complete_candidate_shape(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["recipes"][0].pop("score")
+
+        with self.assertRaisesRegex(ValueError, "finite numeric score"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_rejects_recipe_outside_approved_catalog(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["recipes"][0]["id"] = "unknown_recipe"
+
+        with self.assertRaisesRegex(ValueError, "unknown approved recipe"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_requires_tool_version(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["tools"][0].pop("version")
+
+        with self.assertRaisesRegex(ValueError, "non-empty version"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_rejects_tool_version_outside_approved_catalog(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["tools"][0]["version"] = "999.0"
+
+        with self.assertRaisesRegex(ValueError, "unknown approved tool version"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_preserves_catalog_tool_metadata(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["tools"][0]["execution_verification"] = {
+            "status": "invalid",
+            "evidence": [],
+        }
+
+        with self.assertRaisesRegex(ValueError, "preserve Catalog execution_verification"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_requires_catalog_approved_trust_status(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["tools"][0]["trust_status"] = "candidate"
+
+        with self.assertRaisesRegex(ValueError, "catalog-approved"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_rejects_non_json_backend_evidence(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["backend_evidence"]["model"] = object()
+
+        with self.assertRaisesRegex(ValueError, "non-JSON-compatible value"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_rejects_non_finite_values(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["recipes"][0]["score"] = float("nan")
+
+        with self.assertRaisesRegex(ValueError, "non-finite number"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
                 self.tool_catalog,
                 self.recipe_catalog,
             )

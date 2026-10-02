@@ -265,6 +265,8 @@ User request
 输出应保持 JSON-ready，便于 API、SSE、历史详情和前端复用。
 R3A 后，由 backend contract 产生的新 artifact 必须包含 versioned
 `backend_evidence`；前端和持久化读取仍兼容没有该字段的旧 run snapshot。
+Active backend artifact 还必须通过完整候选结构、精确 approved Catalog 成员、
+Catalog-owned tool trust/verification metadata 和递归 JSON compatibility 校验。
 
 ## 第一版 scoring 建议
 
