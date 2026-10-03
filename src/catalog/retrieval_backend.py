@@ -91,6 +91,8 @@ def retrieve_catalog_context_with_backend(
     top_k_tools: int = 8,
 ) -> dict[str, Any]:
     """Run a backend and validate the common JSON-ready artifact contract."""
+    _validate_top_k("top_k_recipes", top_k_recipes)
+    _validate_top_k("top_k_tools", top_k_tools)
     result = backend.retrieve(
         query,
         tool_catalog,
@@ -104,6 +106,8 @@ def retrieve_catalog_context_with_backend(
         query=query,
         tool_catalog=tool_catalog,
         recipe_catalog=recipe_catalog,
+        top_k_recipes=top_k_recipes,
+        top_k_tools=top_k_tools,
     )
     return result
 
@@ -120,6 +124,8 @@ def _validate_backend_result(
     query: str,
     tool_catalog: ToolCatalog,
     recipe_catalog: RecipeCatalog,
+    top_k_recipes: int,
+    top_k_tools: int,
 ) -> None:
     if not isinstance(result, dict):
         raise ValueError(f"Retrieval backend '{backend_name}' must return an object.")
@@ -136,7 +142,13 @@ def _validate_backend_result(
             f"{result.get('strategy')!r}."
         )
 
-    recipes = _candidate_objects(result, "recipes", backend_name=backend_name)
+    recipes = _candidate_objects(
+        result,
+        "recipes",
+        backend_name=backend_name,
+        maximum_count=top_k_recipes,
+        limit_name="top_k_recipes",
+    )
     for candidate in recipes:
         recipe_id = _validate_common_candidate(
             candidate,
@@ -151,7 +163,13 @@ def _validate_backend_result(
                 f"'{recipe_id}'."
             ) from exc
 
-    tools = _candidate_objects(result, "tools", backend_name=backend_name)
+    tools = _candidate_objects(
+        result,
+        "tools",
+        backend_name=backend_name,
+        maximum_count=top_k_tools,
+        limit_name="top_k_tools",
+    )
     for candidate in tools:
         tool_id = _validate_common_candidate(
             candidate,
@@ -234,6 +252,8 @@ def _candidate_objects(
     field_name: str,
     *,
     backend_name: str,
+    maximum_count: int,
+    limit_name: str,
 ) -> list[dict[str, Any]]:
     candidates = result.get(field_name)
     if not isinstance(candidates, list) or any(
@@ -243,7 +263,17 @@ def _candidate_objects(
             f"Retrieval backend '{backend_name}' field '{field_name}' "
             "must be a list of objects."
         )
+    if len(candidates) > maximum_count:
+        raise ValueError(
+            f"Retrieval backend '{backend_name}' field '{field_name}' returned "
+            f"{len(candidates)} candidates, exceeding {limit_name}={maximum_count}."
+        )
     return candidates
+
+
+def _validate_top_k(field_name: str, value: Any) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f"{field_name} must be a positive integer")
 
 
 def _validate_common_candidate(

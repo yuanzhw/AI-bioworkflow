@@ -260,7 +260,7 @@ R3A 在不改变 lexical scoring 的前提下完成：
   artifact 保留；
 - active backend output 对 query、strategy、完整 candidate shape、精确 approved Catalog
   成员、Catalog-owned tool metadata、component fallback provenance、evidence version 和
-  递归 JSON compatibility 的统一校验；
+  请求 top-k 上限、递归 JSON compatibility 的统一校验；
 - legacy `retrieve_catalog_context(...)` 与已持久化、缺少 evidence 的旧 artifact 继续兼容。
 
 64-query `lexical_v1` metrics 与 PR 6 baseline 逐项一致。R3A 不包含 embedding model、

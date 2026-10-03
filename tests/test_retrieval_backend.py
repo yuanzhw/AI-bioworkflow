@@ -20,6 +20,7 @@ class StaticRetrievalBackend:
 
     def __init__(self, result):
         self.result = result
+        self.calls = 0
 
     def retrieve(
         self,
@@ -29,6 +30,7 @@ class StaticRetrievalBackend:
         _top_k_recipes=3,
         _top_k_tools=8,
     ):
+        self.calls += 1
         return self.result
 
 
@@ -225,6 +227,54 @@ class RetrievalBackendContractTests(unittest.TestCase):
                 self.tool_catalog,
                 self.recipe_catalog,
             )
+
+    def test_contract_requires_positive_top_k_before_backend_dispatch(self):
+        cases = (
+            ("top_k_recipes", {"top_k_recipes": 0}),
+            ("top_k_tools", {"top_k_tools": -1}),
+            ("top_k_tools", {"top_k_tools": True}),
+        )
+
+        for field_name, limits in cases:
+            with self.subTest(field_name=field_name, value=limits[field_name]):
+                backend = StaticRetrievalBackend(
+                    valid_static_result(self.tool_catalog, self.recipe_catalog)
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    f"{field_name} must be a positive integer",
+                ):
+                    retrieve_catalog_context_with_backend(
+                        backend,
+                        VALID_QUERY,
+                        self.tool_catalog,
+                        self.recipe_catalog,
+                        **limits,
+                    )
+                self.assertEqual(backend.calls, 0)
+
+    def test_contract_rejects_candidate_counts_above_top_k(self):
+        cases = (
+            ("recipes", {"top_k_recipes": 1}, "top_k_recipes=1"),
+            ("tools", {"top_k_tools": 1}, "top_k_tools=1"),
+        )
+
+        for field_name, limits, expected_message in cases:
+            with self.subTest(field_name=field_name):
+                result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+                candidate = result[field_name][0]
+                result[field_name] = [candidate, dict(candidate)]
+                backend = StaticRetrievalBackend(result)
+
+                with self.assertRaisesRegex(ValueError, expected_message):
+                    retrieve_catalog_context_with_backend(
+                        backend,
+                        VALID_QUERY,
+                        self.tool_catalog,
+                        self.recipe_catalog,
+                        **limits,
+                    )
+                self.assertEqual(backend.calls, 1)
 
 
 if __name__ == "__main__":

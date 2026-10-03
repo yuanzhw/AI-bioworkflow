@@ -2252,6 +2252,22 @@ backend provenance。
 
 覆盖点：backend artifact 不产生 Python 可编码但不属于标准 JSON 的数值。
 
+### `test_contract_requires_positive_top_k_before_backend_dispatch`
+
+输入：`top_k_recipes == 0`、`top_k_tools == -1` 或 boolean top-k。
+
+期望输出：contract 在调用 backend 前抛出 `ValueError`，backend call count 保持为零。
+
+覆盖点：所有替换 backend 共享相同的正整数候选限制，不依赖具体实现自行防御。
+
+### `test_contract_rejects_candidate_counts_above_top_k`
+
+输入：backend 在 recipe 或 tool 分支返回两条候选，但对应 top-k 为一。
+
+期望输出：contract 拒绝超出请求限制的 artifact。
+
+覆盖点：Planner context 保持有界，不同 backend 的 evaluation cutoff 可以直接比较。
+
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
