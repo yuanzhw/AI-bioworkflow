@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any, Callable, Mapping
 
 from src.catalog.loader import ToolCatalog, load_tool_catalog
-from src.catalog.retriever import retrieve_catalog_context
+from src.catalog.retrieval_backend import (
+    CatalogRetrievalBackend,
+    get_catalog_retrieval_backend,
+    retrieve_catalog_context_with_backend,
+)
 from src.nl_planner import (
     NaturalLanguagePlanningError,
     PlannerLlm,
@@ -32,6 +36,7 @@ def make_natural_language_planner_node(
     llm: PlannerLlm | None = None,
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
+    retrieval_backend: CatalogRetrievalBackend | None = None,
     event_callback: OrchestrationEventCallback | None = None,
 ) -> PlannerNode:
     """Create a planner node, optionally injecting dependencies for tests."""
@@ -54,7 +59,8 @@ def make_natural_language_planner_node(
             events.append(catalog_started_event)
             _emit_planner_event(event_callback, catalog_started_event, state)
 
-            catalog_retrieval = retrieve_catalog_context(
+            catalog_retrieval = retrieve_catalog_context_with_backend(
+                retrieval_backend or get_catalog_retrieval_backend(),
                 state["request"],
                 resolved_tool_catalog,
                 resolved_recipe_catalog,

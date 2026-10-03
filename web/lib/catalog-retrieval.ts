@@ -1,5 +1,6 @@
 import type {
   CatalogRetrievalArtifact,
+  CatalogRetrievalBackendEvidence,
   CatalogRetrievalRecipe,
   CatalogRetrievalTool,
   ExecutionVerification,
@@ -54,6 +55,16 @@ function isExecutionVerification(value: unknown): value is ExecutionVerification
   return value.status === "unverified" ? value.evidence.length === 0 : value.evidence.length > 0;
 }
 
+function isCatalogRetrievalBackendEvidence(
+  value: unknown,
+): value is CatalogRetrievalBackendEvidence {
+  return (
+    isRecord(value) &&
+    typeof value.schema_version === "string" &&
+    typeof value.backend === "string"
+  );
+}
+
 function isCatalogRetrievalRecipe(value: unknown): value is CatalogRetrievalRecipe {
   return (
     isRecord(value) &&
@@ -61,7 +72,8 @@ function isCatalogRetrievalRecipe(value: unknown): value is CatalogRetrievalReci
     Number.isFinite(value.score) &&
     isStringArray(value.matched_terms) &&
     isStringArray(value.matched_fields) &&
-    typeof value.reason === "string"
+    typeof value.reason === "string" &&
+    (value.backend_evidence === undefined || isRecord(value.backend_evidence))
   );
 }
 
@@ -76,7 +88,8 @@ function isCatalogRetrievalTool(value: unknown): value is CatalogRetrievalTool {
     isTrustStatus(value.trust_status) &&
     (value.execution_verification === undefined ||
       isExecutionVerification(value.execution_verification)) &&
-    typeof value.reason === "string"
+    typeof value.reason === "string" &&
+    (value.backend_evidence === undefined || isRecord(value.backend_evidence))
   );
 }
 
@@ -94,7 +107,9 @@ function isCatalogRetrievalArtifact(value: unknown): value is CatalogRetrievalAr
     (value.tool_fallback_used === undefined ||
       typeof value.tool_fallback_used === "boolean") &&
     typeof value.fallback_used === "boolean" &&
-    (value.fallback_reason === null || typeof value.fallback_reason === "string")
+    (value.fallback_reason === null || typeof value.fallback_reason === "string") &&
+    (value.backend_evidence === undefined ||
+      isCatalogRetrievalBackendEvidence(value.backend_evidence))
   );
 }
 

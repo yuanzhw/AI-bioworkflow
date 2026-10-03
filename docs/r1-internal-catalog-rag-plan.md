@@ -230,6 +230,11 @@ User request
 {
   "query": "Run bulk RNA-seq differential expression.",
   "strategy": "lexical_v1",
+  "backend_evidence": {
+    "schema_version": "1.0",
+    "backend": "lexical_v1",
+    "query_tokens": ["run", "bulk", "rna", "seq", "differential", "expression"]
+  },
   "recipes": [
     {
       "id": "rnaseq_differential_expression",
@@ -258,6 +263,11 @@ User request
 ```
 
 输出应保持 JSON-ready，便于 API、SSE、历史详情和前端复用。
+R3A 后，由 backend contract 产生的新 artifact 必须包含 versioned
+`backend_evidence`；前端和持久化读取仍兼容没有该字段的旧 run snapshot。
+Active backend artifact 还必须通过完整候选结构、精确 approved Catalog 成员、
+Catalog-owned tool trust/verification metadata、请求 top-k 上限和递归 JSON
+compatibility 校验。
 
 ## 第一版 scoring 建议
 
@@ -303,7 +313,8 @@ User request
 当前 Planner prompt 包含完整 catalog context。接入 retriever 后：
 
 1. `create_natural_language_plan(...)` 加载完整 Tool Catalog 和 Recipe Catalog。
-2. 调用 `retrieve_catalog_context(query, tool_catalog, recipe_catalog, top_k_recipes, top_k_tools)`。
+2. 通过 `get_catalog_retrieval_backend(...)` 显式选择 backend，并调用
+   `retrieve_catalog_context_with_backend(...)`；默认仍为 `lexical_v1`。
 3. Prompt 使用 retrieved context。
 4. LLM 输出 Recipe Tool Plan。
 5. 仍使用完整 recipe/tool catalog 执行 schema、resolver 和 analyzer 校验。
@@ -356,7 +367,9 @@ artifact.updated catalog_retrieval
 
 ```text
 src/catalog/retriever.py
+src/catalog/retrieval_backend.py
 tests/test_catalog_retriever.py
+tests/test_retrieval_backend.py
 src/nl_planner.py
 src/prompts.py
 src/services/run_service.py
@@ -457,6 +470,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1
 - [x] Run snapshot 暴露 retrieval artifact。
 - [x] 前端能展示候选 recipe/tools 和 `trust_status`。
 - [x] 单测覆盖成功、fallback 和错误边界。
+- [x] R3A backend Protocol、factory、artifact validation 和显式 evaluation selection 已落地。
 - [x] 文档说明内部 RAG 与外部工具发现的边界。
 
 ## 后续序列

@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from src.catalog.loader import ToolCatalog
-from src.catalog.retriever import retrieve_catalog_context
+from src.catalog.retrieval_backend import (
+    CatalogRetrievalBackend,
+    get_catalog_retrieval_backend,
+    retrieve_catalog_context_with_backend,
+)
 from src.recipes.loader import RecipeCatalog
 
 
@@ -136,7 +140,8 @@ def evaluate_retrieval_queries(
     *,
     top_k_recipes: int = DEFAULT_TOP_K_RECIPES,
     top_k_tools: int = DEFAULT_TOP_K_TOOLS,
-    retriever: RetrievalFn = retrieve_catalog_context,
+    backend: CatalogRetrievalBackend | None = None,
+    retriever: RetrievalFn | None = None,
 ) -> dict[str, Any]:
     """Evaluate a retriever over labeled current-catalog query fixtures."""
     if top_k_recipes < 1:
@@ -147,6 +152,7 @@ def evaluate_retrieval_queries(
             f"top_k_tools must be >= {minimum_tool_cutoff} "
             "to compute the fixed Tool Recall@3/@5 metrics"
         )
+    resolved_retriever = _resolve_retriever(backend=backend, retriever=retriever)
 
     recipe_family_by_id = _recipe_family_map(queries)
     per_query = [
@@ -157,7 +163,7 @@ def evaluate_retrieval_queries(
             recipe_family_by_id=recipe_family_by_id,
             top_k_recipes=top_k_recipes,
             top_k_tools=top_k_tools,
-            retriever=retriever,
+            retriever=resolved_retriever,
         )
         for query in queries
     ]
@@ -262,9 +268,11 @@ def _evaluate_one_query(
         "expected_recipe": query.expected_recipe,
         "expected_tools": query.expected_tools,
         "expected_roles": query.expected_roles,
+        "retrieved_recipe_candidates": retrieval.get("recipes", []),
         "retrieved_recipes": retrieved_recipe_ids,
         "top_recipe_id": top_recipe_id,
         "top_recipe_family": top_recipe_family,
+        "retrieved_tool_candidates": retrieval.get("tools", []),
         "retrieved_tools": retrieved_tool_ids,
         "planner_context_tools": planner_context_tool_ids,
         "expected_recipe_recalled": expected_recipe_rank is not None,
@@ -297,10 +305,42 @@ def _evaluate_one_query(
         "fallback_used": fallback_used,
         "fallback_reason": retrieval.get("fallback_reason"),
         "strategy": retrieval.get("strategy"),
+        "backend_evidence": retrieval.get("backend_evidence"),
         "notes": query.notes,
     }
     result["miss_categories"] = _classify_misses(result)
     return result
+
+
+def _resolve_retriever(
+    *,
+    backend: CatalogRetrievalBackend | None,
+    retriever: RetrievalFn | None,
+) -> RetrievalFn:
+    if backend is not None and retriever is not None:
+        raise ValueError("backend and retriever cannot both be provided")
+    if retriever is not None:
+        return retriever
+
+    resolved_backend = backend or get_catalog_retrieval_backend()
+
+    def retrieve(
+        query: str,
+        tool_catalog: ToolCatalog,
+        recipe_catalog: RecipeCatalog,
+        top_k_recipes: int,
+        top_k_tools: int,
+    ) -> dict[str, Any]:
+        return retrieve_catalog_context_with_backend(
+            resolved_backend,
+            query,
+            tool_catalog,
+            recipe_catalog,
+            top_k_recipes,
+            top_k_tools,
+        )
+
+    return retrieve
 
 
 def _fallback_provenance(

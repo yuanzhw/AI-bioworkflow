@@ -1,9 +1,8 @@
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
 
-from src.catalog import load_tool_catalog
+from src.catalog import load_tool_catalog, retrieve_catalog_context
 from src.nl_planner import (
     PlannerCatalogError,
     PlannerJsonError,
@@ -116,6 +115,39 @@ class FakePlannerLlm:
         return SimpleNamespace(content=self.response)
 
 
+class RecordingRetrievalBackend:
+    name = "recording_v1"
+
+    def __init__(self):
+        self.queries = []
+
+    def retrieve(
+        self,
+        query,
+        tool_catalog,
+        recipe_catalog,
+        top_k_recipes=3,
+        top_k_tools=8,
+    ):
+        self.queries.append(query)
+        result = retrieve_catalog_context(
+            query,
+            tool_catalog,
+            recipe_catalog,
+            top_k_recipes,
+            top_k_tools,
+        )
+        return {
+            **result,
+            "strategy": self.name,
+            "backend_evidence": {
+                "schema_version": "1.0",
+                "backend": self.name,
+                "source": "test",
+            },
+        }
+
+
 class NaturalLanguagePlannerTests(unittest.TestCase):
     def test_parse_json_object_accepts_fenced_json(self):
         parsed = parse_json_object('```json\n{"workflow": {"name": "Demo"}}\n```')
@@ -172,6 +204,10 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
         self.assertIn("Catalog:", result.planner_prompt)
         self.assertEqual(result.catalog_retrieval["strategy"], "lexical_v1")
         self.assertEqual(
+            result.catalog_retrieval["backend_evidence"]["backend"],
+            "lexical_v1",
+        )
+        self.assertEqual(
             result.catalog_retrieval["recipes"][0]["id"],
             "rnaseq_differential_expression",
         )
@@ -180,6 +216,23 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
             {tool["id"] for tool in result.catalog_retrieval["tools"]},
         )
         self.assertIn("RNASeqDEG", result.raw_response)
+
+    def test_create_natural_language_plan_uses_injected_retrieval_backend(self):
+        fake_llm = FakePlannerLlm(json.dumps(sample_rnaseq_tool_plan()))
+        backend = RecordingRetrievalBackend()
+
+        result = create_natural_language_plan(
+            "Run RNA-seq differential expression.",
+            llm=fake_llm,
+            retrieval_backend=backend,
+        )
+
+        self.assertEqual(backend.queries, ["Run RNA-seq differential expression."])
+        self.assertEqual(result.catalog_retrieval["strategy"], "recording_v1")
+        self.assertEqual(
+            result.catalog_retrieval["backend_evidence"],
+            {"schema_version": "1.0", "backend": "recording_v1", "source": "test"},
+        )
 
     def test_plan_validation_uses_complete_catalog_after_retrieval(self):
         fake_llm = FakePlannerLlm(json.dumps(sample_rnaseq_tool_plan()))
@@ -210,11 +263,11 @@ class NaturalLanguagePlannerTests(unittest.TestCase):
             "fallback_reason": None,
         }
 
-        with patch("src.nl_planner.retrieve_catalog_context", return_value=sparse_retrieval):
-            result = create_natural_language_plan(
-                "Run RNA-seq differential expression.",
-                llm=fake_llm,
-            )
+        result = create_natural_language_plan(
+            "Run RNA-seq differential expression.",
+            llm=fake_llm,
+            catalog_retrieval=sparse_retrieval,
+        )
 
         self.assertEqual(result.catalog_retrieval, sparse_retrieval)
         self.assertEqual(result.plan["workflow"]["recipe"], "rnaseq_differential_expression")

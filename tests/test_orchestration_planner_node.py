@@ -2,6 +2,7 @@ import json
 import unittest
 from types import SimpleNamespace
 
+from src.catalog import retrieve_catalog_context
 from src.nl_planner import DEFAULT_PLANNER_MODEL
 from src.orchestration.nodes import make_natural_language_planner_node, natural_language_planner_node
 from src.orchestration.state import build_initial_orchestration_state
@@ -111,6 +112,38 @@ class RaisingPlannerLlm:
         raise RuntimeError("planner transport unavailable")
 
 
+class RecordingRetrievalBackend:
+    name = "recording_v1"
+
+    def __init__(self):
+        self.queries = []
+
+    def retrieve(
+        self,
+        query,
+        tool_catalog,
+        recipe_catalog,
+        top_k_recipes=3,
+        top_k_tools=8,
+    ):
+        self.queries.append(query)
+        result = retrieve_catalog_context(
+            query,
+            tool_catalog,
+            recipe_catalog,
+            top_k_recipes,
+            top_k_tools,
+        )
+        return {
+            **result,
+            "strategy": self.name,
+            "backend_evidence": {
+                "schema_version": "1.0",
+                "backend": self.name,
+            },
+        }
+
+
 class OrchestrationPlannerNodeTests(unittest.TestCase):
     def test_planner_node_returns_plan_trace_and_events(self):
         fake_llm = FakePlannerLlm(json.dumps(sample_rnaseq_tool_plan()))
@@ -149,6 +182,23 @@ class OrchestrationPlannerNodeTests(unittest.TestCase):
 
     def test_default_planner_node_uses_same_node_contract(self):
         self.assertTrue(callable(natural_language_planner_node))
+
+    def test_planner_node_uses_injected_retrieval_backend(self):
+        fake_llm = FakePlannerLlm(json.dumps(sample_rnaseq_tool_plan()))
+        backend = RecordingRetrievalBackend()
+        state = build_initial_orchestration_state(
+            "Run RNA-seq differential expression.",
+            planner_model=DEFAULT_PLANNER_MODEL,
+        )
+
+        update = make_natural_language_planner_node(
+            llm=fake_llm,
+            retrieval_backend=backend,
+        )(state)
+
+        self.assertEqual(backend.queries, ["Run RNA-seq differential expression."])
+        self.assertEqual(update["catalog_retrieval"]["strategy"], "recording_v1")
+        self.assertEqual(update["events"][1]["payload"]["strategy"], "recording_v1")
 
     def test_planner_node_records_json_failure_without_secret_payloads(self):
         fake_llm = FakePlannerLlm("I would run fastp first.")

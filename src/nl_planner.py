@@ -9,7 +9,12 @@ from pydantic import SecretStr
 
 from src.analyzer import analyze_workflow_ir
 from src.catalog.loader import ToolCatalog, load_tool_catalog
-from src.catalog.retriever import CATALOG_APPROVED_TRUST_STATUS, retrieve_catalog_context
+from src.catalog.retrieval_backend import (
+    CatalogRetrievalBackend,
+    get_catalog_retrieval_backend,
+    retrieve_catalog_context_with_backend,
+)
+from src.catalog.retriever import CATALOG_APPROVED_TRUST_STATUS
 from src.catalog.resolver import ToolCallPlan, resolve_tool_plan
 from src.catalog.schema import ToolSpec
 from src.prompts import render_natural_language_planner_prompt
@@ -56,6 +61,7 @@ def plan_from_natural_language(
     llm: PlannerLlm | None = None,
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
+    retrieval_backend: CatalogRetrievalBackend | None = None,
 ) -> dict[str, Any]:
     """Convert a natural-language workflow request into a Recipe Tool Plan."""
     return create_natural_language_plan(
@@ -64,6 +70,7 @@ def plan_from_natural_language(
         llm=llm,
         tool_catalog=tool_catalog,
         recipe_catalog=recipe_catalog,
+        retrieval_backend=retrieval_backend,
     ).plan
 
 
@@ -75,6 +82,7 @@ def create_natural_language_plan(
     tool_catalog: ToolCatalog | None = None,
     recipe_catalog: RecipeCatalog | None = None,
     catalog_retrieval: dict[str, Any] | None = None,
+    retrieval_backend: CatalogRetrievalBackend | None = None,
 ) -> NaturalLanguagePlanResult:
     """Convert a natural-language request and retain planner observability details."""
     if not request.strip():
@@ -85,7 +93,12 @@ def create_natural_language_plan(
     planner_llm = llm if llm is not None else _make_planner_llm(model)
 
     if catalog_retrieval is None:
-        catalog_retrieval = retrieve_catalog_context(request, tool_catalog, recipe_catalog)
+        catalog_retrieval = retrieve_catalog_context_with_backend(
+            retrieval_backend or get_catalog_retrieval_backend(),
+            request,
+            tool_catalog,
+            recipe_catalog,
+        )
     prompt = build_planner_prompt(
         request,
         tool_catalog,
@@ -124,9 +137,15 @@ def build_planner_prompt(
     recipe_catalog: RecipeCatalog,
     *,
     catalog_retrieval: dict[str, Any] | None = None,
+    retrieval_backend: CatalogRetrievalBackend | None = None,
 ) -> str:
     if catalog_retrieval is None:
-        catalog_retrieval = retrieve_catalog_context(request, tool_catalog, recipe_catalog)
+        catalog_retrieval = retrieve_catalog_context_with_backend(
+            retrieval_backend or get_catalog_retrieval_backend(),
+            request,
+            tool_catalog,
+            recipe_catalog,
+        )
 
     catalog_context = _build_retrieved_catalog_context(
         catalog_retrieval,
@@ -137,10 +156,19 @@ def build_planner_prompt(
     return render_natural_language_planner_prompt(request, catalog_context)
 
 
-def build_default_planner_prompt(request: str) -> str:
+def build_default_planner_prompt(
+    request: str,
+    *,
+    retrieval_backend: CatalogRetrievalBackend | None = None,
+) -> str:
     tool_catalog = load_tool_catalog()
     recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)
-    return build_planner_prompt(request, tool_catalog, recipe_catalog)
+    return build_planner_prompt(
+        request,
+        tool_catalog,
+        recipe_catalog,
+        retrieval_backend=retrieval_backend,
+    )
 
 
 def _build_retrieved_catalog_context(
