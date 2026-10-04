@@ -91,10 +91,13 @@ def retrieve_catalog_context_with_backend(
     top_k_tools: int = 8,
 ) -> dict[str, Any]:
     """Run a backend and validate the common JSON-ready artifact contract."""
+    normalized_query = query.strip()
+    if not normalized_query:
+        raise ValueError("query must not be empty")
     _validate_top_k("top_k_recipes", top_k_recipes)
     _validate_top_k("top_k_tools", top_k_tools)
     result = backend.retrieve(
-        query,
+        normalized_query,
         tool_catalog,
         recipe_catalog,
         top_k_recipes,
@@ -103,7 +106,7 @@ def retrieve_catalog_context_with_backend(
     _validate_backend_result(
         result,
         backend_name=backend.name,
-        query=query,
+        query=normalized_query,
         tool_catalog=tool_catalog,
         recipe_catalog=recipe_catalog,
         top_k_recipes=top_k_recipes,
@@ -131,8 +134,7 @@ def _validate_backend_result(
         raise ValueError(f"Retrieval backend '{backend_name}' must return an object.")
     _validate_json_value(result, backend_name=backend_name)
 
-    normalized_query = query.strip()
-    if result.get("query") != normalized_query:
+    if result.get("query") != query:
         raise ValueError(
             f"Retrieval backend '{backend_name}' must preserve the normalized query."
         )

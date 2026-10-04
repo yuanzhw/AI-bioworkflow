@@ -2164,6 +2164,22 @@ validation 边界。
 覆盖点：R3A 不改变 lexical ranking、fallback 或 candidate contract，只增加可审计
 backend provenance。
 
+### `test_contract_normalizes_query_before_backend_dispatch`
+
+输入：首尾包含空格和 tab 的合法 RNA-seq query。
+
+期望输出：backend 只收到 `strip()` 后的 query，返回 artifact 记录同一规范化值。
+
+覆盖点：所有替换 backend 共享稳定的 query 输入契约，不会因是否自行 strip 而产生差异。
+
+### `test_contract_rejects_empty_query_before_backend_dispatch`
+
+输入：仅包含空格、tab 和换行符的 query。
+
+期望输出：contract 抛出 `query must not be empty`，backend call count 保持为零。
+
+覆盖点：空 query 在统一边界被拒绝，不能依赖具体 backend 保留 legacy invariant。
+
 ### `test_contract_rejects_mismatched_strategy`
 
 输入：backend name 为 `static_v1`，返回 artifact 却声明 `strategy == other_v1`。

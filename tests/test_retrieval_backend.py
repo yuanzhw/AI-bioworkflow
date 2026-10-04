@@ -21,16 +21,18 @@ class StaticRetrievalBackend:
     def __init__(self, result):
         self.result = result
         self.calls = 0
+        self.queries = []
 
     def retrieve(
         self,
-        _query,
+        query,
         _tool_catalog,
         _recipe_catalog,
         _top_k_recipes=3,
         _top_k_tools=8,
     ):
         self.calls += 1
+        self.queries.append(query)
         return self.result
 
 
@@ -92,6 +94,37 @@ class RetrievalBackendContractTests(unittest.TestCase):
         self.assertEqual(evidence["schema_version"], "1.0")
         self.assertEqual(evidence["backend"], "lexical_v1")
         self.assertIn("differential", evidence["query_tokens"])
+
+    def test_contract_normalizes_query_before_backend_dispatch(self):
+        backend = StaticRetrievalBackend(
+            valid_static_result(self.tool_catalog, self.recipe_catalog)
+        )
+
+        result = retrieve_catalog_context_with_backend(
+            backend,
+            f"  {VALID_QUERY}\t",
+            self.tool_catalog,
+            self.recipe_catalog,
+        )
+
+        self.assertEqual(backend.queries, [VALID_QUERY])
+        self.assertEqual(result["query"], VALID_QUERY)
+
+    def test_contract_rejects_empty_query_before_backend_dispatch(self):
+        backend = StaticRetrievalBackend(
+            valid_static_result(self.tool_catalog, self.recipe_catalog)
+        )
+
+        with self.assertRaisesRegex(ValueError, "query must not be empty"):
+            retrieve_catalog_context_with_backend(
+                backend,
+                " \t\n ",
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+        self.assertEqual(backend.calls, 0)
+        self.assertEqual(backend.queries, [])
 
     def test_contract_rejects_mismatched_strategy(self):
         result = valid_static_result(self.tool_catalog, self.recipe_catalog)
