@@ -2115,6 +2115,200 @@ hard filtering 的 paired-end germline variant calling query。
 
 - Retriever 在进入 scoring 前拒绝不可分析的空 query。
 
+## `tests/test_retrieval_backend.py`
+
+该文件验证 R3A Approved Catalog Retriever backend contract、factory 和 evaluation CLI
+选择。Contract 只允许 backend 返回 approved Catalog candidates，不改变完整 Catalog
+validation 边界。
+
+### `test_factory_defaults_to_lexical_backend`
+
+输入：不指定 backend name。
+
+期望输出：factory 返回满足 `CatalogRetrievalBackend` Protocol 的
+`LexicalCatalogRetrievalBackend`，其 name 为 `lexical_v1`。
+
+覆盖点：生产默认保持 lexical baseline，不会因为 R3A 接口抽取而静默切换策略。
+
+### `test_factory_normalizes_explicit_backend_name`
+
+输入：带空格和大小写差异的 ` Lexical_V1 `。
+
+期望输出：factory 仍返回 lexical backend。
+
+覆盖点：显式配置解析稳定，同时支持值仍由 registry 严格限制。
+
+### `test_unknown_backend_error_lists_supported_backends`
+
+输入：尚未注册的 `vector_v1`。
+
+期望输出：抛出 `ValueError`，同时列出未知名称和当前支持的 `lexical_v1`。
+
+覆盖点：未实现 backend 不会隐式回退或影响生产 Planner。
+
+### `test_evaluation_cli_defaults_to_lexical_backend`
+
+输入：空 CLI 参数，以及显式 `--backend lexical_v1`。
+
+期望输出：两种情况解析出的 backend 都为 `lexical_v1`。
+
+覆盖点：evaluation runner 具备显式可扩展选择点，当前默认保持确定性。
+
+### `test_lexical_backend_preserves_legacy_results_and_adds_evidence`
+
+输入：同一 RNA-seq query 分别调用 lexical compatibility function 和 R3A backend。
+
+期望输出：移除新增 `backend_evidence` 后，两份 retrieval artifact 完全一致；evidence
+记录 schema version、backend name 和 lexical query tokens。
+
+覆盖点：R3A 不改变 lexical ranking、fallback 或 candidate contract，只增加可审计
+backend provenance。
+
+### `test_contract_normalizes_query_before_backend_dispatch`
+
+输入：首尾包含空格和 tab 的合法 RNA-seq query。
+
+期望输出：backend 只收到 `strip()` 后的 query，返回 artifact 记录同一规范化值。
+
+覆盖点：所有替换 backend 共享稳定的 query 输入契约，不会因是否自行 strip 而产生差异。
+
+### `test_contract_rejects_empty_query_before_backend_dispatch`
+
+输入：仅包含空格、tab 和换行符的 query。
+
+期望输出：contract 抛出 `query must not be empty`，backend call count 保持为零。
+
+覆盖点：空 query 在统一边界被拒绝，不能依赖具体 backend 保留 legacy invariant。
+
+### `test_contract_rejects_invalid_backend_name_before_dispatch`
+
+输入：backend name 分别为 `null`、空字符串和纯空白字符串。
+
+期望输出：contract 在调用 backend 前抛出 `ValueError`，backend call count 保持为零。
+
+覆盖点：动态注入的 backend 必须提供可持久化、可供前端消费的非空字符串 identity。
+
+### `test_contract_rejects_mismatched_strategy`
+
+输入：backend name 为 `static_v1`，返回 artifact 却声明 `strategy == other_v1`。
+
+期望输出：contract 抛出 `ValueError`。
+
+覆盖点：artifact strategy 不能与实际选择的 backend 分离。
+
+### `test_contract_rejects_inconsistent_fallback_provenance`
+
+输入：component fallback 为 true，但 aggregate fallback 为 false 的 backend artifact。
+
+期望输出：contract 拒绝该 artifact。
+
+覆盖点：Planner 与 evaluation 进入下游前共享同一 fallback provenance 保证。
+
+### `test_contract_requires_non_empty_fallback_reason_when_used`
+
+输入：component 和 aggregate fallback 均为 true，但 `fallback_reason` 分别为 `null`、
+空字符串和纯空白字符串。
+
+期望输出：contract 拒绝缺少有效说明的 fallback artifact。
+
+覆盖点：前端 fallback badge、evaluation artifact 和诊断记录始终保留可解释 provenance。
+
+### `test_contract_requires_null_fallback_reason_when_not_used`
+
+输入：所有 fallback flags 均为 false，但 `fallback_reason` 包含字符串。
+
+期望输出：contract 要求 `fallback_reason` 为 `null`。
+
+覆盖点：fallback 状态与说明严格配对，避免下游展示互相矛盾的 artifact。
+
+### `test_contract_requires_versioned_backend_evidence`
+
+输入：backend evidence 缺少 `schema_version`。
+
+期望输出：contract 要求当前 evidence schema version `1.0`。
+
+覆盖点：后续 vector model、index 和 hybrid fusion provenance 可以在版本化字段内演进。
+
+### `test_contract_requires_complete_candidate_shape`
+
+输入：缺少 `score` 的 recipe candidate。
+
+期望输出：contract 拒绝该 artifact，并要求有限数值 score。
+
+覆盖点：通过 backend contract 的候选可以直接被 Planner、evaluation 和前端共同消费。
+
+### `test_contract_rejects_recipe_outside_approved_catalog`
+
+输入：candidate 声明不存在于当前 Recipe Catalog 的 recipe ID。
+
+期望输出：contract 在进入 Planner prompt 构造前抛出 `ValueError`。
+
+覆盖点：替换 backend 不能绕过 approved Recipe Catalog 边界。
+
+### `test_contract_requires_tool_version`
+
+输入：缺少 `version` 的 tool candidate。
+
+期望输出：contract 要求非空 tool version。
+
+覆盖点：Planner 不会在已验证边界之后因缺少 tool version 才失败。
+
+### `test_contract_rejects_tool_version_outside_approved_catalog`
+
+输入：tool ID 存在，但 candidate 声明未准入的版本 `999.0`。
+
+期望输出：contract 拒绝未知的 approved tool id/version 组合。
+
+覆盖点：backend 只能排序正式 Tool Catalog 中的精确工具版本。
+
+### `test_contract_preserves_catalog_tool_metadata`
+
+输入：candidate 修改正式 ToolSpec 的 `execution_verification`。
+
+期望输出：contract 拒绝被修改的 verification metadata。
+
+覆盖点：retrieval backend 不拥有工具执行可信度，artifact 必须保留 Catalog 的权威值。
+
+### `test_contract_requires_catalog_approved_trust_status`
+
+输入：tool candidate 将 `trust_status` 改为 `candidate`。
+
+期望输出：contract 要求 `catalog-approved`。
+
+覆盖点：R3 approved Catalog retrieval 不与 P6 candidate tool discovery 边界混合。
+
+### `test_contract_rejects_non_json_backend_evidence`
+
+输入：`backend_evidence` 嵌套不可 JSON 序列化的 Python object。
+
+期望输出：contract 在 prompt 或持久化之前拒绝该 artifact。
+
+覆盖点：versioned backend evidence 必须是可安全传递的严格 JSON 数据。
+
+### `test_contract_rejects_non_finite_values`
+
+输入：candidate score 为 `NaN`。
+
+期望输出：contract 拒绝非有限数值。
+
+覆盖点：backend artifact 不产生 Python 可编码但不属于标准 JSON 的数值。
+
+### `test_contract_requires_positive_top_k_before_backend_dispatch`
+
+输入：`top_k_recipes == 0`、`top_k_tools == -1` 或 boolean top-k。
+
+期望输出：contract 在调用 backend 前抛出 `ValueError`，backend call count 保持为零。
+
+覆盖点：所有替换 backend 共享相同的正整数候选限制，不依赖具体实现自行防御。
+
+### `test_contract_rejects_candidate_counts_above_top_k`
+
+输入：backend 在 recipe 或 tool 分支返回两条候选，但对应 top-k 为一。
+
+期望输出：contract 拒绝超出请求限制的 artifact。
+
+覆盖点：Planner context 保持有界，不同 backend 的 evaluation cutoff 可以直接比较。
+
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query
@@ -2166,6 +2360,25 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
 - 当前 baseline 明确区分四个 supported workflow family 和 unsupported 负例。
 - Fixture 标注明确区分显式 tool intent 和通用 role intent。
 
+### `test_evaluates_explicit_backend_and_preserves_backend_evidence`
+
+输入：显式注入 `fake_v1` backend，并评估一条 supported hit query。
+
+期望输出：backend 只接收该 query；evaluation 顶层 strategy 为 `fake_v1`；per-query
+artifact 保留 versioned backend evidence、完整 recipe candidates 和完整 tool candidates。
+
+覆盖点：R3B/R3C 可以复用同一 evaluation pipeline 比较 backend，并保留分支 score、
+rank 或 fusion 依据所需的结构化位置。
+
+### `test_rejects_backend_and_legacy_retriever_together`
+
+输入：同时传入 R3A backend 和兼容用 legacy retriever callable。
+
+期望输出：evaluation 抛出 `ValueError`。
+
+覆盖点：每次 evaluation 只有一个明确的检索来源，避免 artifact strategy 与实际执行路径
+产生歧义。
+
 ### `test_evaluates_current_catalog_baseline`
 
 输入：
@@ -2215,6 +2428,7 @@ scRNA-seq 与 variant calling 的 four-family baseline metrics。Unsupported 负
 - 每条 query 包含 `top_recipe_id`、`top_recipe_family` 和可重叠
   `miss_categories`；`cross_family_chipseq_not_variant_en` 被标记为 family confusion，
   `rnaseq_quality_report_en` 被标记为唯一 top-3 recipe miss。
+- 每条 query 同时保留完整 recipe/tool candidate objects 和 versioned backend evidence。
 - unsupported metagenomics fallback 保留返回的 approved candidates，但
   `top_recipe_id == null`、`top_recipe_family == "no_match"`，且 component fallback
   flags 均为 `true`。
@@ -4235,6 +4449,16 @@ Compiler Graph，也不产出 Workflow IR 或 WDL。
 
 - 后续 Orchestration Graph 可以直接注册默认 planner node。
 
+### `test_planner_node_uses_injected_retrieval_backend`
+
+输入：合法 RNA-seq Planner 响应和 `recording_v1` retrieval backend。
+
+期望输出：backend 收到 state 中的请求；`catalog_retrieval.strategy` 与 retriever
+completed event payload 均为 `recording_v1`。
+
+覆盖点：Orchestration Graph 的 Planner node 可以注入候选 backend，同时保持 Catalog
+Retrieval 事件顺序和 Planner/Compiler 边界不变。
+
 ### `test_planner_node_records_json_failure_without_secret_payloads`
 
 输入：
@@ -4821,6 +5045,7 @@ I would run fastp first.
 - `result.plan.workflow.recipe == "rnaseq_differential_expression"`。
 - `result.planner_prompt` 包含 `Catalog:`。
 - `result.catalog_retrieval.strategy == "lexical_v1"`。
+- `result.catalog_retrieval.backend_evidence.backend == "lexical_v1"`。
 - `result.catalog_retrieval.recipes[0].id == "rnaseq_differential_expression"`。
 - `result.catalog_retrieval.tools` 包含 `deseq2`。
 - `result.raw_response` 包含 `RNASeqDEG`。
@@ -4828,14 +5053,25 @@ I would run fastp first.
 覆盖点：
 
 - Planner 返回可观测性信息：结构化 plan、实际 prompt、原始模型响应和 catalog retrieval artifact。
-- 自然语言 planner 成功路径会先通过 Approved Catalog Retriever 缩小 prompt context。
+- 自然语言 planner 成功路径会先通过默认 Approved Catalog Retriever backend 缩小
+  prompt context，并保留 backend provenance。
+
+### `test_create_natural_language_plan_uses_injected_retrieval_backend`
+
+输入：合法 RNA-seq Planner 响应和 name 为 `recording_v1` 的测试 backend。
+
+期望输出：backend 收到原始自然语言 query；Planner result 的 strategy 和 versioned
+backend evidence 均标识 `recording_v1`。
+
+覆盖点：直接 Natural Language Planner 入口支持显式 backend dependency injection，
+R3B prototype 不需要替换全局函数或修改完整 Catalog validation。
 
 ### `test_plan_validation_uses_complete_catalog_after_retrieval`
 
 输入：
 
 - 用户请求：`Run RNA-seq differential expression.`
-- mock `retrieve_catalog_context(...)` 返回稀疏结果：只包含 RNA-seq recipe 和 `fastp` tool。
+- 显式 `catalog_retrieval` 参数传入稀疏结果：只包含 RNA-seq recipe 和 `fastp` tool。
 - `FakePlannerLlm` 返回完整合法 RNA-seq Recipe Tool Plan JSON，包含 `salmon`、`tximport`、`deseq2` 和 `multiqc`。
 
 执行：
@@ -5707,11 +5943,13 @@ npm run test:catalog-retrieval
 - 空 query、空 recipes、空 tools 且未 fallback 的 retrieval。
 - 包含 RNA-seq query、recipe 和带 execution verification 的 tool 候选的 retrieval。
 - component fallback flag 使用非法字符串值的 retrieval。
+- backend evidence 缺少 schema version 的 retrieval。
 
 期望输出：
 
 - `null` 与空 retrieval 返回 `false`。
 - component fallback flag 只接受 boolean；非法类型返回 `false`。
+- 新 backend evidence 必须包含字符串类型的 schema version 和 backend name。
 - 包含候选或 query 的 retrieval 返回 `true`。
 
 覆盖点：
@@ -5739,6 +5977,15 @@ retrieval artifact。
 覆盖点：新 artifact 暴露 component fallback provenance，同时前端继续兼容已持久化的
 旧 run snapshots。该读取兼容不放宽 evaluation backend contract；新评估遇到
 aggregate fallback 时仍强制要求 component provenance。
+
+### `accepts legacy retrieval artifacts without backend evidence`
+
+输入：R3A 前已持久化、不包含 `backend_evidence` 的 retrieval artifact。
+
+期望输出：artifact 仍被识别为有效 retrieval。
+
+覆盖点：active backend contract 要求 versioned evidence，但前端历史读取不会因此隐藏
+旧 run snapshot。
 
 ### `selects top catalog recipe and limited tools`
 

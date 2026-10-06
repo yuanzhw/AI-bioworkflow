@@ -110,7 +110,7 @@ main.py -> workflow_service.plan_and_compile_workflow
   ↓
 Orchestration Graph
   ↓
-natural_language_planner       # Approved Catalog Retriever 缩小 prompt context，再生成 Recipe Tool Plan 和 planner trace
+natural_language_planner       # 可替换 Approved Catalog Retriever backend 缩小 prompt context，再生成 Recipe Tool Plan 和 planner trace
   ↓
 Recipe Tool Plan
   ↓
@@ -189,6 +189,7 @@ P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流
 | P0 本地快速检查 | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1` | 运行单测、代表性 RNA-seq WDL 编译和语法校验；不触发真实 e2e。 |
 | 结构化编译 | `uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl` | 直接走确定性 Recipe Tool Plan / IR 编译路径，不需要 API key。 |
 | 自然语言规划编译 | `uv run main.py --prompt-file examples/rnaseq_deg_request.txt --output outputs/rnaseq_deg.wdl` | 先生成 Recipe Tool Plan，再进入确定性编译链路；需要 `DEEPSEEK_API_KEY`。 |
+| Retrieval baseline | `.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --backend lexical_v1` | 对 64-query fixture 显式选择 backend 并生成可比较 retrieval metrics；默认仍为 `lexical_v1`。 |
 | 本地 API + Web 开发服务 | `powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1` | 同时启动 FastAPI `127.0.0.1:8010` 与 Next.js `127.0.0.1:3000`，用于本地观察工作台修改结果。 |
 | FastAPI 开发服务 | `.\.venv\Scripts\python.exe -m src.api.server` | 默认监听 `127.0.0.1:8010`，避开 Cromwell 的 `8000`。 |
 | 真实 Cromwell tiny e2e | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 -RunE2E -CromwellUrl http://localhost:8000 -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny` | 显式 opt-in；`check_p0.ps1` 委托 `run_cromwell_tiny_e2e.ps1` 准备 fixture、同步 runner 并运行真实 e2e。 |
@@ -208,7 +209,7 @@ Cromwell 92 runner 对齐；生产 API 镜像当前使用的 miniwdl 作为必�
 1. **Reviewer LLM 只能修改 IR**：Reviewer 可以读取当前 IR、分析错误、WOMtool stderr 和历史修复记录，并输出结构化 IR patch 或候选 IR；不能直接改写最终 WDL、绕过验证或引入未经准入的正式工具。
 2. **Bioinfo Reviewer 只告警与建议**：科学性审查节点负责指出缺失步骤、方法学风险和推荐调整，但最终流程方案始终由 Architect Agent 决定。
 3. **Resource Agent 只处理资源字段**：该节点仅建议或覆盖 `cpu`、`memory`、`disks` 等资源字段，记录修改理由；不负责镜像选择、工具选择或分析方法选择。
-4. **Catalog 内检索优先**：Planner 不必永久读取全量正式工具库；当前自然语言 Planner 已先由 Approved Catalog Retriever 从 approved Catalog 中筛选候选 recipe / tools，再由完整 Catalog 做最终校验。
+4. **Catalog 内检索优先**：Planner 不必永久读取全量正式工具库；当前自然语言 Planner 已通过可替换的 Approved Catalog Retriever backend 从 approved Catalog 中筛选候选 recipe / tools，再由完整 Catalog 做最终校验。`lexical_v1` 仍是默认 backend。
 5. **未知工具先形成 Candidate ToolSpec**：外部检索发现的新工具必须先生成带来源、版本依据、未确认字段和测试状态的候选定义，才能进入镜像构建环节。
 6. **临时镜像可服务当前任务**：自动构建并通过最小验证的临时镜像允许在隔离环境内用于当前探索任务，前端必须以文字提示可信等级和风险。
 7. **正式 Catalog 只引用已验证 digest**：可复用的正式工具镜像应固定为经过验证的 digest，而不是依赖可变 tag。
@@ -865,7 +866,7 @@ RAG 开发序列放在 P4 之下维护：
 | --- | --- | --- |
 | R1 | [Internal Catalog RAG / Tool Retriever](./docs/r1-internal-catalog-rag-plan.md) | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./docs/r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | [决策完成，实施中](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；先建立 backend contract，`lexical_v1` 保持默认直到 promotion gates 通过 |
+| R3 | [R3A 已完成，R3B 待实施](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend contract 已建立，下一步离线 vector prototype，`lexical_v1` 保持默认直到 promotion gates 通过 |
 | R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
 
 R3 决策前，项目先按
@@ -915,8 +916,12 @@ lexical 对否定侧词汇与共享 role 的排序干扰；Unsupported Direct-Ma
 `0.8750`。PR 6 已进一步记录 `0.8750`（49/56）的 top-1 recipe family agreement、
 7 条 family confusion、15 条 raw tool miss 和 16 条 raw role miss；后两类均被 recipe
 context 完整恢复。R3 因此选择 hybrid-first experiment，并保留 `lexical_v1` 为默认。
-下一步进入 R3A，抽取可替换 backend contract 和可比较 evaluation interface；详细
-promotion gates 与 R3A-R3C 顺序见
+R3A 已抽取 `CatalogRetrievalBackend`、显式 backend factory 和受校验调用入口；该入口
+在 dispatch 前校验 backend identity、query 和 top-k，并统一约束 approved candidates、
+fallback provenance/reason 与 JSON-ready evidence。Planner 与 evaluation 支持 backend
+注入，CLI 支持 `--backend`，artifact 通过可选的 versioned `backend_evidence` 为
+vector/hybrid provenance 预留空间。下一步进入 R3B，只做显式选择的本地 vector
+prototype 与离线评估；详细 promotion gates 与 R3A-R3C 顺序见
 [R3 Retrieval Backend Decision](./docs/r3-retrieval-backend-decision.md)。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。

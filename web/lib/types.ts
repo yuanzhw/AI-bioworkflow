@@ -134,6 +134,7 @@ export type CatalogRetrievalRecipe = {
   matched_terms: string[];
   matched_fields: string[];
   reason: string;
+  backend_evidence?: JsonObject;
 };
 
 export type CatalogRetrievalTool = {
@@ -145,6 +146,12 @@ export type CatalogRetrievalTool = {
   trust_status: TrustStatus;
   execution_verification?: ExecutionVerification;
   reason: string;
+  backend_evidence?: JsonObject;
+};
+
+export type CatalogRetrievalBackendEvidence = JsonObject & {
+  schema_version: string;
+  backend: string;
 };
 
 export type CatalogRetrievalArtifact = {
@@ -156,6 +163,7 @@ export type CatalogRetrievalArtifact = {
   tool_fallback_used?: boolean;
   fallback_used: boolean;
   fallback_reason: string | null;
+  backend_evidence?: CatalogRetrievalBackendEvidence;
 };
 
 export type WorkflowArtifacts = {

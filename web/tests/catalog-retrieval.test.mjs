@@ -53,6 +53,11 @@ const retrieval = {
   tool_fallback_used: false,
   fallback_used: false,
   fallback_reason: null,
+  backend_evidence: {
+    schema_version: "1.0",
+    backend: "lexical_v1",
+    query_tokens: ["run", "bulk", "rna", "seq", "differential", "expression"],
+  },
 };
 
 test("detects non-empty catalog retrieval artifacts", () => {
@@ -78,6 +83,13 @@ test("detects non-empty catalog retrieval artifacts", () => {
     hasCatalogRetrieval({
       ...retrieval,
       tools: [{ id: "deseq2" }],
+    }),
+    false,
+  );
+  assert.equal(
+    hasCatalogRetrieval({
+      ...retrieval,
+      backend_evidence: { backend: "lexical_v1" },
     }),
     false,
   );
@@ -122,6 +134,12 @@ test("accepts legacy retrieval artifacts without component fallback flags", () =
     tool_fallback_used: _toolFallback,
     ...legacyRetrieval
   } = retrieval;
+
+  assert.equal(hasCatalogRetrieval(legacyRetrieval), true);
+});
+
+test("accepts legacy retrieval artifacts without backend evidence", () => {
+  const { backend_evidence: _backendEvidence, ...legacyRetrieval } = retrieval;
 
   assert.equal(hasCatalogRetrieval(legacyRetrieval), true);
 });
