@@ -265,9 +265,11 @@ User request
 输出应保持 JSON-ready，便于 API、SSE、历史详情和前端复用。
 R3A 后，由 backend contract 产生的新 artifact 必须包含 versioned
 `backend_evidence`；前端和持久化读取仍兼容没有该字段的旧 run snapshot。
-Active backend artifact 还必须在 dispatch 前通过非空 query 规范化，并通过完整候选
-结构、精确 approved Catalog 成员、Catalog-owned tool trust/verification metadata、
-请求 top-k 上限和递归 JSON compatibility 校验。
+Active backend artifact 还必须在 dispatch 前通过非空 backend identity 和 query
+规范化，并通过完整候选结构、精确 approved Catalog 成员、Catalog-owned tool
+trust/verification metadata、请求 top-k 上限和递归 JSON compatibility 校验。
+`fallback_used == true` 时必须提供非空 `fallback_reason`，未触发 fallback 时该字段
+必须为 `null`。
 
 ## 第一版 scoring 建议
 

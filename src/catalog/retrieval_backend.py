@@ -91,6 +91,7 @@ def retrieve_catalog_context_with_backend(
     top_k_tools: int = 8,
 ) -> dict[str, Any]:
     """Run a backend and validate the common JSON-ready artifact contract."""
+    backend_name = _validate_backend_name(getattr(backend, "name", None))
     normalized_query = query.strip()
     if not normalized_query:
         raise ValueError("query must not be empty")
@@ -105,7 +106,7 @@ def retrieve_catalog_context_with_backend(
     )
     _validate_backend_result(
         result,
-        backend_name=backend.name,
+        backend_name=backend_name,
         query=normalized_query,
         tool_catalog=tool_catalog,
         recipe_catalog=recipe_catalog,
@@ -118,6 +119,12 @@ def retrieve_catalog_context_with_backend(
 def _normalize_backend_name(name: str | None) -> str:
     normalized = (name or DEFAULT_RETRIEVAL_BACKEND).strip().lower()
     return normalized or DEFAULT_RETRIEVAL_BACKEND
+
+
+def _validate_backend_name(name: Any) -> str:
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Retrieval backend name must be a non-empty string.")
+    return name
 
 
 def _validate_backend_result(
@@ -228,9 +235,17 @@ def _validate_backend_result(
         )
 
     fallback_reason = result.get("fallback_reason")
-    if fallback_reason is not None and not isinstance(fallback_reason, str):
+    if expected_fallback and (
+        not isinstance(fallback_reason, str) or not fallback_reason.strip()
+    ):
         raise ValueError(
-            f"Retrieval backend '{backend_name}' fallback_reason must be a string or null."
+            f"Retrieval backend '{backend_name}' fallback_reason must be a non-empty "
+            "string when fallback_used is true."
+        )
+    if not expected_fallback and fallback_reason is not None:
+        raise ValueError(
+            f"Retrieval backend '{backend_name}' fallback_reason must be null when "
+            "fallback_used is false."
         )
 
     evidence = result.get("backend_evidence")

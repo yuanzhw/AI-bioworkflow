@@ -2180,6 +2180,14 @@ backend provenance。
 
 覆盖点：空 query 在统一边界被拒绝，不能依赖具体 backend 保留 legacy invariant。
 
+### `test_contract_rejects_invalid_backend_name_before_dispatch`
+
+输入：backend name 分别为 `null`、空字符串和纯空白字符串。
+
+期望输出：contract 在调用 backend 前抛出 `ValueError`，backend call count 保持为零。
+
+覆盖点：动态注入的 backend 必须提供可持久化、可供前端消费的非空字符串 identity。
+
 ### `test_contract_rejects_mismatched_strategy`
 
 输入：backend name 为 `static_v1`，返回 artifact 却声明 `strategy == other_v1`。
@@ -2195,6 +2203,23 @@ backend provenance。
 期望输出：contract 拒绝该 artifact。
 
 覆盖点：Planner 与 evaluation 进入下游前共享同一 fallback provenance 保证。
+
+### `test_contract_requires_non_empty_fallback_reason_when_used`
+
+输入：component 和 aggregate fallback 均为 true，但 `fallback_reason` 分别为 `null`、
+空字符串和纯空白字符串。
+
+期望输出：contract 拒绝缺少有效说明的 fallback artifact。
+
+覆盖点：前端 fallback badge、evaluation artifact 和诊断记录始终保留可解释 provenance。
+
+### `test_contract_requires_null_fallback_reason_when_not_used`
+
+输入：所有 fallback flags 均为 false，但 `fallback_reason` 包含字符串。
+
+期望输出：contract 要求 `fallback_reason` 为 `null`。
+
+覆盖点：fallback 状态与说明严格配对，避免下游展示互相矛盾的 artifact。
 
 ### `test_contract_requires_versioned_backend_evidence`
 

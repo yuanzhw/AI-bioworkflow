@@ -126,6 +126,27 @@ class RetrievalBackendContractTests(unittest.TestCase):
         self.assertEqual(backend.calls, 0)
         self.assertEqual(backend.queries, [])
 
+    def test_contract_rejects_invalid_backend_name_before_dispatch(self):
+        for backend_name in (None, "", " \t"):
+            with self.subTest(backend_name=backend_name):
+                backend = StaticRetrievalBackend(
+                    valid_static_result(self.tool_catalog, self.recipe_catalog)
+                )
+                backend.name = backend_name
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "backend name must be a non-empty string",
+                ):
+                    retrieve_catalog_context_with_backend(
+                        backend,
+                        VALID_QUERY,
+                        self.tool_catalog,
+                        self.recipe_catalog,
+                    )
+
+                self.assertEqual(backend.calls, 0)
+
     def test_contract_rejects_mismatched_strategy(self):
         result = valid_static_result(self.tool_catalog, self.recipe_catalog)
         result["strategy"] = "other_v1"
@@ -143,6 +164,40 @@ class RetrievalBackendContractTests(unittest.TestCase):
         result["recipe_fallback_used"] = True
 
         with self.assertRaisesRegex(ValueError, "fallback_used must equal"):
+            retrieve_catalog_context_with_backend(
+                StaticRetrievalBackend(result),
+                VALID_QUERY,
+                self.tool_catalog,
+                self.recipe_catalog,
+            )
+
+    def test_contract_requires_non_empty_fallback_reason_when_used(self):
+        for fallback_reason in (None, "", " \t"):
+            with self.subTest(fallback_reason=fallback_reason):
+                result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+                result["recipe_fallback_used"] = True
+                result["fallback_used"] = True
+                result["fallback_reason"] = fallback_reason
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "fallback_reason must be a non-empty string",
+                ):
+                    retrieve_catalog_context_with_backend(
+                        StaticRetrievalBackend(result),
+                        VALID_QUERY,
+                        self.tool_catalog,
+                        self.recipe_catalog,
+                    )
+
+    def test_contract_requires_null_fallback_reason_when_not_used(self):
+        result = valid_static_result(self.tool_catalog, self.recipe_catalog)
+        result["fallback_reason"] = "fallback was not used"
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "fallback_reason must be null when fallback_used is false",
+        ):
             retrieve_catalog_context_with_backend(
                 StaticRetrievalBackend(result),
                 VALID_QUERY,

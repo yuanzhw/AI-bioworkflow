@@ -916,10 +916,12 @@ lexical 对否定侧词汇与共享 role 的排序干扰；Unsupported Direct-Ma
 `0.8750`。PR 6 已进一步记录 `0.8750`（49/56）的 top-1 recipe family agreement、
 7 条 family confusion、15 条 raw tool miss 和 16 条 raw role miss；后两类均被 recipe
 context 完整恢复。R3 因此选择 hybrid-first experiment，并保留 `lexical_v1` 为默认。
-R3A 已抽取 `CatalogRetrievalBackend`、显式 backend factory 和受校验调用入口；Planner
-与 evaluation 支持 backend 注入，CLI 支持 `--backend`，artifact 通过可选的 versioned
-`backend_evidence` 为 vector/hybrid provenance 预留空间。下一步进入 R3B，只做显式
-选择的本地 vector prototype 与离线评估；详细 promotion gates 与 R3A-R3C 顺序见
+R3A 已抽取 `CatalogRetrievalBackend`、显式 backend factory 和受校验调用入口；该入口
+在 dispatch 前校验 backend identity、query 和 top-k，并统一约束 approved candidates、
+fallback provenance/reason 与 JSON-ready evidence。Planner 与 evaluation 支持 backend
+注入，CLI 支持 `--backend`，artifact 通过可选的 versioned `backend_evidence` 为
+vector/hybrid provenance 预留空间。下一步进入 R3B，只做显式选择的本地 vector
+prototype 与离线评估；详细 promotion gates 与 R3A-R3C 顺序见
 [R3 Retrieval Backend Decision](./docs/r3-retrieval-backend-decision.md)。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
