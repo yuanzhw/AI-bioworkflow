@@ -267,6 +267,21 @@ R3A 在不改变 lexical scoring 的前提下完成：
 64-query `lexical_v1` metrics 与 PR 6 baseline 逐项一致。R3A 不包含 embedding model、
 vector index、fusion 或默认 backend 切换。
 
+### R3B-1 Catalog Document Contract Checkpoint
+
+R3B-1 将 5 个 approved recipes 与 16 个 approved tool versions 确定性转换为 21 个
+versioned documents。Recipe/tool identity、ordered source sections、canonical embedding
+text 和 Catalog-owned tool trust/verification metadata 使用 schema `1.0`；完整 corpus
+通过 canonical JSON 计算 SHA-256 fingerprint：
+
+```text
+sha256:a0d1e6dde133936d808bf43a4262f5f1e6fc764a89732733298933aa97b490db
+```
+
+详细 schema、canonicalization 和 JSON export 见
+[R3B Catalog Retrieval Document Contract](./r3b-catalog-document-contract.md)。R3B-1 不包含
+embedding model、vector index、vector backend 或默认行为变化。
+
 ## Metrics
 
 第一版 eval 应保持轻量、可解释、可在本地稳定运行。
@@ -601,11 +616,15 @@ R2 query set 和 baseline 已完成。后续 R3 PR 顺序由
    - 已抽象 lexical backend、显式 factory 与受校验 artifact contract。
    - `lexical_v1` 默认行为和 64-query metrics 保持不变。
 
-2. **R3B Vector backend prototype（下一步）**
+2. **R3B-1 Catalog document contract（已完成）**
+   - 已建立 versioned recipe/tool documents、canonical text 和 corpus fingerprint。
+   - 当前 21-document artifact 可确定性导出为 JSON。
+
+3. **R3B-2 Vector backend prototype（下一步）**
    - 加入本地 vector index 或轻量 embedding backend。
    - 仅显式配置或离线评估，不影响结构化入口。
 
-3. **R3C Hybrid scoring**
+4. **R3C Hybrid scoring**
    - 融合 lexical 和 vector。
    - 用 promotion gates 决定是否改变默认 backend。
 
