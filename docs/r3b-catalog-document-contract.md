@@ -40,8 +40,14 @@ R3B-1 不引入 embedding model、vector index、vector database 或新的运行
 - `trust_status` / `execution_verification_*`：只对 tool document 存在，且必须保留
   Tool Catalog 的权威值。这些字段不进入 `text`，不能成为相似度信号。
 
-Schema 会拒绝不一致的 identity、重复 section、空 section value、被修改的 `text`，以及
-缺失或被篡改的 tool trust / execution verification metadata。
+Schema 会拒绝不一致的 identity、重复 section、空 section value、被修改的 `text`、
+非 `catalog-approved` 的 tool trust status，以及不合法的 execution verification
+status/evidence 组合。
+
+Tool metadata 与当前 Tool Catalog 的精确一致性由 `build_catalog_retrieval_corpus()`
+构造路径保证：builder 从 `ToolSpec` 复制权威值。脱离 Catalog 单独验证 artifact 时，
+schema 只能确认结构和内部一致性，不能证明 execution verification metadata 与当前
+Tool Catalog 相同。
 
 ## Searchable Sections
 
