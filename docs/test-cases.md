@@ -2309,6 +2309,99 @@ backend provenance。
 
 覆盖点：Planner context 保持有界，不同 backend 的 evaluation cutoff 可以直接比较。
 
+## `tests/test_retrieval_documents.py`
+
+该文件验证 R3B-1 Approved Catalog document/corpus schema、deterministic canonicalization、
+SHA-256 fingerprint 和 JSON export。测试不加载 embedding model，也不创建 vector index。
+
+### `test_builds_versioned_sorted_current_catalog_corpus`
+
+输入：当前 5-recipe、16-tool-version Approved Catalog。
+
+期望输出：生成 21 个按 `document_id` 排序且 identity 唯一的 schema `1.0` documents；
+corpus fingerprint 固定为
+`sha256:a0d1e6dde133936d808bf43a4262f5f1e6fc764a89732733298933aa97b490db`。
+
+覆盖点：当前 Catalog corpus 是可版本化、可审计的稳定 R3B checkpoint。
+
+### `test_recipe_document_preserves_identity_and_searchable_structure`
+
+输入：`rnaseq_differential_expression` recipe。
+
+期望输出：document identity 为 `recipe:rnaseq_differential_expression`，version 与 trust
+metadata 为 null；canonical text 包含 recipe name、differential-expression role 和有序
+allowed tools。
+
+覆盖点：后续 embedding backend 使用正式 recipe intent 与 step role，不自行读取或拼接
+Recipe YAML。
+
+### `test_tool_document_preserves_identity_and_catalog_owned_metadata`
+
+输入：`deseq2@1.42.1` tool。
+
+期望输出：document 保留精确 tool id/version、`catalog-approved`、`e2e-validated` evidence，
+且 canonical text 包含 aliases 和 parameter contract。
+
+覆盖点：相似度文本和 Catalog-owned trust/execution metadata 分离，但 artifact 同时保留
+两类信息供 validated backend 使用。
+
+### `test_corpus_is_independent_of_catalog_insertion_order`
+
+输入：内容相同但以反向 insertion order 构造的 ToolCatalog 与 RecipeCatalog。
+
+期望输出：完整 corpus artifact 与 fingerprint 均与默认加载顺序完全一致。
+
+覆盖点：index identity 不依赖 Python mapping 或文件发现顺序。
+
+### `test_fingerprint_changes_when_searchable_catalog_content_changes`
+
+输入：只修改 DESeq2 description 的 Catalog 副本。
+
+期望输出：新 corpus fingerprint 与 baseline 不同。
+
+覆盖点：searchable content 变化会使旧 index/evidence 明确失效，不能静默复用。
+
+### `test_rejects_recipe_document_with_unknown_allowed_tool`
+
+输入：recipe step 将 `allowed_tools` 改为不在当前 Tool Catalog 中的 `not_approved`。
+
+期望输出：corpus builder 在生成 document 前拒绝该 recipe。
+
+覆盖点：R3B document 层只接受 Approved Catalog identity，不能把未知工具带入后续 index。
+
+### `test_document_rejects_text_that_does_not_match_sections`
+
+输入：保留原 sections，但将 document `text` 改为任意字符串。
+
+期望输出：schema validation 拒绝该 document。
+
+覆盖点：backend 不能绕过 canonical renderer 提交与 provenance 不一致的 embedding text。
+
+### `test_corpus_rejects_mismatched_fingerprint`
+
+输入：documents 不变，但将 fingerprint 替换为全零 SHA-256。
+
+期望输出：schema validation 拒绝该 corpus。
+
+覆盖点：corpus artifact 自校验 canonical content，fingerprint 不能作为未验证标签传递。
+
+### `test_cli_writes_json_ready_corpus_artifact`
+
+输入：`scripts/build_retrieval_corpus.py --output <temporary path>`。
+
+期望输出：命令返回 0，并创建包含 schema version、SHA-256 fingerprint 和 21 个 documents
+的 JSON artifact；缺失父目录会被创建。
+
+覆盖点：R3B-2 和人工审计共享同一 machine-consumable corpus 生成入口。
+
+### `test_cli_prints_pure_json_corpus_artifact_to_stdout`
+
+输入：不传 `--output` 调用 corpus CLI。
+
+期望输出：stdout 可直接解析为包含 21 个 documents 的 JSON artifact，返回码为 0。
+
+覆盖点：CLI stdout 保持 machine-consumable，不混入日志或进度文本。
+
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query

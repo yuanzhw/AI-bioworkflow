@@ -866,7 +866,7 @@ RAG 开发序列放在 P4 之下维护：
 | --- | --- | --- |
 | R1 | [Internal Catalog RAG / Tool Retriever](./docs/r1-internal-catalog-rag-plan.md) | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./docs/r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | [R3A 已完成，R3B 待实施](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend contract 已建立，下一步离线 vector prototype，`lexical_v1` 保持默认直到 promotion gates 通过 |
+| R3 | [R3A / R3B-1 已完成，R3B-2 待实施](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend 与 [document contract](./docs/r3b-catalog-document-contract.md) 已建立，下一步离线 vector prototype，`lexical_v1` 保持默认直到 promotion gates 通过 |
 | R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
 
 R3 决策前，项目先按
@@ -920,9 +920,14 @@ R3A 已抽取 `CatalogRetrievalBackend`、显式 backend factory 和受校验调
 在 dispatch 前校验 backend identity、query 和 top-k，并统一约束 approved candidates、
 fallback provenance/reason 与 JSON-ready evidence。Planner 与 evaluation 支持 backend
 注入，CLI 支持 `--backend`，artifact 通过可选的 versioned `backend_evidence` 为
-vector/hybrid provenance 预留空间。下一步进入 R3B，只做显式选择的本地 vector
-prototype 与离线评估；详细 promotion gates 与 R3A-R3C 顺序见
+vector/hybrid provenance 预留空间。R3 随后按 R3B-1 document contract、R3B-2 本地
+vector prototype 与离线评估的顺序推进；详细 promotion gates 与 R3A-R3C 顺序见
 [R3 Retrieval Backend Decision](./docs/r3-retrieval-backend-decision.md)。
+R3B-1 已进一步把 5 个 approved recipes 和 16 个 approved tool versions 转换为 21 个
+版本化 documents，并以 canonical JSON 和 SHA-256 固定 corpus fingerprint；document
+identity、可检索 sections、Catalog-owned trust/verification metadata 与 JSON 导出由
+[R3B Catalog Retrieval Document Contract](./docs/r3b-catalog-document-contract.md) 定义。
+R3B-2 才引入显式选择的本地 embedding/vector prototype，R3B-1 不增加模型依赖。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

@@ -175,7 +175,14 @@ intent routing/capability rejection 的风险信号，而不是相关性 ranking
 
 ### R3B: Vector Prototype And Offline Evaluation
 
+#### R3B-1: Catalog Document Contract
+
 - 从 approved recipe/tool metadata 构造可版本化 documents。
+- 固定 canonical text、identity、Catalog-owned metadata 和 corpus fingerprint contract。
+- 提供 JSON export，不引入 embedding 或 index runtime。
+
+#### R3B-2: Vector Backend Prototype
+
 - 选择可本地复现的 embedding model，并记录 model id、revision、document schema 和
   index fingerprint。
 - 只通过显式配置运行 vector prototype；不得静默下载模型或影响默认 Planner。
@@ -213,9 +220,23 @@ R3A 已完成以下基础设施，同时保持 `lexical_v1` scoring 与 64-query
 - 前端读取接受新 evidence，同时继续兼容缺少 evidence 或 component fallback flags 的
   legacy run snapshots。
 
-下一步是 R3B：引入可本地复现、只能显式选择的 vector prototype，记录 model revision、
-document schema 和 index fingerprint，并用相同 64-query fixture 离线评估。R3B 不改变
-生产默认 backend。
+## R3B-1 Outcome
+
+R3B-1 已完成 [Catalog Retrieval Document Contract](./r3b-catalog-document-contract.md)：
+
+- `CatalogRetrievalDocument` 将 recipe/tool identity、ordered sections、canonical text 和
+  tool trust/verification metadata 固定为 schema `1.0`。
+- `CatalogRetrievalCorpus` 对 documents 强制稳定排序、唯一 identity 和内容匹配的
+  SHA-256 fingerprint。
+- 当前 5 个 recipes 与 16 个 tool versions 生成 21 个 documents；checkpoint fingerprint
+  为 `sha256:a0d1e6dde133936d808bf43a4262f5f1e6fc764a89732733298933aa97b490db`。
+- `scripts/build_retrieval_corpus.py` 可将同一 JSON-ready artifact 输出到 stdout 或文件。
+- R3B-1 不增加依赖，不实现 embedding、vector index 或新 backend，不改变
+  `lexical_v1` ranking 与默认 Planner 路径。
+
+下一步是 R3B-2：引入可本地复现、只能显式选择的 vector prototype，记录 model
+revision、dimension、document schema 和 corpus/index fingerprint，并用相同 64-query
+fixture 离线评估。R3B-2 不改变生产默认 backend。
 
 ## Contract Boundaries
 
