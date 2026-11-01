@@ -7,17 +7,29 @@ from math import isfinite
 from typing import Any, Protocol, runtime_checkable
 
 from src.catalog.loader import ToolCatalog
-from src.catalog.retriever import (
-    CATALOG_APPROVED_TRUST_STATUS,
-    LEXICAL_RETRIEVER_STRATEGY,
-    retrieve_catalog_context,
-    tokenize_for_retrieval,
-)
+from src.catalog.retrieval_documents import (CatalogRetrievalDocument,
+                                             build_catalog_retrieval_corpus)
+from src.catalog.retriever import (CATALOG_APPROVED_TRUST_STATUS,
+                                   LEXICAL_RETRIEVER_STRATEGY,
+                                   retrieve_catalog_context,
+                                   tokenize_for_retrieval)
+from src.catalog.vector_retrieval import (VECTOR_RETRIEVER_STRATEGY,
+                                          VECTOR_SCORE_PRECISION,
+                                          CatalogVectorIndex,
+                                          CatalogVectorSearchResult,
+                                          EmbeddingProvider,
+                                          LocalEmbeddingModelConfig,
+                                          SentenceTransformerEmbeddingProvider,
+                                          build_catalog_vector_index,
+                                          embed_catalog_query,
+                                          search_catalog_vector_index)
 from src.recipes.loader import RecipeCatalog
 
-
 DEFAULT_RETRIEVAL_BACKEND = LEXICAL_RETRIEVER_STRATEGY
-SUPPORTED_RETRIEVAL_BACKENDS = (LEXICAL_RETRIEVER_STRATEGY,)
+SUPPORTED_RETRIEVAL_BACKENDS = (
+    LEXICAL_RETRIEVER_STRATEGY,
+    VECTOR_RETRIEVER_STRATEGY,
+)
 BACKEND_EVIDENCE_SCHEMA_VERSION = "1.0"
 
 
@@ -69,13 +81,203 @@ class LexicalCatalogRetrievalBackend:
         }
 
 
+class VectorCatalogRetrievalBackend:
+    """Exact cosine retrieval over one pinned local embedding model and corpus."""
+
+    name = VECTOR_RETRIEVER_STRATEGY
+
+    def __init__(
+        self,
+        provider: EmbeddingProvider,
+        tool_catalog: ToolCatalog,
+        recipe_catalog: RecipeCatalog,
+    ):
+        corpus = build_catalog_retrieval_corpus(tool_catalog, recipe_catalog)
+        self._provider = provider
+        self._corpus = corpus
+        self._index = build_catalog_vector_index(corpus, provider)
+        self._documents_by_id = {
+            document.document_id: document for document in corpus.documents
+        }
+
+    @property
+    def index(self) -> CatalogVectorIndex:
+        return self._index
+
+    def retrieve(
+        self,
+        query: str,
+        tool_catalog: ToolCatalog,
+        recipe_catalog: RecipeCatalog,
+        top_k_recipes: int = 3,
+        top_k_tools: int = 8,
+    ) -> dict[str, Any]:
+        normalized_query = query.strip()
+        if not normalized_query:
+            raise ValueError("query must not be empty")
+        _validate_top_k("top_k_recipes", top_k_recipes)
+        _validate_top_k("top_k_tools", top_k_tools)
+
+        current_corpus = build_catalog_retrieval_corpus(
+            tool_catalog,
+            recipe_catalog,
+        )
+        if current_corpus.fingerprint != self._corpus.fingerprint:
+            raise ValueError(
+                "vector_v1 index corpus fingerprint does not match the current Catalog"
+            )
+
+        query_vector = embed_catalog_query(normalized_query, self._provider)
+        recipe_matches = search_catalog_vector_index(
+            self._index,
+            query_vector,
+            kind="recipe",
+            top_k=top_k_recipes,
+        )
+        tool_matches = search_catalog_vector_index(
+            self._index,
+            query_vector,
+            kind="tool",
+            top_k=top_k_tools,
+        )
+
+        return {
+            "query": normalized_query,
+            "strategy": self.name,
+            "recipes": [
+                self._recipe_result(match, rank=rank)
+                for rank, match in enumerate(recipe_matches, start=1)
+            ],
+            "tools": [
+                self._tool_result(
+                    match,
+                    rank=rank,
+                    tool_catalog=tool_catalog,
+                )
+                for rank, match in enumerate(tool_matches, start=1)
+            ],
+            "recipe_fallback_used": False,
+            "tool_fallback_used": False,
+            "fallback_used": False,
+            "fallback_reason": None,
+            "backend_evidence": self._backend_evidence(),
+        }
+
+    def _recipe_result(
+        self,
+        match: CatalogVectorSearchResult,
+        *,
+        rank: int,
+    ) -> dict[str, Any]:
+        document = self._document(match)
+        score = _json_similarity(match.score)
+        return {
+            "id": document.catalog_id,
+            "score": score,
+            "matched_terms": [],
+            "matched_fields": [],
+            "reason": "Ranked by exact cosine similarity over the approved Catalog corpus.",
+            "backend_evidence": {
+                "document_id": document.document_id,
+                "rank": rank,
+                "cosine_similarity": score,
+            },
+        }
+
+    def _tool_result(
+        self,
+        match: CatalogVectorSearchResult,
+        *,
+        rank: int,
+        tool_catalog: ToolCatalog,
+    ) -> dict[str, Any]:
+        document = self._document(match)
+        version = document.catalog_version
+        if version is None:
+            raise ValueError(
+                f"vector tool document '{document.document_id}' has no version"
+            )
+        tool = tool_catalog.get(document.catalog_id, version)
+        score = _json_similarity(match.score)
+        return {
+            "id": tool.id,
+            "version": tool.version,
+            "score": score,
+            "matched_terms": [],
+            "matched_fields": [],
+            "trust_status": CATALOG_APPROVED_TRUST_STATUS,
+            "execution_verification": tool.execution_verification.model_dump(mode="json"),
+            "reason": "Ranked by exact cosine similarity over the approved Catalog corpus.",
+            "backend_evidence": {
+                "document_id": document.document_id,
+                "rank": rank,
+                "cosine_similarity": score,
+            },
+        }
+
+    def _document(
+        self,
+        match: CatalogVectorSearchResult,
+    ) -> CatalogRetrievalDocument:
+        try:
+            return self._documents_by_id[match.entry.document_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"vector index returned unknown document '{match.entry.document_id}'"
+            ) from exc
+
+    def _backend_evidence(self) -> dict[str, Any]:
+        return {
+            "schema_version": BACKEND_EVIDENCE_SCHEMA_VERSION,
+            "backend": self.name,
+            "model_id": self._index.model_id,
+            "model_revision": self._index.model_revision,
+            "embedding_dimension": self._index.dimension,
+            "query_prefix": self._index.query_prefix,
+            "document_prefix": self._index.document_prefix,
+            "document_schema_version": self._index.document_schema_version,
+            "corpus_fingerprint": self._index.corpus_fingerprint,
+            "index_schema_version": self._index.schema_version,
+            "index_fingerprint": self._index.fingerprint,
+            "similarity": "cosine",
+        }
+
+
 def get_catalog_retrieval_backend(
     name: str | None = None,
+    *,
+    vector_config: LocalEmbeddingModelConfig | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
+    tool_catalog: ToolCatalog | None = None,
+    recipe_catalog: RecipeCatalog | None = None,
 ) -> CatalogRetrievalBackend:
     """Return an explicitly selected approved Catalog retrieval backend."""
     selected = _normalize_backend_name(name)
     if selected == LEXICAL_RETRIEVER_STRATEGY:
+        if vector_config is not None or embedding_provider is not None:
+            raise ValueError("vector configuration requires backend 'vector_v1'")
         return LexicalCatalogRetrievalBackend()
+    if selected == VECTOR_RETRIEVER_STRATEGY:
+        if tool_catalog is None or recipe_catalog is None:
+            raise ValueError(
+                "vector_v1 requires explicit Tool Catalog and Recipe Catalog instances"
+            )
+        if vector_config is not None and embedding_provider is not None:
+            raise ValueError(
+                "vector_v1 accepts either vector_config or embedding_provider, not both"
+            )
+        provider = embedding_provider
+        if provider is None:
+            if vector_config is None:
+                raise ValueError(
+                    "vector_v1 requires an explicit local embedding model path"
+                )
+            provider = SentenceTransformerEmbeddingProvider(vector_config)
+        return VectorCatalogRetrievalBackend(
+            provider,
+            tool_catalog,
+            recipe_catalog,
+        )
     raise ValueError(
         f"Unknown Catalog retrieval backend '{selected}'. Supported backends: "
         f"{', '.join(SUPPORTED_RETRIEVAL_BACKENDS)}."
@@ -342,6 +544,11 @@ def _is_finite_number(value: Any) -> bool:
         and not isinstance(value, bool)
         and (not isinstance(value, float) or isfinite(value))
     )
+
+
+def _json_similarity(score: float) -> float:
+    rounded = round(score, VECTOR_SCORE_PRECISION)
+    return 0.0 if rounded == 0.0 else rounded
 
 
 def _validate_json_value(

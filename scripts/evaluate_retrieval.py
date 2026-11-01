@@ -13,20 +13,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.catalog.loader import load_tool_catalog
-from src.catalog.retrieval_backend import (
-    DEFAULT_RETRIEVAL_BACKEND,
-    SUPPORTED_RETRIEVAL_BACKENDS,
-    get_catalog_retrieval_backend,
-)
-from src.catalog.retrieval_eval import (
-    DEFAULT_TOP_K_RECIPES,
-    DEFAULT_TOP_K_TOOLS,
-    evaluate_retrieval_queries,
-    load_retrieval_queries,
-)
-from src.recipes.loader import load_recipe_catalog
-
+from src.catalog.loader import ToolCatalog, load_tool_catalog
+from src.catalog.retrieval_backend import (DEFAULT_RETRIEVAL_BACKEND,
+                                           SUPPORTED_RETRIEVAL_BACKENDS,
+                                           CatalogRetrievalBackend,
+                                           get_catalog_retrieval_backend)
+from src.catalog.retrieval_eval import (DEFAULT_TOP_K_RECIPES,
+                                        DEFAULT_TOP_K_TOOLS,
+                                        evaluate_retrieval_queries,
+                                        load_retrieval_queries)
+from src.catalog.vector_retrieval import (VECTOR_RETRIEVER_STRATEGY,
+                                          LocalEmbeddingModelConfig)
+from src.recipes.loader import RecipeCatalog, load_recipe_catalog
 
 DEFAULT_QUERY_FIXTURE = PROJECT_ROOT / "tests" / "fixtures" / "retrieval_queries.json"
 
@@ -72,23 +70,44 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print the full JSON evaluation artifact instead of a summary.",
     )
+    parser.add_argument(
+        "--embedding-model-path",
+        type=Path,
+        help=(
+            "Explicit local model directory for vector_v1. The runtime never "
+            "downloads model files."
+        ),
+    )
+    parser.add_argument(
+        "--embedding-device",
+        default="cpu",
+        help="Sentence Transformers device for vector_v1. Default: cpu",
+    )
     return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
     tool_catalog = load_tool_catalog()
     recipe_catalog = load_recipe_catalog(tool_catalog=tool_catalog)
-    queries = load_retrieval_queries(args.queries)
-    backend = get_catalog_retrieval_backend(args.backend)
-    evaluation = evaluate_retrieval_queries(
-        queries,
-        tool_catalog,
-        recipe_catalog,
-        top_k_recipes=args.top_k_recipes,
-        top_k_tools=args.top_k_tools,
-        backend=backend,
-    )
+    try:
+        queries = load_retrieval_queries(args.queries)
+        backend = build_evaluation_backend(
+            args,
+            tool_catalog=tool_catalog,
+            recipe_catalog=recipe_catalog,
+        )
+        evaluation = evaluate_retrieval_queries(
+            queries,
+            tool_catalog,
+            recipe_catalog,
+            top_k_recipes=args.top_k_recipes,
+            top_k_tools=args.top_k_tools,
+            backend=backend,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
@@ -102,6 +121,35 @@ def main() -> int:
     else:
         print(_format_summary(evaluation))
     return 0
+
+
+def build_evaluation_backend(
+    args: argparse.Namespace,
+    *,
+    tool_catalog: ToolCatalog,
+    recipe_catalog: RecipeCatalog,
+) -> CatalogRetrievalBackend:
+    """Build only the explicitly requested evaluation backend."""
+    if args.backend == VECTOR_RETRIEVER_STRATEGY:
+        if args.embedding_model_path is None:
+            raise ValueError(
+                "vector_v1 requires --embedding-model-path; prepare it explicitly "
+                "with scripts/prepare_embedding_model.py"
+            )
+        config = LocalEmbeddingModelConfig(
+            model_path=args.embedding_model_path,
+            device=args.embedding_device,
+        )
+        return get_catalog_retrieval_backend(
+            args.backend,
+            vector_config=config,
+            tool_catalog=tool_catalog,
+            recipe_catalog=recipe_catalog,
+        )
+
+    if args.embedding_model_path is not None:
+        raise ValueError("--embedding-model-path requires --backend vector_v1")
+    return get_catalog_retrieval_backend(args.backend)
 
 
 def _format_summary(evaluation: dict[str, Any]) -> str:

@@ -866,7 +866,7 @@ RAG 开发序列放在 P4 之下维护：
 | --- | --- | --- |
 | R1 | [Internal Catalog RAG / Tool Retriever](./docs/r1-internal-catalog-rag-plan.md) | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./docs/r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | [R3A / R3B-1 已完成，R3B-2 待实施](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend 与 [document contract](./docs/r3b-catalog-document-contract.md) 已建立，下一步离线 vector prototype，`lexical_v1` 保持默认直到 promotion gates 通过 |
+| R3 | [R3A / R3B 已完成，R3C 下一步](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend、[document contract](./docs/r3b-catalog-document-contract.md) 和真实评估的 [vector prototype](./docs/r3b-vector-backend-prototype.md) 已建立，下一步用 rank fusion 保留 lexical exact-match 并吸收 vector 的 recipe/family ranking 收益 |
 | R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
 
 R3 决策前，项目先按
@@ -927,7 +927,14 @@ R3B-1 已进一步把 5 个 approved recipes 和 16 个 approved tool versions �
 版本化 documents，并以 canonical JSON 和 SHA-256 固定 corpus fingerprint；document
 identity、可检索 sections、Catalog-owned trust/verification metadata 与 JSON 导出由
 [R3B Catalog Retrieval Document Contract](./docs/r3b-catalog-document-contract.md) 定义。
-R3B-2 才引入显式选择的本地 embedding/vector prototype，R3B-1 不增加模型依赖。
+R3B-2 已实现显式选择的 `vector_v1`、固定 multilingual E5 model identity、local-only
+provider、精确 cosine index、index fingerprint 和共享 64-query evaluation 入口；
+`sentence-transformers` 只属于可选 `vector` extra，模型下载由独立 prepare 命令显式
+触发。Mandatory tests 使用 fake provider，不下载模型。固定真实模型的离线评估将
+Recipe Recall@1 从 `0.8571` 提升到 `0.9643`，Tool Recall@5 从 `0.7973` 提升到
+`0.8506`，但 Tool Recall@8、Role Coverage 和显式工具 query 存在局部退化；因此
+vector-only 不替换默认 backend，下一步进入 R3C reciprocal-rank fusion。详见
+[R3B-2 Vector Backend Prototype](./docs/r3b-vector-backend-prototype.md)。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

@@ -1,16 +1,12 @@
 import unittest
 
 from scripts.evaluate_retrieval import parse_args
-from src.catalog import (
-    CatalogRetrievalBackend,
-    LexicalCatalogRetrievalBackend,
-    get_catalog_retrieval_backend,
-    load_tool_catalog,
-    retrieve_catalog_context,
-    retrieve_catalog_context_with_backend,
-)
+from src.catalog import (CatalogRetrievalBackend,
+                         LexicalCatalogRetrievalBackend,
+                         get_catalog_retrieval_backend, load_tool_catalog,
+                         retrieve_catalog_context,
+                         retrieve_catalog_context_with_backend)
 from src.recipes import load_recipe_catalog
-
 
 VALID_QUERY = "Run RNA-seq differential expression."
 
@@ -62,8 +58,11 @@ class RetrievalBackendFactoryTests(unittest.TestCase):
         self.assertIsInstance(backend, LexicalCatalogRetrievalBackend)
 
     def test_unknown_backend_error_lists_supported_backends(self):
-        with self.assertRaisesRegex(ValueError, "vector_v1.*lexical_v1"):
-            get_catalog_retrieval_backend("vector_v1")
+        with self.assertRaisesRegex(
+            ValueError,
+            "hybrid_v1.*lexical_v1, vector_v1",
+        ):
+            get_catalog_retrieval_backend("hybrid_v1")
 
     def test_evaluation_cli_defaults_to_lexical_backend(self):
         self.assertEqual(parse_args([]).backend, "lexical_v1")

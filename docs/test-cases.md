@@ -2140,11 +2140,12 @@ validation 边界。
 
 ### `test_unknown_backend_error_lists_supported_backends`
 
-输入：尚未注册的 `vector_v1`。
+输入：尚未注册的 `hybrid_v1`。
 
-期望输出：抛出 `ValueError`，同时列出未知名称和当前支持的 `lexical_v1`。
+期望输出：抛出 `ValueError`，同时列出未知名称和当前支持的 `lexical_v1`、
+`vector_v1`。
 
-覆盖点：未实现 backend 不会隐式回退或影响生产 Planner。
+覆盖点：未实现 backend 不会隐式回退；`lexical_v1` 仍是生产默认。
 
 ### `test_evaluation_cli_defaults_to_lexical_backend`
 
@@ -2401,6 +2402,172 @@ Recipe YAML。
 期望输出：stdout 可直接解析为包含 21 个 documents 的 JSON artifact，返回码为 0。
 
 覆盖点：CLI stdout 保持 machine-consumable，不混入日志或进度文本。
+
+## `tests/test_vector_retrieval.py`
+
+该文件验证 R3B-2 的 pinned local embedding contract、deterministic exact-cosine
+index、`vector_v1` backend 和 evaluation CLI 边界。除 local provider 的 manifest
+检查外，测试统一注入 deterministic fake embedding provider，不访问网络，也不把 fake
+ranking 当作真实模型质量证据。
+
+### `test_builds_deterministic_index_bound_to_model_and_corpus`
+
+输入：当前 21-document corpus 与固定 384 维 embedding batch。
+
+期望输出：重复构建得到相同、排序稳定的 index，且保留 pinned model revision、dimension、
+corpus fingerprint 和自校验 SHA-256 fingerprint。
+
+覆盖点：index identity 同时绑定模型、corpus 与 quantized vector content。
+
+### `test_exact_cosine_search_ranks_target_and_breaks_ties_by_document_id`
+
+输入：一个与目标 recipe 相同的 unit query vector，以及多个同分候选。
+
+期望输出：目标 recipe 排名第一；同分项按 `document_id` 排序。
+
+覆盖点：exact cosine ranking 和 tie-break 在不同运行中保持确定性。
+
+### `test_index_rejects_invalid_embedding_batches`
+
+输入：数量不足、维度错误、包含非有限值或全零向量的 document embeddings。
+
+期望输出：index builder 分别拒绝每类无效 batch。
+
+覆盖点：无效模型输出不能进入可持久化 index。
+
+### `test_query_embedding_rejects_invalid_vectors`
+
+输入：维度错误、包含 infinity 或全零的 query embedding。
+
+期望输出：query normalization 在 search 前失败。
+
+覆盖点：query 与 document 使用同一数值完整性边界。
+
+### `test_index_schema_rejects_tampered_fingerprint`
+
+输入：内容不变但 fingerprint 被替换的 index artifact。
+
+期望输出：schema validation 拒绝 artifact。
+
+覆盖点：index fingerprint 是经过验证的 provenance，而非自由文本标签。
+
+### `test_index_entry_rejects_kind_document_id_mismatch`
+
+输入：`document_id` 前缀与 `kind` 不一致的 index entry。
+
+期望输出：entry schema 拒绝该 identity。
+
+覆盖点：recipe/tool 分区不能通过篡改 metadata 将 document 放入错误候选集合。
+
+### `test_index_fingerprint_changes_when_vector_content_changes`
+
+输入：只修改一个 document embedding 的 corpus index。
+
+期望输出：index fingerprint 发生变化。
+
+覆盖点：vector content 变化可被 provenance 检测。
+
+### `test_factory_requires_explicit_vector_dependencies`
+
+输入：缺少 Catalog 或缺少 local model path/provider 的 `vector_v1` factory 请求。
+
+期望输出：factory fail closed，并说明缺失的显式依赖。
+
+覆盖点：vector backend 不隐式下载模型，也不使用未绑定的 Catalog。
+
+### `test_factory_builds_vector_backend_with_injected_provider`
+
+输入：大小写和空白不规范的 backend name，以及显式 Catalog/fake provider。
+
+期望输出：factory 规范化名称并返回 `VectorCatalogRetrievalBackend`。
+
+覆盖点：测试和未来替代 provider 可通过正式依赖注入边界接入。
+
+### `test_vector_backend_ranks_candidates_and_preserves_catalog_metadata`
+
+输入：将目标 recipe 与 DESeq2 映射为最高 cosine score 的 fake provider。
+
+期望输出：backend 返回相同 retrieval artifact shape、Catalog-owned tool version/trust/
+execution verification，以及 model、corpus、index 和 candidate rank evidence；结果可严格序列化为 JSON。
+
+覆盖点：vector ranking 不接管 Catalog 的信任和执行声明所有权。
+
+### `test_vector_backend_rejects_catalog_drift_after_index_build`
+
+输入：index 构建后 description 被修改的 Tool Catalog。
+
+期望输出：retrieve 因 corpus fingerprint 不一致而失败。
+
+覆盖点：stale index 不能静默服务变化后的 Catalog。
+
+### `test_vector_backend_runs_the_shared_64_query_evaluation`
+
+输入：共享 64-query fixture 与 deterministic fake vector backend。
+
+期望输出：evaluation 保留 64 条结果、`vector_v1` strategy 和逐 query backend evidence，
+且完整 artifact 可严格序列化为 JSON。
+
+覆盖点：lexical 与 vector backend 使用同一 evaluation harness；该测试只验证集成，不声明
+真实 embedding quality。
+
+### `test_prepare_command_uses_pinned_revision_and_writes_manifest`
+
+输入：注入式 downloader 与临时 local model directory。
+
+期望输出：下载请求使用固定 model id/revision 且不传 token；成功后写入并可重新读取匹配的 manifest。
+
+覆盖点：模型获取是显式准备步骤，runtime identity 可审计。
+
+### `test_manifest_rejects_tampered_model_identity`
+
+输入：revision 被改为 `main` 的 local model manifest。
+
+期望输出：manifest loader 拒绝该目录。
+
+覆盖点：runtime 不接受浮动或未经批准的模型 revision。
+
+### `test_prepare_command_reports_download_failure_without_writing_manifest`
+
+输入：已有旧 manifest 的模型目录，以及抛出连接错误的 downloader。
+
+期望输出：prepare command 返回稳定的下载失败错误，并撤销旧 manifest。
+
+覆盖点：不完整 snapshot 不会被 runtime 误认为已准备模型。
+
+### `test_sentence_transformer_provider_requires_prepared_manifest`
+
+输入：存在但不含项目 manifest 的 local directory。
+
+期望输出：provider 在导入或加载模型前拒绝该目录。
+
+覆盖点：本地路径本身不构成批准的模型 provenance。
+
+### `test_sentence_transformer_provider_uses_current_dimension_api`
+
+输入：有效 pinned manifest 与只实现当前 `get_embedding_dimension()` API 的 fake
+Sentence Transformer runtime。
+
+期望输出：provider 以 `local_files_only=True`、`trust_remote_code=False` 和 CPU device
+加载显式目录，并接受 384 维模型。
+
+覆盖点：local-only runtime contract 使用锁定依赖的当前 API，不重新引入已弃用的
+dimension accessor。
+
+### `test_cli_accepts_explicit_vector_configuration`
+
+输入：`--backend vector_v1`、local model path 和 device 参数。
+
+期望输出：CLI parser 保留显式 Path 与 device 配置。
+
+覆盖点：真实模型 evaluation 有稳定、可复现的命令入口。
+
+### `test_cli_rejects_vector_backend_without_local_model_path`
+
+输入：未传 `--embedding-model-path` 的 vector evaluation 请求。
+
+期望输出：命令返回 2，stdout 为空，诊断写入 stderr。
+
+覆盖点：CLI fail closed，同时保持 stdout 的 machine-consumable contract。
 
 ## `tests/test_retrieval_evaluation.py`
 

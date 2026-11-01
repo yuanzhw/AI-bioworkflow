@@ -100,13 +100,9 @@ Windows PowerShell：
 
 省略 `--output` 时，完整 JSON artifact 写入 stdout；该路径不输出日志或说明文字。
 
-## Next Step
+## R3B-2 Consumer
 
-R3B-2 将在独立 PR 中：
-
-- 选择并固定可本地复现的多语言 embedding model id 与 revision；
-- 要求显式本地模型路径或已准备好的 cache，禁止静默下载；
-- 对本 contract 的 `text` 建立小规模精确 cosine index；
-- 将 model、revision、dimension、document schema 和 corpus/index fingerprint 写入
-  `backend_evidence`；
-- 仅通过显式 `vector_v1` 或离线 evaluation 运行，不改变 `lexical_v1` 默认行为。
+[R3B-2 Vector Backend Prototype](./r3b-vector-backend-prototype.md) 已将本 contract 的
+canonical `text` 用于显式本地 `vector_v1`：固定 model id/revision、要求 prepared local
+model、建立 exact cosine index，并在 `backend_evidence` 中记录 model、document、corpus
+和 index identity。`lexical_v1` 继续保持默认。
