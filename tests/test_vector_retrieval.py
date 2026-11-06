@@ -29,6 +29,7 @@ from src.catalog.vector_retrieval import (DEFAULT_DOCUMENT_PREFIX,
                                           DEFAULT_EMBEDDING_MODEL_REVISION,
                                           DEFAULT_QUERY_PREFIX,
                                           EMBEDDING_MODEL_MANIFEST_FILENAME,
+                                          EMBEDDING_MODEL_REQUIRED_FILES,
                                           embed_catalog_query)
 from src.recipes import load_recipe_catalog
 
@@ -41,6 +42,22 @@ def unit_vector(index: int) -> list[float]:
     vector = [0.0] * DEFAULT_EMBEDDING_DIMENSION
     vector[index] = 1.0
     return vector
+
+
+def write_fake_embedding_model_files(model_path: Path) -> None:
+    for relative_path in EMBEDDING_MODEL_REQUIRED_FILES:
+        file_path = model_path / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(f"fixture:{relative_path}".encode("utf-8"))
+
+
+def write_embedding_model_manifest(model_path: Path):
+    manifest = embedding_model_manifest(model_path)
+    (model_path / EMBEDDING_MODEL_MANIFEST_FILENAME).write_text(
+        json.dumps(manifest.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    return manifest
 
 
 class FakeEmbeddingProvider:
@@ -323,25 +340,36 @@ class EmbeddingModelPreparationTests(unittest.TestCase):
         def downloader(**kwargs):
             calls.append(kwargs)
             output = Path(kwargs["local_dir"])
-            (output / "model.safetensors").write_bytes(b"test")
+            write_fake_embedding_model_files(output)
             return str(output)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "model"
             manifest = prepare_embedding_model(output, downloader=downloader)
             loaded = load_embedding_model_manifest(output)
+            expected = embedding_model_manifest(output)
 
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["repo_id"], DEFAULT_EMBEDDING_MODEL_ID)
         self.assertEqual(calls[0]["revision"], DEFAULT_EMBEDDING_MODEL_REVISION)
+        self.assertEqual(
+            calls[0]["allow_patterns"],
+            list(EMBEDDING_MODEL_REQUIRED_FILES),
+        )
         self.assertFalse(calls[0]["token"])
-        self.assertEqual(manifest, embedding_model_manifest().model_dump(mode="json"))
-        self.assertEqual(loaded, embedding_model_manifest())
+        self.assertEqual(manifest, expected.model_dump(mode="json"))
+        self.assertEqual(loaded, expected)
+        self.assertEqual(
+            tuple(file.path for file in loaded.files),
+            EMBEDDING_MODEL_REQUIRED_FILES,
+        )
+        self.assertTrue(all(len(file.sha256) == 64 for file in loaded.files))
 
     def test_manifest_rejects_tampered_model_identity(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir)
-            payload = embedding_model_manifest().model_dump(mode="json")
+            write_fake_embedding_model_files(model_path)
+            payload = embedding_model_manifest(model_path).model_dump(mode="json")
             payload["revision"] = "main"
             (model_path / EMBEDDING_MODEL_MANIFEST_FILENAME).write_text(
                 json.dumps(payload),
@@ -391,10 +419,8 @@ class EmbeddingModelPreparationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir)
-            (model_path / EMBEDDING_MODEL_MANIFEST_FILENAME).write_text(
-                json.dumps(embedding_model_manifest().model_dump(mode="json")),
-                encoding="utf-8",
-            )
+            write_fake_embedding_model_files(model_path)
+            write_embedding_model_manifest(model_path)
             config = LocalEmbeddingModelConfig(model_path=model_path)
 
             with patch.dict(sys.modules, {"sentence_transformers": fake_module}):
@@ -407,6 +433,50 @@ class EmbeddingModelPreparationTests(unittest.TestCase):
         self.assertEqual(kwargs["device"], "cpu")
         self.assertTrue(kwargs["local_files_only"])
         self.assertFalse(kwargs["trust_remote_code"])
+
+    def test_provider_rejects_tampered_model_file_before_runtime_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir)
+            write_fake_embedding_model_files(model_path)
+            write_embedding_model_manifest(model_path)
+            (model_path / "model.safetensors").write_bytes(b"replaced")
+            config = LocalEmbeddingModelConfig(model_path=model_path)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"digest mismatch.*model\.safetensors",
+            ):
+                SentenceTransformerEmbeddingProvider(config)
+
+    def test_provider_rejects_missing_model_file_before_runtime_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir)
+            write_fake_embedding_model_files(model_path)
+            write_embedding_model_manifest(model_path)
+            (model_path / "tokenizer.json").unlink()
+            config = LocalEmbeddingModelConfig(model_path=model_path)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"missing required file.*tokenizer\.json",
+            ):
+                SentenceTransformerEmbeddingProvider(config)
+
+    def test_provider_rejects_tampered_file_digest_before_runtime_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir)
+            write_fake_embedding_model_files(model_path)
+            manifest = write_embedding_model_manifest(model_path)
+            payload = manifest.model_dump(mode="json")
+            payload["files"][0]["sha256"] = "0" * 64
+            (model_path / EMBEDDING_MODEL_MANIFEST_FILENAME).write_text(
+                json.dumps(payload),
+                encoding="utf-8",
+            )
+            config = LocalEmbeddingModelConfig(model_path=model_path)
+
+            with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                SentenceTransformerEmbeddingProvider(config)
 
 
 class VectorEvaluationCliTests(unittest.TestCase):

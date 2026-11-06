@@ -2514,9 +2514,11 @@ execution verification，以及 model、corpus、index 和 candidate rank eviden
 
 输入：注入式 downloader 与临时 local model directory。
 
-期望输出：下载请求使用固定 model id/revision 且不传 token；成功后写入并可重新读取匹配的 manifest。
+期望输出：下载请求使用固定 model id/revision 且不传 token；成功后写入并可重新读取
+schema `1.1` manifest，其中按稳定路径顺序记录全部固定运行时文件的 SHA-256。
 
-覆盖点：模型获取是显式准备步骤，runtime identity 可审计。
+覆盖点：模型获取是显式准备步骤，runtime identity 同时绑定 revision metadata 和本地文件
+内容。
 
 ### `test_manifest_rejects_tampered_model_identity`
 
@@ -2552,6 +2554,30 @@ Sentence Transformer runtime。
 
 覆盖点：local-only runtime contract 使用锁定依赖的当前 API，不重新引入已弃用的
 dimension accessor。
+
+### `test_provider_rejects_tampered_model_file_before_runtime_load`
+
+输入：manifest 写入后被替换的 `model.safetensors`。
+
+期望输出：provider 在导入或实例化 Sentence Transformer 前报告文件摘要不匹配。
+
+覆盖点：兼容维度的替代权重不能继续报告为批准的固定 revision。
+
+### `test_provider_rejects_missing_model_file_before_runtime_load`
+
+输入：manifest 写入后被删除的 `tokenizer.json`。
+
+期望输出：provider 在模型运行时加载前报告缺失的固定文件。
+
+覆盖点：不完整 snapshot 不能绕过 prepared-model 边界。
+
+### `test_provider_rejects_tampered_file_digest_before_runtime_load`
+
+输入：模型文件不变，但 manifest 中一个 SHA-256 被替换。
+
+期望输出：provider 在模型运行时加载前报告文件摘要不匹配。
+
+覆盖点：manifest 摘要不是未经验证的 provenance 标签。
 
 ### `test_cli_accepts_explicit_vector_configuration`
 

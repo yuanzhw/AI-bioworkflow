@@ -32,13 +32,19 @@ prefix。固定 revision、dimension 和 prefix 可以避免同名模型或调�
 1. `scripts/prepare_embedding_model.py` 是唯一允许下载模型文件的项目入口；必须由用户
    显式执行。
 2. prepare 命令只请求固定 model id/revision 和运行所需文件，并在模型目录写入
-   `ai-bioworkflow-embedding-model.json`。
-3. `SentenceTransformerEmbeddingProvider` 要求显式本地目录，先验证 manifest，再以
-   `local_files_only=True`、`trust_remote_code=False` 加载。
+   schema `1.1` 的 `ai-bioworkflow-embedding-model.json`；manifest 按稳定路径顺序记录
+   权重、tokenizer、模型配置和 pooling 配置的 SHA-256。
+3. `SentenceTransformerEmbeddingProvider` 要求显式本地目录，先验证 manifest identity、
+   固定文件清单和每个文件的 SHA-256，再以 `local_files_only=True`、
+   `trust_remote_code=False` 加载。
 4. 模型路径、模型文件、index 和 evaluation artifact 均位于已忽略的 `.cache/`，不进入
    Git、retrieval artifact 或 corpus fingerprint。
-5. 未安装 `vector` extra、缺少本地模型、manifest 不匹配或模型维度不匹配时，
-   `vector_v1` 快速失败；不会回退到网络下载或另一个模型。
+5. 未安装 `vector` extra、缺少本地模型、manifest 不匹配、运行时文件缺失或摘要不匹配、
+   模型维度不匹配时，`vector_v1` 快速失败；不会回退到网络下载或另一个模型。
+
+Manifest 不记录 Hugging Face 的 `.cache` 下载元数据，也不记录 manifest 自身。文件摘要在
+prepare 完成固定 revision 下载后生成，并在导入和实例化 Sentence Transformer 之前重新
+计算，因此准备完成后的权重、tokenizer 或配置漂移不能继续沿用批准的 revision identity。
 
 ## Exact Index Contract
 
@@ -101,8 +107,8 @@ uv run python scripts/evaluate_retrieval.py \
   --json-output .cache/retrieval-vector-v1.json
 ```
 
-`prepare_embedding_model.py` 将 manifest JSON 写到 stdout；evaluation 的 `--json` 输出保持
-machine-consumable，默认 summary 为人类可读文本，错误写入 stderr。
+`prepare_embedding_model.py` 将带文件摘要的 manifest JSON 写到 stdout；evaluation 的
+`--json` 输出保持 machine-consumable，默认 summary 为人类可读文本，错误写入 stderr。
 
 ## Evaluation Outcome
 

@@ -31,8 +31,28 @@ DEFAULT_EMBEDDING_DIMENSION = 384
 DEFAULT_QUERY_PREFIX = "query: "
 DEFAULT_DOCUMENT_PREFIX = "passage: "
 
-EMBEDDING_MODEL_MANIFEST_SCHEMA_VERSION = "1.0"
+EMBEDDING_MODEL_MANIFEST_SCHEMA_VERSION = "1.1"
 EMBEDDING_MODEL_MANIFEST_FILENAME = "ai-bioworkflow-embedding-model.json"
+EMBEDDING_MODEL_REQUIRED_FILES = (
+    "1_Pooling/config.json",
+    "config.json",
+    "model.safetensors",
+    "modules.json",
+    "sentence_bert_config.json",
+    "sentencepiece.bpe.model",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+)
+
+
+class EmbeddingModelFileDigest(BaseModel):
+    """SHA-256 identity for one file required by the local embedding runtime."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class EmbeddingModelManifest(BaseModel):
@@ -40,12 +60,13 @@ class EmbeddingModelManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["1.0"] = EMBEDDING_MODEL_MANIFEST_SCHEMA_VERSION
+    schema_version: Literal["1.1"] = EMBEDDING_MODEL_MANIFEST_SCHEMA_VERSION
     model_id: str
     revision: str
     dimension: int
     query_prefix: str
     document_prefix: str
+    files: tuple[EmbeddingModelFileDigest, ...]
 
     @model_validator(mode="after")
     def validate_supported_model(self):
@@ -56,6 +77,11 @@ class EmbeddingModelManifest(BaseModel):
             query_prefix=self.query_prefix,
             document_prefix=self.document_prefix,
         )
+        file_paths = tuple(file.path for file in self.files)
+        if file_paths != EMBEDDING_MODEL_REQUIRED_FILES:
+            raise ValueError(
+                "embedding model manifest files must match the pinned runtime files"
+            )
         return self
 
 
@@ -115,12 +141,7 @@ class SentenceTransformerEmbeddingProvider:
     def __init__(self, config: LocalEmbeddingModelConfig):
         model_path = config.model_path.expanduser().resolve()
         manifest = load_embedding_model_manifest(model_path)
-        expected_manifest = embedding_model_manifest()
-        if manifest != expected_manifest:
-            raise ValueError(
-                "local embedding model manifest does not match the pinned vector_v1 "
-                "model identity"
-            )
+        verify_embedding_model_files(model_path, manifest)
 
         try:
             from sentence_transformers import SentenceTransformer
@@ -289,14 +310,25 @@ class CatalogVectorSearchResult:
     score: float
 
 
-def embedding_model_manifest() -> EmbeddingModelManifest:
-    """Return the pinned vector_v1 model identity written by the prepare command."""
+def embedding_model_manifest(model_path: Path) -> EmbeddingModelManifest:
+    """Build the pinned model manifest from the prepared runtime files."""
+    resolved_model_path = model_path.expanduser().resolve()
     return EmbeddingModelManifest(
         model_id=DEFAULT_EMBEDDING_MODEL_ID,
         revision=DEFAULT_EMBEDDING_MODEL_REVISION,
         dimension=DEFAULT_EMBEDDING_DIMENSION,
         query_prefix=DEFAULT_QUERY_PREFIX,
         document_prefix=DEFAULT_DOCUMENT_PREFIX,
+        files=tuple(
+            EmbeddingModelFileDigest(
+                path=relative_path,
+                sha256=_sha256_embedding_model_file(
+                    resolved_model_path,
+                    relative_path,
+                ),
+            )
+            for relative_path in EMBEDDING_MODEL_REQUIRED_FILES
+        ),
     )
 
 
@@ -314,6 +346,38 @@ def load_embedding_model_manifest(model_path: Path) -> EmbeddingModelManifest:
         return EmbeddingModelManifest.model_validate(payload)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         raise ValueError("embedding model manifest is invalid") from exc
+
+
+def verify_embedding_model_files(
+    model_path: Path,
+    manifest: EmbeddingModelManifest,
+) -> None:
+    """Verify prepared model files before importing the embedding runtime."""
+    resolved_model_path = model_path.expanduser().resolve()
+    for file in manifest.files:
+        actual_sha256 = _sha256_embedding_model_file(
+            resolved_model_path,
+            file.path,
+        )
+        if actual_sha256 != file.sha256:
+            raise ValueError(
+                f"embedding model file digest mismatch for '{file.path}'"
+            )
+
+
+def _sha256_embedding_model_file(model_path: Path, relative_path: str) -> str:
+    file_path = model_path / relative_path
+    if not file_path.is_file():
+        raise ValueError(
+            f"embedding model snapshot is missing required file '{relative_path}'"
+        )
+    try:
+        with file_path.open("rb") as handle:
+            return hashlib.file_digest(handle, "sha256").hexdigest()
+    except OSError as exc:
+        raise ValueError(
+            f"embedding model file '{relative_path}' could not be read"
+        ) from exc
 
 
 def build_catalog_vector_index(

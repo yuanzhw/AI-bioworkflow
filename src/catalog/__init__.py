@@ -15,6 +15,7 @@ from src.catalog.schema import (ExecutionVerificationSpec,
                                 ExecutionVerificationStatus, ToolSpec)
 from src.catalog.vector_retrieval import (CatalogVectorIndex,
                                           CatalogVectorIndexEntry,
+                                          EmbeddingModelFileDigest,
                                           EmbeddingModelManifest,
                                           EmbeddingProvider,
                                           LocalEmbeddingModelConfig,
@@ -24,7 +25,8 @@ from src.catalog.vector_retrieval import (CatalogVectorIndex,
                                           embedding_model_manifest,
                                           fingerprint_catalog_vector_index,
                                           load_embedding_model_manifest,
-                                          search_catalog_vector_index)
+                                          search_catalog_vector_index,
+                                          verify_embedding_model_files)
 
 __all__ = [
     "ExecutionVerificationSpec",
@@ -35,6 +37,7 @@ __all__ = [
     "CatalogRetrievalDocumentSection",
     "CatalogVectorIndex",
     "CatalogVectorIndexEntry",
+    "EmbeddingModelFileDigest",
     "EmbeddingModelManifest",
     "EmbeddingProvider",
     "LexicalCatalogRetrievalBackend",
@@ -58,4 +61,5 @@ __all__ = [
     "resolve_tool_plan",
     "search_catalog_vector_index",
     "tokenize_for_retrieval",
+    "verify_embedding_model_files",
 ]

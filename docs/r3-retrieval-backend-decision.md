@@ -236,9 +236,10 @@ R3B-1 已完成 [Catalog Retrieval Document Contract](./r3b-catalog-document-con
 
 R3B-2 已完成：`vector_v1` 固定
 `intfloat/multilingual-e5-small` model id、revision、384 dimension 和 E5 query/document
-prefix；模型只能由独立 prepare 命令显式下载并以 local-only provider 加载。21-document
-corpus 被转换为具备 canonical fingerprint 的精确 cosine index，artifact 记录 model、
-document、corpus 和 index identity，并继续通过 R3A 的 Approved Catalog contract。
+prefix；模型只能由独立 prepare 命令显式下载，prepare manifest 记录固定运行时文件的
+SHA-256，local-only provider 在加载模型前验证文件完整性。21-document corpus 被转换为
+具备 canonical fingerprint 的精确 cosine index，artifact 记录 model、document、corpus
+和 index identity，并继续通过 R3A 的 Approved Catalog contract。
 
 Mandatory tests 通过 deterministic fake provider 覆盖相同 64-query evaluator，不访问
 模型仓库。固定 revision 的真实模型 artifact 已生成并与 lexical baseline 完成比较：

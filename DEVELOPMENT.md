@@ -928,7 +928,8 @@ R3B-1 已进一步把 5 个 approved recipes 和 16 个 approved tool versions �
 identity、可检索 sections、Catalog-owned trust/verification metadata 与 JSON 导出由
 [R3B Catalog Retrieval Document Contract](./docs/r3b-catalog-document-contract.md) 定义。
 R3B-2 已实现显式选择的 `vector_v1`、固定 multilingual E5 model identity、local-only
-provider、精确 cosine index、index fingerprint 和共享 64-query evaluation 入口；
+provider、模型运行时文件 SHA-256 校验、精确 cosine index、index fingerprint 和共享
+64-query evaluation 入口；
 `sentence-transformers` 只属于可选 `vector` extra，模型下载由独立 prepare 命令显式
 触发。Mandatory tests 使用 fake provider，不下载模型。固定真实模型的离线评估将
 Recipe Recall@1 从 `0.8571` 提升到 `0.9643`，Tool Recall@5 从 `0.7973` 提升到

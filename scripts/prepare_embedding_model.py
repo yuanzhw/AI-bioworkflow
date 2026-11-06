@@ -16,17 +16,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.catalog.vector_retrieval import (DEFAULT_EMBEDDING_MODEL_ID,
                                           DEFAULT_EMBEDDING_MODEL_REVISION,
                                           EMBEDDING_MODEL_MANIFEST_FILENAME,
+                                          EMBEDDING_MODEL_REQUIRED_FILES,
                                           embedding_model_manifest)
 
 DEFAULT_MODEL_OUTPUT = (
     PROJECT_ROOT / ".cache" / "models" / "multilingual-e5-small"
 )
-MODEL_ALLOW_PATTERNS = (
-    "1_Pooling/*",
-    "*.json",
-    "*.model",
-    "model.safetensors",
-)
+MODEL_ALLOW_PATTERNS = EMBEDDING_MODEL_REQUIRED_FILES
 SnapshotDownloader = Callable[..., str]
 
 
@@ -79,7 +75,7 @@ def prepare_embedding_model(
             "failed to download the pinned embedding model snapshot"
         ) from exc
 
-    manifest = embedding_model_manifest().model_dump(mode="json")
+    manifest = embedding_model_manifest(model_path).model_dump(mode="json")
     pending_manifest_path = manifest_path.with_name(f".{manifest_path.name}.tmp")
     pending_manifest_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
