@@ -2427,6 +2427,14 @@ corpus fingerprint 和自校验 SHA-256 fingerprint。
 
 覆盖点：exact cosine ranking 和 tie-break 在不同运行中保持确定性。
 
+### `test_exact_cosine_search_preserves_extreme_query_directions`
+
+输入：方向相同但非零分量分别为 `1e200` 和 `1e-200` 的 query vectors。
+
+期望输出：两种 query 均稳定归一化并将目标 recipe 排在第一，cosine score 为 `1.0`。
+
+覆盖点：direct search 不因平方和溢出或下溢而丢失有限非零向量方向。
+
 ### `test_index_rejects_invalid_embedding_batches`
 
 输入：数量不足、维度错误、包含非有限值或全零向量的 document embeddings。
@@ -2442,6 +2450,14 @@ corpus fingerprint 和自校验 SHA-256 fingerprint。
 期望输出：query normalization 在 search 前失败。
 
 覆盖点：query 与 document 使用同一数值完整性边界。
+
+### `test_query_embedding_normalizes_extreme_finite_vectors`
+
+输入：provider 分别返回非零分量为 `1e200` 和 `1e-200` 的 query embeddings。
+
+期望输出：两种 embedding 均归一化为相同的 axis unit vector。
+
+覆盖点：provider query path 与 direct search 使用同一数值稳定的归一化实现。
 
 ### `test_index_schema_rejects_tampered_fingerprint`
 

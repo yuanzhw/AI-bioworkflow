@@ -605,10 +605,14 @@ def _normalize_embedding(
             raise ValueError(f"{label} components must be finite")
         values.append(numeric)
 
-    norm = sqrt(sum(component * component for component in values))
-    if norm == 0.0:
+    scale = max(abs(component) for component in values)
+    if scale == 0.0:
         raise ValueError(f"{label} vectors must not be zero")
+    scaled_values = [component / scale for component in values]
+    norm = sqrt(
+        sum(component * component for component in scaled_values)
+    )
     return tuple(
         round(component / norm, VECTOR_COMPONENT_PRECISION)
-        for component in values
+        for component in scaled_values
     )

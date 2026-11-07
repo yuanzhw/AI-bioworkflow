@@ -139,6 +139,25 @@ class CatalogVectorIndexTests(unittest.TestCase):
         tied_ids = [result.entry.document_id for result in results[1:]]
         self.assertEqual(tied_ids, sorted(tied_ids))
 
+    def test_exact_cosine_search_preserves_extreme_query_directions(self):
+        for magnitude in (1e200, 1e-200):
+            with self.subTest(magnitude=magnitude):
+                query_vector = [0.0] * DEFAULT_EMBEDDING_DIMENSION
+                query_vector[0] = magnitude
+
+                results = search_catalog_vector_index(
+                    self.index,
+                    query_vector,
+                    kind="recipe",
+                    top_k=1,
+                )
+
+                self.assertEqual(
+                    results[0].entry.document_id,
+                    TARGET_RECIPE_DOCUMENT,
+                )
+                self.assertEqual(results[0].score, 1.0)
+
     def test_index_rejects_invalid_embedding_batches(self):
         cases = (
             (
@@ -188,6 +207,18 @@ class CatalogVectorIndexTests(unittest.TestCase):
                 provider.query_vectors[VALID_QUERY] = vector
                 with self.assertRaisesRegex(ValueError, expected_message):
                     embed_catalog_query(VALID_QUERY, provider)
+
+    def test_query_embedding_normalizes_extreme_finite_vectors(self):
+        for magnitude in (1e200, 1e-200):
+            with self.subTest(magnitude=magnitude):
+                provider = FakeEmbeddingProvider(self.corpus)
+                query_vector = [0.0] * DEFAULT_EMBEDDING_DIMENSION
+                query_vector[0] = magnitude
+                provider.query_vectors[VALID_QUERY] = query_vector
+
+                normalized = embed_catalog_query(VALID_QUERY, provider)
+
+                self.assertEqual(normalized, tuple(unit_vector(0)))
 
     def test_index_schema_rejects_tampered_fingerprint(self):
         payload = self.index.model_dump(mode="json")

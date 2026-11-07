@@ -55,7 +55,8 @@ prepare 完成固定 revision 下载后生成，并在导入和实例化 Sentenc
 
 - 输入必须是 `CatalogRetrievalCorpus` 的全部 canonical `text`；
 - recipe 与 tool 共享 index artifact，但查询时按 `kind` 分开排名；
-- document vectors 与 query vector 均做 L2 normalization；
+- document vectors 与 query vector 均先按最大绝对分量缩放，再做 L2 normalization，
+  避免有限非零输入在平方和计算时溢出或下溢；
 - normalized component 固定到 8 位小数，以减少相同锁定环境中的无意义浮点差异；
 - similarity 使用纯 Python exact cosine，不引入 approximate index 或 vector database；
 - score 相同时按 `document_id` 排序；
