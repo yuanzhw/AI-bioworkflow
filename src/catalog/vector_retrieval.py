@@ -44,6 +44,7 @@ EMBEDDING_MODEL_REQUIRED_FILES = (
     "tokenizer.json",
     "tokenizer_config.json",
 )
+EMBEDDING_MODEL_REJECTED_FILES = ("config_sentence_transformers.json",)
 
 
 class EmbeddingModelFileDigest(BaseModel):
@@ -313,6 +314,7 @@ class CatalogVectorSearchResult:
 def embedding_model_manifest(model_path: Path) -> EmbeddingModelManifest:
     """Build the pinned model manifest from the prepared runtime files."""
     resolved_model_path = model_path.expanduser().resolve()
+    _reject_unmanifested_embedding_model_files(resolved_model_path)
     return EmbeddingModelManifest(
         model_id=DEFAULT_EMBEDDING_MODEL_ID,
         revision=DEFAULT_EMBEDDING_MODEL_REVISION,
@@ -354,6 +356,7 @@ def verify_embedding_model_files(
 ) -> None:
     """Verify prepared model files before importing the embedding runtime."""
     resolved_model_path = model_path.expanduser().resolve()
+    _reject_unmanifested_embedding_model_files(resolved_model_path)
     for file in manifest.files:
         actual_sha256 = _sha256_embedding_model_file(
             resolved_model_path,
@@ -362,6 +365,15 @@ def verify_embedding_model_files(
         if actual_sha256 != file.sha256:
             raise ValueError(
                 f"embedding model file digest mismatch for '{file.path}'"
+            )
+
+
+def _reject_unmanifested_embedding_model_files(model_path: Path) -> None:
+    for relative_path in EMBEDDING_MODEL_REJECTED_FILES:
+        if (model_path / relative_path).exists():
+            raise ValueError(
+                "embedding model snapshot contains unmanifested runtime file "
+                f"'{relative_path}'"
             )
 
 

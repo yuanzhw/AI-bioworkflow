@@ -2544,6 +2544,15 @@ schema `1.1` manifest，其中按稳定路径顺序记录全部固定运行时�
 
 覆盖点：本地路径本身不构成批准的模型 provenance。
 
+### `test_prepare_rejects_stale_sentence_transformer_config`
+
+输入：模型目录在 prepare 前已存在 `config_sentence_transformers.json`，downloader 随后
+写入全部固定运行时文件。
+
+期望输出：prepare 拒绝该未清单化配置且不写入 manifest。
+
+覆盖点：重新准备模型不会让旧目录中的默认 prompt 配置进入批准 snapshot。
+
 ### `test_sentence_transformer_provider_uses_current_dimension_api`
 
 输入：有效 pinned manifest 与只实现当前 `get_embedding_dimension()` API 的 fake
@@ -2578,6 +2587,15 @@ dimension accessor。
 期望输出：provider 在模型运行时加载前报告文件摘要不匹配。
 
 覆盖点：manifest 摘要不是未经验证的 provenance 标签。
+
+### `test_provider_rejects_unmanifested_sentence_transformer_config_drift`
+
+输入：有效 manifest 生成后新增包含 `prompts` 和 `default_prompt_name` 的
+`config_sentence_transformers.json`。
+
+期望输出：provider 在导入或实例化 Sentence Transformer 前拒绝该文件。
+
+覆盖点：未清单化的默认 prompt 不能在固定 E5 query/document prefix 之外改变编码输入。
 
 ### `test_cli_accepts_explicit_vector_configuration`
 

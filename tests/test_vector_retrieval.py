@@ -29,6 +29,7 @@ from src.catalog.vector_retrieval import (DEFAULT_DOCUMENT_PREFIX,
                                           DEFAULT_EMBEDDING_MODEL_REVISION,
                                           DEFAULT_QUERY_PREFIX,
                                           EMBEDDING_MODEL_MANIFEST_FILENAME,
+                                          EMBEDDING_MODEL_REJECTED_FILES,
                                           EMBEDDING_MODEL_REQUIRED_FILES,
                                           embed_catalog_query)
 from src.recipes import load_recipe_catalog
@@ -397,6 +398,34 @@ class EmbeddingModelPreparationTests(unittest.TestCase):
 
             self.assertFalse(manifest_path.exists())
 
+    def test_prepare_rejects_stale_sentence_transformer_config(self):
+        def downloader(**kwargs):
+            write_fake_embedding_model_files(Path(kwargs["local_dir"]))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "model"
+            output.mkdir()
+            rejected_path = output / EMBEDDING_MODEL_REJECTED_FILES[0]
+            rejected_path.write_text(
+                json.dumps(
+                    {
+                        "prompts": {"drift": "unexpected: "},
+                        "default_prompt_name": "drift",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"unmanifested runtime file.*config_sentence_transformers\.json",
+            ):
+                prepare_embedding_model(output, downloader=downloader)
+
+            self.assertFalse(
+                (output / EMBEDDING_MODEL_MANIFEST_FILENAME).exists()
+            )
+
     def test_sentence_transformer_provider_requires_prepared_manifest(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config = LocalEmbeddingModelConfig(model_path=Path(tmpdir))
@@ -477,6 +506,40 @@ class EmbeddingModelPreparationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "digest mismatch"):
                 SentenceTransformerEmbeddingProvider(config)
+
+    def test_provider_rejects_unmanifested_sentence_transformer_config_drift(self):
+        runtime_calls = []
+
+        class FakeSentenceTransformer:
+            def __init__(self, *args, **kwargs):
+                runtime_calls.append((args, kwargs))
+
+        fake_module = ModuleType("sentence_transformers")
+        fake_module.SentenceTransformer = FakeSentenceTransformer
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir)
+            write_fake_embedding_model_files(model_path)
+            write_embedding_model_manifest(model_path)
+            (model_path / EMBEDDING_MODEL_REJECTED_FILES[0]).write_text(
+                json.dumps(
+                    {
+                        "prompts": {"drift": "unexpected: "},
+                        "default_prompt_name": "drift",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = LocalEmbeddingModelConfig(model_path=model_path)
+
+            with patch.dict(sys.modules, {"sentence_transformers": fake_module}):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"unmanifested runtime file.*config_sentence_transformers\.json",
+                ):
+                    SentenceTransformerEmbeddingProvider(config)
+
+        self.assertEqual(runtime_calls, [])
 
 
 class VectorEvaluationCliTests(unittest.TestCase):

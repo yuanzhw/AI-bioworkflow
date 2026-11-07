@@ -36,7 +36,8 @@ prefix。固定 revision、dimension 和 prefix 可以避免同名模型或调�
    权重、tokenizer、模型配置和 pooling 配置的 SHA-256。
 3. `SentenceTransformerEmbeddingProvider` 要求显式本地目录，先验证 manifest identity、
    固定文件清单和每个文件的 SHA-256，再以 `local_files_only=True`、
-   `trust_remote_code=False` 加载。
+   `trust_remote_code=False` 加载；准备和加载都会拒绝不属于固定 snapshot 的
+   `config_sentence_transformers.json`。
 4. 模型路径、模型文件、index 和 evaluation artifact 均位于已忽略的 `.cache/`，不进入
    Git、retrieval artifact 或 corpus fingerprint。
 5. 未安装 `vector` extra、缺少本地模型、manifest 不匹配、运行时文件缺失或摘要不匹配、
@@ -45,6 +46,8 @@ prefix。固定 revision、dimension 和 prefix 可以避免同名模型或调�
 Manifest 不记录 Hugging Face 的 `.cache` 下载元数据，也不记录 manifest 自身。文件摘要在
 prepare 完成固定 revision 下载后生成，并在导入和实例化 Sentence Transformer 之前重新
 计算，因此准备完成后的权重、tokenizer 或配置漂移不能继续沿用批准的 revision identity。
+固定 revision 不包含 `config_sentence_transformers.json`；显式拒绝该文件可以防止其
+`prompts` 或 `default_prompt_name` 在摘要校验之外改变 query/document 编码输入。
 
 ## Exact Index Contract
 
