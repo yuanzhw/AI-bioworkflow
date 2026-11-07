@@ -22,6 +22,9 @@ dependencies = [
 miniwdl = [
     "miniwdl>=1.14.2",
 ]
+vector = [
+    "sentence-transformers==5.5.1",
+]
 
 [dependency-groups]
 dev = [

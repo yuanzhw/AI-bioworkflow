@@ -213,8 +213,8 @@ R3A 已完成以下基础设施，同时保持 `lexical_v1` scoring 与 64-query
   evaluation 的默认运行路径改由 backend contract 驱动。
 - Natural Language Planner、Orchestration Planner node 与 evaluation runner 均支持
   backend dependency injection。
-- `scripts/evaluate_retrieval.py` 增加 `--backend`；当前唯一允许值和默认值均为
-  `lexical_v1`。
+- `scripts/evaluate_retrieval.py` 增加 `--backend`；默认值仍为 `lexical_v1`，R3B-2
+  另外提供要求显式本地模型配置的 `vector_v1`。
 - Evaluation per-query artifact 同时保留 candidate IDs、完整 candidate objects 和
   backend evidence，为 R3B/R3C 的 model/index/fusion provenance 留出稳定位置。
 - 前端读取接受新 evidence，同时继续兼容缺少 evidence 或 component fallback flags 的
@@ -234,9 +234,37 @@ R3B-1 已完成 [Catalog Retrieval Document Contract](./r3b-catalog-document-con
 - R3B-1 不增加依赖，不实现 embedding、vector index 或新 backend，不改变
   `lexical_v1` ranking 与默认 Planner 路径。
 
-下一步是 R3B-2：引入可本地复现、只能显式选择的 vector prototype，记录 model
-revision、dimension、document schema 和 corpus/index fingerprint，并用相同 64-query
-fixture 离线评估。R3B-2 不改变生产默认 backend。
+R3B-2 已完成：`vector_v1` 固定
+`intfloat/multilingual-e5-small` model id、revision、384 dimension 和 E5 query/document
+prefix；模型只能由独立 prepare 命令显式下载，prepare manifest 记录固定运行时文件的
+SHA-256，local-only provider 在加载模型前验证文件完整性。21-document corpus 被转换为
+具备 canonical fingerprint 的精确 cosine index，artifact 记录 model、document、corpus
+和 index identity，并继续通过 R3A 的 Approved Catalog contract。
+
+Mandatory tests 通过 deterministic fake provider 覆盖相同 64-query evaluator，不访问
+模型仓库。固定 revision 的真实模型 artifact 已生成并与 lexical baseline 完成比较：
+
+| Metric | `lexical_v1` | `vector_v1` |
+| --- | ---: | ---: |
+| Recipe Recall@1 | 0.8571 | 0.9643 |
+| Recipe Recall@3 | 0.9821 | 1.0000 |
+| Tool Recall@5 | 0.7973 | 0.8506 |
+| Tool Recall@8 | 0.9158 | 0.9060 |
+| Role Coverage | 0.9134 | 0.9101 |
+| Macro Recipe Recall@1 | 0.8812 | 0.9683 |
+| Macro Tool Recall@5 | 0.7902 | 0.8288 |
+| Recipe family top-1 agreement | 0.8750 | 0.9643 |
+| Planner Context Tool / Role | 1.0000 / 1.0000 | 1.0000 / 1.0000 |
+| Unsupported Direct-Match Rate | 0.8750 | 1.0000 |
+
+Vector 通过 recipe ranking、macro 和 Planner-context gates，但不满足保守的显式工具
+no-regression gate：germline explicit-tools query 的 Tool Recall@8 从 `0.8333` 降到
+`0.6667`，ChIP-seq explicit-tools query 则丢失 lexical top-8 中的 `samtools`。此外，
+variant-calling Recipe Recall@1 与 ChIP-seq Tool Recall@5 发生 family-level 退化。
+
+因此 R3B-2 支持进入 R3C reciprocal-rank fusion，但不支持 vector-only 替换默认 backend。
+`lexical_v1` 继续作为默认和回归基线。完整指标、index fingerprint 与本地命令见
+[R3B-2 Vector Backend Prototype](./r3b-vector-backend-prototype.md)。
 
 ## Contract Boundaries
 

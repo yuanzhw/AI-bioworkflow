@@ -620,13 +620,18 @@ R2 query set 和 baseline 已完成。后续 R3 PR 顺序由
    - 已建立 versioned recipe/tool documents、canonical text 和 corpus fingerprint。
    - 当前 21-document artifact 可确定性导出为 JSON。
 
-3. **R3B-2 Vector backend prototype（下一步）**
-   - 加入本地 vector index 或轻量 embedding backend。
-   - 仅显式配置或离线评估，不影响结构化入口。
+3. **R3B-2 Vector backend prototype（已完成）**
+   - 已加入固定 model identity、显式 local-only provider、精确 cosine index 与
+     `vector_v1` backend。
+   - 已复用同一 64-query evaluator，并保持 `lexical_v1` 默认行为不变。
+   - 真实模型 artifact 已生成并与 lexical baseline 完成 per-family、confusion 和
+     per-query 对比；Recipe Recall@1 从 `0.8571` 提升到 `0.9643`，但 Tool Recall@8、
+     Role Coverage 和显式工具 query 存在局部退化。
 
-4. **R3C Hybrid scoring**
+4. **R3C Hybrid scoring（下一步）**
    - 融合 lexical 和 vector。
-   - 用 promotion gates 决定是否改变默认 backend。
+   - 用 promotion gates 验证 fusion 能否保留 lexical exact-match 优势并吸收 vector 的
+     recipe/family ranking 收益；`lexical_v1` 在通过前继续作为默认。
 
 ## Verification
 
