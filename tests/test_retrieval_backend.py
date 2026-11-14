@@ -60,9 +60,9 @@ class RetrievalBackendFactoryTests(unittest.TestCase):
     def test_unknown_backend_error_lists_supported_backends(self):
         with self.assertRaisesRegex(
             ValueError,
-            "hybrid_v1.*lexical_v1, vector_v1",
+            "semantic_v1.*lexical_v1, vector_v1, hybrid_v1",
         ):
-            get_catalog_retrieval_backend("hybrid_v1")
+            get_catalog_retrieval_backend("semantic_v1")
 
     def test_evaluation_cli_defaults_to_lexical_backend(self):
         self.assertEqual(parse_args([]).backend, "lexical_v1")

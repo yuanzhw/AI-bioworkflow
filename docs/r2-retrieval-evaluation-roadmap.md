@@ -628,9 +628,12 @@ R2 query set 和 baseline 已完成。后续 R3 PR 顺序由
      per-query 对比；Recipe Recall@1 从 `0.8571` 提升到 `0.9643`，但 Tool Recall@8、
      Role Coverage 和显式工具 query 存在局部退化。
 
-4. **R3C Hybrid scoring（下一步）**
-   - 融合 lexical 和 vector。
-   - 用 promotion gates 验证 fusion 能否保留 lexical exact-match 优势并吸收 vector 的
+4. **R3C Hybrid scoring（进行中）**
+   - **R3C-1（已完成）**：`hybrid_v1` 使用固定 `k = 60` 的 reciprocal-rank fusion，
+     在完整 approved Catalog pool 上融合 lexical/vector rank，保留 lexical explanation、
+     Catalog metadata、component rank/score/contribution 与 fallback provenance。
+   - **R3C-2（下一步）**：用固定真实模型对 lexical、vector、hybrid 生成完整三方 artifact，
+     按 promotion gates 验证 fusion 能否保留 lexical exact-match 优势并吸收 vector 的
      recipe/family ranking 收益；`lexical_v1` 在通过前继续作为默认。
 
 ## Verification
