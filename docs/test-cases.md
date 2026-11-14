@@ -2629,6 +2629,100 @@ dimension accessor。
 
 覆盖点：CLI fail closed，同时保持 stdout 的 machine-consumable contract。
 
+## `tests/test_hybrid_retrieval.py`
+
+该文件验证 R3C-1 固定 reciprocal-rank fusion、component fallback 隔离、完整 Catalog
+candidate pool、fusion evidence、factory/CLI 显式依赖，以及 shared 64-query evaluator
+集成。测试统一注入 deterministic fake embedding provider，不访问模型仓库，也不声明真实
+模型 promotion 结果。
+
+### `test_fuses_complete_component_ranks_and_preserves_lexical_explanation`
+
+输入：lexical/vector 各自把同一 recipe/tool 排在第二位，同时各有一个 rank-1 独有候选；
+调用方请求 recipe/tool top-3。
+
+期望输出：共享候选凭两个 `1 / (60 + 2)` contribution 排在第一；独有同分候选按 identity
+稳定排序；lexical explanation、component rank/score/contribution 和完整 5-recipe、
+16-tool pool evidence 保留。
+
+覆盖点：RRF 不混合原始 score 量纲，且不会在 component top-K 阶段过早丢弃可融合候选。
+
+### `test_component_fallback_candidates_do_not_receive_rrf_credit`
+
+输入：lexical recipe/tool 分支只返回 fallback candidates，vector 分支返回 direct matches。
+
+期望输出：只保留 vector direct candidates；hybrid aggregate 不标记 fallback，但 nested
+lexical evidence 保留 component fallback 状态。
+
+覆盖点：Catalog fallback 不伪装成相关性 rank，也不污染 RRF score。
+
+### `test_falls_back_only_when_all_ranking_components_fall_back`
+
+输入：lexical/vector 的 recipe/tool 分支都标记 fallback。
+
+期望输出：hybrid 标记 recipe/tool/aggregate fallback，确定性保留 lexical fallback candidate，
+fusion score 为零且 candidate evidence 明确 `fallback: true`。
+
+覆盖点：hybrid fallback 与 component fallback provenance 分离，同时遵守 common contract。
+
+### `test_rejects_invalid_components_and_rrf_constant`
+
+输入：component backend identity 错误，或试图把 `hybrid_v1` 的 `rrf_k` 改为非固定值。
+
+期望输出：backend 构造立即失败。
+
+覆盖点：`hybrid_v1` identity 固定绑定 lexical/vector component 与 `k = 60`，不能静默调参。
+
+### `test_rejects_duplicate_candidates_from_one_component`
+
+输入：lexical 分支在同一次 recipe ranking 中重复返回相同 identity。
+
+期望输出：fusion fail closed，不给重复项累计两次 contribution。
+
+覆盖点：component artifact 异常不能人为抬高 RRF score。
+
+### `test_factory_requires_explicit_hybrid_dependencies`
+
+输入：缺少 Catalog，或有 Catalog 但没有 local model config/provider 的 `hybrid_v1` 请求。
+
+期望输出：factory 分别报告缺失的显式依赖。
+
+覆盖点：hybrid 不隐式下载模型，也不在未绑定 Catalog 的情况下构建 vector component。
+
+### `test_factory_builds_hybrid_backend_with_injected_provider`
+
+输入：大小写/空白不规范的 backend name、当前 Catalog 与 deterministic fake provider。
+
+期望输出：factory 返回 `HybridCatalogRetrievalBackend`；artifact 记录 RRF algorithm、固定
+`k`、candidate pool 和两个 component evidence，并可严格 JSON 序列化。
+
+覆盖点：正式 dependency injection 边界可用于测试和后续本地 provider，同时保持证据完整。
+
+### `test_hybrid_backend_runs_shared_64_query_evaluation`
+
+输入：共享 64-query fixture 与 fake-provider `hybrid_v1`。
+
+期望输出：evaluation 保留 64 条结果、hybrid strategy 和逐 query backend evidence；完整
+artifact 可严格 JSON 序列化。
+
+覆盖点：lexical、vector、hybrid 使用同一 evaluation harness，R3C-2 可直接做三方对比。
+
+### `test_cli_accepts_explicit_hybrid_configuration`
+
+输入：`--backend hybrid_v1` 与 local model path。
+
+期望输出：CLI parser 保留显式 backend 与 Path 配置。
+
+覆盖点：真实模型 hybrid evaluation 有稳定命令入口。
+
+### `test_cli_rejects_hybrid_backend_without_local_model_path`
+
+输入：未传 `--embedding-model-path` 的 hybrid evaluation 请求。
+
+期望输出：命令返回 2，stdout 为空，诊断写入 stderr。
+
+覆盖点：hybrid CLI 与 vector CLI 一样 fail closed，不触发隐式模型获取。
+
 ## `tests/test_retrieval_evaluation.py`
 
 该文件验证 R2 retrieval evaluation baseline。Evaluation 读取人工标注 query

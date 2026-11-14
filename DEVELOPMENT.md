@@ -190,6 +190,7 @@ P0 后续工作重点不再是证明 runner 能否运行，而是把已验证流
 | 结构化编译 | `uv run main.py --input examples/rnaseq_deg_recipe_plan.json --output outputs/rnaseq_deg.wdl` | 直接走确定性 Recipe Tool Plan / IR 编译路径，不需要 API key。 |
 | 自然语言规划编译 | `uv run main.py --prompt-file examples/rnaseq_deg_request.txt --output outputs/rnaseq_deg.wdl` | 先生成 Recipe Tool Plan，再进入确定性编译链路；需要 `DEEPSEEK_API_KEY`。 |
 | Retrieval baseline | `.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --backend lexical_v1` | 对 64-query fixture 显式选择 backend 并生成可比较 retrieval metrics；默认仍为 `lexical_v1`。 |
+| Hybrid retrieval experiment | `.\.venv\Scripts\python.exe scripts\evaluate_retrieval.py --backend hybrid_v1 --embedding-model-path .cache/models/multilingual-e5-small` | 显式运行固定 RRF 的 lexical/vector fusion；只用于离线评估，尚未通过 promotion review。 |
 | 本地 API + Web 开发服务 | `powershell -ExecutionPolicy Bypass -File scripts\dev_local.ps1` | 同时启动 FastAPI `127.0.0.1:8010` 与 Next.js `127.0.0.1:3000`，用于本地观察工作台修改结果。 |
 | FastAPI 开发服务 | `.\.venv\Scripts\python.exe -m src.api.server` | 默认监听 `127.0.0.1:8010`，避开 Cromwell 的 `8000`。 |
 | 真实 Cromwell tiny e2e | `powershell -ExecutionPolicy Bypass -File scripts\check_p0.ps1 -RunE2E -CromwellUrl http://localhost:8000 -WindowsFixtureRoot C:\data\ai-bioworkflow-tiny -CromwellFixtureRoot /data/ai-bioworkflow-runner/tiny` | 显式 opt-in；`check_p0.ps1` 委托 `run_cromwell_tiny_e2e.ps1` 准备 fixture、同步 runner 并运行真实 e2e。 |
@@ -866,7 +867,7 @@ RAG 开发序列放在 P4 之下维护：
 | --- | --- | --- |
 | R1 | [Internal Catalog RAG / Tool Retriever](./docs/r1-internal-catalog-rag-plan.md) | Approved Catalog Retriever MVP、Planner prompt 集成、run artifact 和前端展示 |
 | R2 | [Retrieval Evaluation Roadmap](./docs/r2-retrieval-evaluation-roadmap.md) | 查询测试集、Recall@K、MRR、Role Coverage、vector / hybrid retriever 优先级 |
-| R3 | [R3A / R3B 已完成，R3C 下一步](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend、[document contract](./docs/r3b-catalog-document-contract.md) 和真实评估的 [vector prototype](./docs/r3b-vector-backend-prototype.md) 已建立，下一步用 rank fusion 保留 lexical exact-match 并吸收 vector 的 recipe/family ranking 收益 |
+| R3 | [R3C-1 已完成，R3C-2 下一步](./docs/r3-retrieval-backend-decision.md) | Hybrid-first experiment；backend、[document contract](./docs/r3b-catalog-document-contract.md)、真实评估的 [vector prototype](./docs/r3b-vector-backend-prototype.md) 与固定 RRF 的 [hybrid backend](./docs/r3c-hybrid-rrf-backend.md) 已建立，下一步执行真实模型 promotion review |
 | R4 | 规划中 | 当 catalog 和标注数据足够后，再评估 reranker 或 embedding fine-tuning |
 
 R3 决策前，项目先按
@@ -934,8 +935,13 @@ provider、模型运行时文件 SHA-256 校验、精确 cosine index、index fi
 触发。Mandatory tests 使用 fake provider，不下载模型。固定真实模型的离线评估将
 Recipe Recall@1 从 `0.8571` 提升到 `0.9643`，Tool Recall@5 从 `0.7973` 提升到
 `0.8506`，但 Tool Recall@8、Role Coverage 和显式工具 query 存在局部退化；因此
-vector-only 不替换默认 backend，下一步进入 R3C reciprocal-rank fusion。详见
-[R3B-2 Vector Backend Prototype](./docs/r3b-vector-backend-prototype.md)。
+vector-only 不替换默认 backend。R3C-1 已新增显式选择的 `hybrid_v1`，以完整 approved
+Catalog 候选池、固定 `k = 60` 的 reciprocal-rank fusion 合并 lexical/vector rank，
+保留 lexical explanation、Catalog-owned tool metadata、component rank/score/contribution
+与 fallback provenance；mandatory tests 继续注入 fake provider，默认 backend 仍为
+`lexical_v1`。R3C-2 将使用固定真实模型执行三方 promotion review。详见
+[R3B-2 Vector Backend Prototype](./docs/r3b-vector-backend-prototype.md) 与
+[R3C-1 Hybrid Reciprocal-Rank Fusion Backend](./docs/r3c-hybrid-rrf-backend.md)。
 
 R1/R2 仍属于受控 Catalog 内检索，不进入 P6 的未知工具发现边界。外部网页、论文、未知工具和 Candidate ToolSpec 的发现应继续归入 P6。
 

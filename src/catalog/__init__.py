@@ -1,9 +1,12 @@
+from src.catalog.hybrid_retrieval import (DEFAULT_RRF_K,
+                                          HYBRID_FUSION_ALGORITHM,
+                                          HYBRID_RETRIEVER_STRATEGY)
 from src.catalog.loader import ToolCatalog, load_tool_catalog
 from src.catalog.resolver import resolve_tool_plan
 from src.catalog.retrieval_backend import (
-    CatalogRetrievalBackend, LexicalCatalogRetrievalBackend,
-    VectorCatalogRetrievalBackend, get_catalog_retrieval_backend,
-    retrieve_catalog_context_with_backend)
+    CatalogRetrievalBackend, HybridCatalogRetrievalBackend,
+    LexicalCatalogRetrievalBackend, VectorCatalogRetrievalBackend,
+    get_catalog_retrieval_backend, retrieve_catalog_context_with_backend)
 from src.catalog.retrieval_documents import (
     CatalogRetrievalCorpus, CatalogRetrievalDocument,
     CatalogRetrievalDocumentSection, build_catalog_retrieval_corpus,
@@ -37,9 +40,13 @@ __all__ = [
     "CatalogRetrievalDocumentSection",
     "CatalogVectorIndex",
     "CatalogVectorIndexEntry",
+    "DEFAULT_RRF_K",
     "EmbeddingModelFileDigest",
     "EmbeddingModelManifest",
     "EmbeddingProvider",
+    "HYBRID_FUSION_ALGORITHM",
+    "HYBRID_RETRIEVER_STRATEGY",
+    "HybridCatalogRetrievalBackend",
     "LexicalCatalogRetrievalBackend",
     "LocalEmbeddingModelConfig",
     "SentenceTransformerEmbeddingProvider",

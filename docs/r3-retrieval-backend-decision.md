@@ -190,9 +190,18 @@ intent routing/capability rejection 的风险信号，而不是相关性 ranking
 
 ### R3C: Hybrid Fusion And Promotion Review
 
-- 实现 lexical/vector rank fusion，第一版优先 reciprocal-rank fusion。
-- 保留 lexical explanation，并增加 vector/fusion provenance。
-- 用本文档 promotion gates 比较 lexical、vector 和 hybrid。
+#### R3C-1: Hybrid RRF Backend
+
+- 实现固定 `k = 60` 的 lexical/vector reciprocal-rank fusion。
+- 在完整 approved Catalog candidate pool 上融合后再按请求 top-K 截断。
+- 保留 lexical explanation，并增加 component rank/score/contribution、vector evidence 和
+  fallback provenance。
+- 通过正式 factory 与 shared evaluator 显式选择；默认仍为 `lexical_v1`。
+
+#### R3C-2: Promotion Review
+
+- 用固定真实模型 artifact 按本文档 promotion gates 比较 lexical、vector 和 hybrid。
+- 审核 aggregate、family、confusion、显式工具 query 和全部 per-query regression。
 - 只有通过 gates 后，另开 PR 决定是否切换默认 backend；否则保留实验实现或记录
   rejection decision。
 
@@ -265,6 +274,26 @@ variant-calling Recipe Recall@1 与 ChIP-seq Tool Recall@5 发生 family-level �
 因此 R3B-2 支持进入 R3C reciprocal-rank fusion，但不支持 vector-only 替换默认 backend。
 `lexical_v1` 继续作为默认和回归基线。完整指标、index fingerprint 与本地命令见
 [R3B-2 Vector Backend Prototype](./r3b-vector-backend-prototype.md)。
+
+## R3C-1 Outcome
+
+R3C-1 已完成 [Hybrid Reciprocal-Rank Fusion Backend](./r3c-hybrid-rrf-backend.md)：
+
+- `hybrid_v1` 组合经过 R3A common contract 校验的 `lexical_v1` 与 `vector_v1`；
+- recipe/tool component 均请求完整当前 Catalog pool，fusion 后才按调用方 top-K 截断；
+- 固定无权重 RRF `k = 60`，不混合 lexical score 与 cosine similarity 的量纲；
+- fusion score 相同时按 recipe id 或 tool `(id, version)` 稳定排序，同一分支重复 identity
+  会 fail closed；
+- lexical `matched_terms` / `matched_fields` 与 Catalog-owned tool trust/execution metadata
+  保留；每个候选记录 component rank、原始 score、RRF contribution 和 nested evidence；
+- component fallback candidates 不获得 RRF credit，backend-level evidence 保留两个分支的
+  recipe/tool/aggregate fallback provenance；
+- backend factory 与 evaluation CLI 支持显式 `hybrid_v1`，并继续要求 prepared local model；
+- mandatory tests 使用 deterministic fake provider 运行 shared 64-query evaluator，不声明
+  真实模型质量或 promotion 结论。
+
+因此 R3C-1 只建立可复现、可审计的 fusion 实验面。`lexical_v1` 继续作为默认；固定真实
+模型的 lexical/vector/hybrid 三方 artifact 与 promotion review 属于 R3C-2。
 
 ## Contract Boundaries
 
