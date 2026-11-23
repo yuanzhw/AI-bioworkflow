@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any, Protocol, runtime_checkable
 
+from src.catalog.hybrid_retrieval import (DEFAULT_RRF_K,
+                                          HYBRID_FUSION_ALGORITHM,
+                                          HYBRID_RETRIEVER_STRATEGY,
+                                          build_hybrid_fallback_candidates,
+                                          fuse_catalog_candidate_ranks)
 from src.catalog.loader import ToolCatalog
 from src.catalog.retrieval_documents import (CatalogRetrievalDocument,
                                              build_catalog_retrieval_corpus)
@@ -29,6 +34,7 @@ DEFAULT_RETRIEVAL_BACKEND = LEXICAL_RETRIEVER_STRATEGY
 SUPPORTED_RETRIEVAL_BACKENDS = (
     LEXICAL_RETRIEVER_STRATEGY,
     VECTOR_RETRIEVER_STRATEGY,
+    HYBRID_RETRIEVER_STRATEGY,
 )
 BACKEND_EVIDENCE_SCHEMA_VERSION = "1.0"
 
@@ -243,6 +249,178 @@ class VectorCatalogRetrievalBackend:
         }
 
 
+class HybridCatalogRetrievalBackend:
+    """Fuse complete lexical and vector rankings with deterministic RRF."""
+
+    name = HYBRID_RETRIEVER_STRATEGY
+
+    def __init__(
+        self,
+        lexical_backend: CatalogRetrievalBackend,
+        vector_backend: CatalogRetrievalBackend,
+        *,
+        rrf_k: int = DEFAULT_RRF_K,
+    ):
+        if getattr(lexical_backend, "name", None) != LEXICAL_RETRIEVER_STRATEGY:
+            raise ValueError("hybrid_v1 requires a lexical_v1 component backend")
+        if getattr(vector_backend, "name", None) != VECTOR_RETRIEVER_STRATEGY:
+            raise ValueError("hybrid_v1 requires a vector_v1 component backend")
+        if (
+            not isinstance(rrf_k, int)
+            or isinstance(rrf_k, bool)
+            or rrf_k != DEFAULT_RRF_K
+        ):
+            raise ValueError(
+                f"hybrid_v1 requires the fixed rrf_k value {DEFAULT_RRF_K}"
+            )
+        self._lexical_backend = lexical_backend
+        self._vector_backend = vector_backend
+        self._rrf_k = rrf_k
+
+    def retrieve(
+        self,
+        query: str,
+        tool_catalog: ToolCatalog,
+        recipe_catalog: RecipeCatalog,
+        top_k_recipes: int = 3,
+        top_k_tools: int = 8,
+    ) -> dict[str, Any]:
+        normalized_query = query.strip()
+        if not normalized_query:
+            raise ValueError("query must not be empty")
+        _validate_top_k("top_k_recipes", top_k_recipes)
+        _validate_top_k("top_k_tools", top_k_tools)
+
+        recipe_pool_size = max(len(recipe_catalog.all()), 1)
+        tool_pool_size = max(len(tool_catalog.all()), 1)
+        lexical_result = retrieve_catalog_context_with_backend(
+            self._lexical_backend,
+            normalized_query,
+            tool_catalog,
+            recipe_catalog,
+            recipe_pool_size,
+            tool_pool_size,
+        )
+        vector_result = retrieve_catalog_context_with_backend(
+            self._vector_backend,
+            normalized_query,
+            tool_catalog,
+            recipe_catalog,
+            recipe_pool_size,
+            tool_pool_size,
+        )
+
+        recipes = fuse_catalog_candidate_ranks(
+            (
+                []
+                if lexical_result["recipe_fallback_used"]
+                else lexical_result["recipes"]
+            ),
+            (
+                []
+                if vector_result["recipe_fallback_used"]
+                else vector_result["recipes"]
+            ),
+            candidate_kind="recipe",
+            rrf_k=self._rrf_k,
+        )
+        tools = fuse_catalog_candidate_ranks(
+            (
+                []
+                if lexical_result["tool_fallback_used"]
+                else lexical_result["tools"]
+            ),
+            (
+                []
+                if vector_result["tool_fallback_used"]
+                else vector_result["tools"]
+            ),
+            candidate_kind="tool",
+            rrf_k=self._rrf_k,
+        )
+
+        recipe_fallback_used = not recipes
+        tool_fallback_used = not tools
+        fallback_reasons: list[str] = []
+        if recipe_fallback_used:
+            fallback_reasons.append(
+                "hybrid recipe ranking produced no direct candidates; used component fallback"
+            )
+            fallback_backend, fallback_candidates = _hybrid_fallback_source(
+                lexical_result["recipes"],
+                vector_result["recipes"],
+            )
+            recipes = build_hybrid_fallback_candidates(
+                fallback_candidates,
+                candidate_kind="recipe",
+                component_backend=fallback_backend,
+                rrf_k=self._rrf_k,
+            )
+        if tool_fallback_used:
+            fallback_reasons.append(
+                "hybrid tool ranking produced no direct candidates; used component fallback"
+            )
+            fallback_backend, fallback_candidates = _hybrid_fallback_source(
+                lexical_result["tools"],
+                vector_result["tools"],
+            )
+            tools = build_hybrid_fallback_candidates(
+                fallback_candidates,
+                candidate_kind="tool",
+                component_backend=fallback_backend,
+                rrf_k=self._rrf_k,
+            )
+
+        fallback_used = recipe_fallback_used or tool_fallback_used
+        return {
+            "query": normalized_query,
+            "strategy": self.name,
+            "recipes": recipes[:top_k_recipes],
+            "tools": tools[:top_k_tools],
+            "recipe_fallback_used": recipe_fallback_used,
+            "tool_fallback_used": tool_fallback_used,
+            "fallback_used": fallback_used,
+            "fallback_reason": (
+                "; ".join(fallback_reasons) if fallback_reasons else None
+            ),
+            "backend_evidence": self._backend_evidence(
+                lexical_result,
+                vector_result,
+                recipe_pool_size=recipe_pool_size,
+                tool_pool_size=tool_pool_size,
+            ),
+        }
+
+    def _backend_evidence(
+        self,
+        lexical_result: dict[str, Any],
+        vector_result: dict[str, Any],
+        *,
+        recipe_pool_size: int,
+        tool_pool_size: int,
+    ) -> dict[str, Any]:
+        return {
+            "schema_version": BACKEND_EVIDENCE_SCHEMA_VERSION,
+            "backend": self.name,
+            "fusion": {
+                "algorithm": HYBRID_FUSION_ALGORITHM,
+                "rrf_k": self._rrf_k,
+                "candidate_pool": {
+                    "recipes": recipe_pool_size,
+                    "tools": tool_pool_size,
+                },
+            },
+            "components": {
+                LEXICAL_RETRIEVER_STRATEGY: _hybrid_component_evidence(
+                    lexical_result
+                ),
+                VECTOR_RETRIEVER_STRATEGY: _hybrid_component_evidence(
+                    vector_result
+                ),
+            },
+        }
+
+
 def get_catalog_retrieval_backend(
     name: str | None = None,
     *,
@@ -255,28 +433,36 @@ def get_catalog_retrieval_backend(
     selected = _normalize_backend_name(name)
     if selected == LEXICAL_RETRIEVER_STRATEGY:
         if vector_config is not None or embedding_provider is not None:
-            raise ValueError("vector configuration requires backend 'vector_v1'")
+            raise ValueError(
+                "vector configuration requires backend 'vector_v1' or 'hybrid_v1'"
+            )
         return LexicalCatalogRetrievalBackend()
-    if selected == VECTOR_RETRIEVER_STRATEGY:
+    if selected in (VECTOR_RETRIEVER_STRATEGY, HYBRID_RETRIEVER_STRATEGY):
         if tool_catalog is None or recipe_catalog is None:
             raise ValueError(
-                "vector_v1 requires explicit Tool Catalog and Recipe Catalog instances"
+                f"{selected} requires explicit Tool Catalog and Recipe Catalog instances"
             )
         if vector_config is not None and embedding_provider is not None:
             raise ValueError(
-                "vector_v1 accepts either vector_config or embedding_provider, not both"
+                f"{selected} accepts either vector_config or embedding_provider, not both"
             )
         provider = embedding_provider
         if provider is None:
             if vector_config is None:
                 raise ValueError(
-                    "vector_v1 requires an explicit local embedding model path"
+                    f"{selected} requires an explicit local embedding model path"
                 )
             provider = SentenceTransformerEmbeddingProvider(vector_config)
-        return VectorCatalogRetrievalBackend(
+        vector_backend = VectorCatalogRetrievalBackend(
             provider,
             tool_catalog,
             recipe_catalog,
+        )
+        if selected == VECTOR_RETRIEVER_STRATEGY:
+            return vector_backend
+        return HybridCatalogRetrievalBackend(
+            LexicalCatalogRetrievalBackend(),
+            vector_backend,
         )
     raise ValueError(
         f"Unknown Catalog retrieval backend '{selected}'. Supported backends: "
@@ -544,6 +730,25 @@ def _is_finite_number(value: Any) -> bool:
         and not isinstance(value, bool)
         and (not isinstance(value, float) or isfinite(value))
     )
+
+
+def _hybrid_component_evidence(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "backend_evidence": result["backend_evidence"],
+        "recipe_fallback_used": result["recipe_fallback_used"],
+        "tool_fallback_used": result["tool_fallback_used"],
+        "fallback_used": result["fallback_used"],
+        "fallback_reason": result["fallback_reason"],
+    }
+
+
+def _hybrid_fallback_source(
+    lexical_candidates: list[dict[str, Any]],
+    vector_candidates: list[dict[str, Any]],
+) -> tuple[str, list[dict[str, Any]]]:
+    if lexical_candidates:
+        return LEXICAL_RETRIEVER_STRATEGY, lexical_candidates
+    return VECTOR_RETRIEVER_STRATEGY, vector_candidates
 
 
 def _json_similarity(score: float) -> float:

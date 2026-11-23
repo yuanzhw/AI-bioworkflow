@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.catalog.hybrid_retrieval import HYBRID_RETRIEVER_STRATEGY
 from src.catalog.loader import ToolCatalog, load_tool_catalog
 from src.catalog.retrieval_backend import (DEFAULT_RETRIEVAL_BACKEND,
                                            SUPPORTED_RETRIEVAL_BACKENDS,
@@ -74,14 +75,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--embedding-model-path",
         type=Path,
         help=(
-            "Explicit local model directory for vector_v1. The runtime never "
-            "downloads model files."
+            "Explicit local model directory for vector_v1 or hybrid_v1. "
+            "The runtime never downloads model files."
         ),
     )
     parser.add_argument(
         "--embedding-device",
         default="cpu",
-        help="Sentence Transformers device for vector_v1. Default: cpu",
+        help="Sentence Transformers device for vector_v1 or hybrid_v1. Default: cpu",
     )
     return parser.parse_args(argv)
 
@@ -130,11 +131,15 @@ def build_evaluation_backend(
     recipe_catalog: RecipeCatalog,
 ) -> CatalogRetrievalBackend:
     """Build only the explicitly requested evaluation backend."""
-    if args.backend == VECTOR_RETRIEVER_STRATEGY:
+    vector_backends = (
+        VECTOR_RETRIEVER_STRATEGY,
+        HYBRID_RETRIEVER_STRATEGY,
+    )
+    if args.backend in vector_backends:
         if args.embedding_model_path is None:
             raise ValueError(
-                "vector_v1 requires --embedding-model-path; prepare it explicitly "
-                "with scripts/prepare_embedding_model.py"
+                f"{args.backend} requires --embedding-model-path; prepare it "
+                "explicitly with scripts/prepare_embedding_model.py"
             )
         config = LocalEmbeddingModelConfig(
             model_path=args.embedding_model_path,
@@ -148,7 +153,9 @@ def build_evaluation_backend(
         )
 
     if args.embedding_model_path is not None:
-        raise ValueError("--embedding-model-path requires --backend vector_v1")
+        raise ValueError(
+            "--embedding-model-path requires --backend vector_v1 or hybrid_v1"
+        )
     return get_catalog_retrieval_backend(args.backend)
 
 
